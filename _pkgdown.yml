@@ -1,0 +1,210 @@
+url: https://chiara-cattani.github.io/sdtm-builder/
+
+template:
+  bootstrap: 5
+  bootswatch: cosmo
+
+home:
+  title: sdtmbuilder
+  description: >
+    Metadata-driven SDTM domain builder and code generator for R.
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [search, github]
+  components:
+    github:
+      icon: fa-github
+      href: https://github.com/chiara-cattani/sdtm-builder
+
+reference:
+  - title: "Core Pipeline"
+    desc: "The main entry points for building SDTM domains."
+    contents:
+      - build_domain
+      - build_domain_from_sources
+      - compile_rules
+      - make_dummy_study
+      - check_end_to_end
+
+  - title: "Configuration & Metadata"
+    desc: "Read, validate and bundle study metadata."
+    contents:
+      - new_sdtm_config
+      - new_meta_bundle
+      - new_rule_set
+      - new_validation_report
+      - new_build_context
+      - read_target_meta
+      - read_source_meta
+      - read_ct_library
+      - validate_target_meta
+      - validate_source_meta
+      - validate_ct_library
+      - normalize_target_meta
+      - normalize_source_meta
+      - expand_value_level_meta
+      - apply_study_overrides
+      - resolve_domain_model
+
+  - title: "Rule Engine"
+    desc: "Parse, validate and serialise derivation rules."
+    contents:
+      - parse_rule_json
+      - parse_rule_dsl
+      - validate_rules
+      - enrich_rules_with_ct
+      - canonicalize_rules
+      - infer_rule_dependencies
+      - render_rule_comments
+      - serialize_rules_to_json
+      - serialize_rules_to_yaml
+
+  - title: "Dependency Graph"
+    desc: "Variable-level dependency resolution."
+    contents:
+      - build_dependency_graph
+      - topo_sort_rules
+      - detect_cycles
+      - plan_build_steps
+      - resolve_late_binding
+
+  - title: "Data Access & Joins"
+    desc: "Load, standardize and join raw data."
+    contents:
+      - load_raw_data
+      - standardize_names
+      - standardize_types
+      - apply_missing_conventions
+      - derive_core_keys
+      - get_subject_level
+      - safe_join
+      - resolve_keys
+      - deduplicate_by_rule
+      - bind_sources
+      - split_records
+      - expand_checkbox
+      - expand_visits
+      - add_provenance_cols
+
+  - title: "Derivation Functions"
+    desc: "Individual variable derivation methods."
+    contents:
+      - derive_variable
+      - map_direct
+      - derive_constant
+      - derive_coalesce
+      - derive_if_else
+      - derive_case_when
+      - derive_concat
+      - derive_regex_extract
+      - derive_regex_replace
+      - derive_trim_pad
+      - derive_numeric_round
+      - derive_occurrence
+      - derive_reason
+      - assign_ct
+      - decode_ct
+      - map_unknown
+      - map_yes_no
+      - format_iso_dtc
+      - parse_partial_date
+      - combine_date_time
+      - derive_dy
+      - derive_epoch
+      - derive_duration
+      - derive_elapsed_time
+      - derive_rel_time
+      - apply_imputation_policy
+      - derive_visit
+      - derive_visitnum
+      - derive_visitdy
+      - derive_tpt
+      - derive_seq
+      - derive_usubjid
+      - derive_domain_keys
+      - derive_grpid
+      - derive_spid
+      - derive_baseline_flag
+      - derive_lastobs_flag
+      - derive_status
+      - derive_unit_standardize
+
+  - title: "Domain Builders & Helpers"
+    desc: "Orchestration, SUPP, RELREC and plugin builders."
+    contents:
+      - apply_domain_rules
+      - finalize_domain
+      - derive_domain_defaults
+      - build_supp
+      - build_relrec
+      - build_dm_plugin
+      - build_sv_plugin
+      - build_ta_tv_te_ts_plugins
+
+  - title: "Validation"
+    desc: "Post-build domain validation checks."
+    contents:
+      - validate_domain_structure
+      - validate_required_vars
+      - validate_keys_unique
+      - validate_iso8601
+      - validate_ct_conformance
+      - validate_ct_values
+      - validate_lengths_types_labels
+      - validate_value_level
+      - validate_cross_domain
+      - summarize_validation_report
+      - add_finding
+
+  - title: "Code Generation & Export"
+    desc: "Generate R scripts, Quarto reports and XPT files."
+    contents:
+      - gen_domain_script
+      - gen_qmd_domain
+      - gen_project_scaffold
+      - gen_shared_utils_script
+      - export_xpt
+      - export_rds_csv
+      - snapshot_dataset
+      - write_define_support
+      - write_codelist_support
+      - write_origin_support
+      - write_value_level_support
+
+  - title: "Utilities & Logging"
+    desc: "Internal helpers, assertions and logging."
+    contents:
+      - new_log_sink
+      - emit_log_messages
+      - log_info
+      - log_warn
+      - log_error
+      - assert_cols
+      - assert_types
+      - stop_with_context
+      - warn_with_context
+
+articles:
+  - title: "Getting Started"
+    navbar: Getting Started
+    contents:
+      - build-ae-tutorial
+      - build-pipeline
+
+  - title: "Reference"
+    navbar: Reference
+    contents:
+      - metadata-schema
+      - architecture
+
+  - title: "Advanced Topics"
+    navbar: Advanced
+    contents:
+      - multi-source-ex
+      - supp-relrec
+      - custom-rules
+
+news:
+  one_page: true

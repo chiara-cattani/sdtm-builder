@@ -1,0 +1,198 @@
+---
+title: "SUPP and RELREC — Supplemental Qualifiers"
+author: "sdtmbuilder team"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{SUPP and RELREC}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+CDISC SDTM stores non-standard variables in **Supplemental Qualifier** (SUPP--)
+datasets.  When two domains share related records (e.g., an adverse event
+leading to a concomitant medication), SDTM uses a **RELREC** dataset to link
+them.
+
+`sdtmbuilder` automates both SUPP generation and RELREC scaffolding.
+
+## 1. Supplemental Qualifiers (SUPP--)
+
+### How it works
+
+Variables that should be moved to SUPP-- are flagged in the target metadata
+with `to_supp = "Y"`.  During `build_domain()`, the pipeline:
+1. Derives all variables (including SUPP candidates) in the parent domain.
+2. Identifies variables with `to_supp = "Y"`.
+3. Calls `build_supp()` to extract those variables into CDISC SUPP format.
+4. Removes the SUPP variables from the parent domain.
+5. Returns both the parent domain and the SUPP dataset in the result.
+
+### Example: SUPPAE
+
+The starter kit flags two AE variables for SUPP: `AESSION` and `AETRTEM`.
+
+```{r suppae}
+library(sdtmbuilder)
+
+study     <- make_dummy_study(seed = 123)
+rule_set  <- compile_rules(study$target_meta, study$source_meta, study$ct_lib)
+
+ae_result <- build_domain(
+  domain      = "AE",
+  target_meta = study$target_meta,
+  source_meta = study$source_meta,
+  raw_data    = study$raw_data,
+  config      = study$config,
+  rule_set    = rule_set,
+  verbose     = FALSE
+)
+
+cat("AE domain columns:", ncol(ae_result$data), "\n")
+cat("SUPPAE present:", !is.null(ae_result$supp), "\n")
+```
+
+### SUPP structure
+
+The CDISC SUPP-- format has a fixed set of columns:
+
+| Column | Description | Source |
+|--------|-------------|--------|
+| STUDYID | Study identifier | From parent domain |
+| RDOMAIN | Related domain (e.g., "AE") | From domain name |
+| USUBJID | Unique subject identifier | From parent domain |
+| IDVAR | Identifying variable (e.g., "AESEQ") | Auto-detected |
+| IDVARVAL | Value of IDVAR for the parent record | From parent row |
+| QNAM | Qualifier variable name (≤ 8 chars) | Truncated var name |
+| QLABEL | Qualifier variable label | From metadata label |
+| QVAL | Qualifier value | From parent variable |
+| QORIG | Origin (e.g., "CRF") | From metadata or default |
+| QEVAL | Evaluator | Optional, default NA |
+
+```{r supp-inspect}
+if (!is.null(ae_result$supp) && nrow(ae_result$supp) > 0) {
+  cat("SUPPAE rows:", nrow(ae_result$supp), "\n")
+  cat("SUPPAE columns:", paste(names(ae_result$supp), collapse = ", "), "\n")
+  head(ae_result$supp[, c("RDOMAIN", "USUBJID", "IDVAR", "IDVARVAL",
+                           "QNAM", "QLABEL", "QVAL")])
+}
+```
+
+### Using build_supp() directly
+
+You can also call `build_supp()` manually on any domain data:
+
+```{r build-supp-direct}
+supp <- build_supp(
+  domain_data  = ae_result$data,
+  domain       = "AE",
+  target_meta  = study$target_meta,
+  vars_to_supp = c("AEBODSYS"),
+  idvar        = "AESEQ"
+)
+
+if (!is.null(supp)) {
+  cat("Manual SUPP rows:", nrow(supp), "\n")
+  cat("QNAMs:", paste(unique(supp$QNAM), collapse = ", "), "\n")
+}
+```
+
+### Metadata setup for SUPP
+
+To flag a variable for SUPP in your metadata, add `to_supp = "Y"` in the
+target_meta CSV:
+```
+domain,var,type,...,to_supp
+AE,AESSION,char,...,Y
+AE,AETRTEM,char,...,Y
+```
+
+All other derivation rules (rule_type, rule_params) work exactly the same—
+the variable is derived normally first, then moved to SUPP at finalization.
+
+## 2. RELREC — Relationship Records
+
+### Concept
+
+RELREC links records across domains.  For example, if an adverse event
+(AE record) led to a concomitant medication (CM record), RELREC captures
+that relationship with matching RELID values.
+
+### Using build_relrec()
+
+`build_relrec()` takes relationship specifications and produces a RELREC
+dataset:
+
+```{r relrec}
+specs <- list(
+  list(
+    rdomain1 = "AE",
+    idvar1   = "AESEQ",
+    rdomain2 = "CM",
+    idvar2   = "CMSEQ",
+    reltype  = "ONE",
+    relid    = "REL-001"
+  ),
+  list(
+    rdomain1 = "AE",
+    idvar1   = "AESEQ",
+    rdomain2 = "PR",
+    idvar2   = "PRSEQ",
+    reltype  = "ONE",
+    relid    = "REL-002"
+  )
+)
+
+relrec <- build_relrec(specs, list(), study$config)
+if (!is.null(relrec)) {
+  cat("RELREC rows:", nrow(relrec), "\n")
+  relrec
+}
+```
+
+### RELREC structure
+
+| Column | Description |
+|--------|-------------|
+| STUDYID | Study identifier |
+| RDOMAIN | Related domain |
+| USUBJID | Subject (blank for dataset-level) |
+| IDVAR | Identifying variable in RDOMAIN |
+| IDVARVAL | Value linking to specific record |
+| RELTYPE | Relationship type (ONE, MANY) |
+| RELID | Relationship identifier (matching pair) |
+
+## 3. Exporting SUPP and RELREC
+
+Both datasets export to XPT just like standard domains:
+
+```{r export}
+output_dir <- tempdir()
+
+if (!is.null(ae_result$supp) && nrow(ae_result$supp) > 0) {
+  export_xpt(ae_result$supp, "SUPPAE", output_dir, study$target_meta)
+  cat("SUPPAE exported:", file.path(output_dir, "suppae.xpt"), "\n")
+}
+```
+
+## Summary
+
+| Task | Function | Key arguments |
+|------|----------|---------------|
+| Flag vars for SUPP | Metadata `to_supp = "Y"` | — |
+| Auto-generate SUPP | `build_domain()` | Automatic when flags present |
+| Manual SUPP | `build_supp()` | `vars_to_supp`, `idvar` |
+| Link records | `build_relrec()` | `relationship_specs` |
+| Export | `export_xpt()` | Standard export |
+
+The SUPP workflow is fully integrated into `build_domain()`—just set the
+metadata flags and the pipeline handles the rest.

@@ -1,18 +1,20 @@
 # sdtmbuilder — Implementation Roadmap
 
-> Last updated: 2026-02-08
-> Status: **Phases 0–6 complete. 8 SDTM domains building end-to-end with EPOCH, SUPP, validation, codegen. 289 tests passing (0 failures).**
+> Last updated: 2026-02-09
+> Status: **Phases 0–7 complete. 8 SDTM domains building end-to-end with EPOCH, SUPP, validation, codegen. 289 tests passing (0 failures). Full documentation, pkgdown, CI, NEWS.md.**
 
 ---
 
 ## Current State
 
 The repository contains a **fully working MVP**: 18 implemented R module files,
-17 testthat files with 289 passing tests, 4 vignettes, a full package skeleton,
+17 testthat files with 289 passing tests, 7 vignettes, a full package skeleton,
 and a starter kit with metadata for 8 domains. All function bodies are
 implemented. The end-to-end pipeline builds DM, AE, CM, MH, PR, EX, VS, and LB
 domains from dummy data with 0 validation errors. SUPP (SUPPAE), EPOCH
 derivation, 10+ validation checks, code generation, and XPT export all working.
+Phase 7 documentation complete: NEWS.md, pkgdown config, CI with covr, and
+3 new vignettes (Multi-Source EX, SUPP/RELREC, Custom Rules).
 
 ---
 
@@ -397,21 +399,26 @@ findings; `gen_domain_script("AE")` produces code that can rebuild the domain.
 
 ---
 
-### Phase 7 — Documentation + Examples + CI + Release Readiness (ongoing)
+### Phase 7 — Documentation + Examples + CI + Release Readiness (ongoing) ✅ DONE
 
 **Goal:** Publishable package quality.
+
+**Status:** All deliverables complete. NEWS.md changelog, _pkgdown.yml site
+configuration, GitHub Actions CI with R-CMD-check and covr coverage, and
+3 new vignettes added. 7 total vignettes covering architecture, metadata,
+pipeline, AE tutorial, multi-source EX, SUPP/RELREC, and custom rules.
 
 #### Deliverables
 
 - [x] Vignette: "Build AE from Metadata" (end-to-end tutorial)
-- [ ] Vignette: "Multi-Source EX" (join patterns)
-- [ ] Vignette: "SUPP and RELREC" (supplemental qualifiers)
-- [ ] Vignette: "Custom Rules and Sponsor Overrides"
+- [x] Vignette: "Multi-Source EX" (join patterns)
+- [x] Vignette: "SUPP and RELREC" (supplemental qualifiers)
+- [x] Vignette: "Custom Rules and Sponsor Overrides"
 - [x] Demo script: `inst/examples/demo_full_pipeline.R`
-- [ ] `pkgdown` site configuration
-- [ ] CI: `.github/workflows/R-CMD-check.yaml` (R 4.1+, ubuntu/windows/macos)
-- [ ] CI: test coverage with `covr` → target ≥ 80%
-- [ ] `NEWS.md` changelog from Phase 1 onward
+- [x] `pkgdown` site configuration
+- [x] CI: `.github/workflows/R-CMD-check.yaml` (R 4.1+, ubuntu/windows/macos)
+- [x] CI: test coverage with `covr` → target ≥ 80%
+- [x] `NEWS.md` changelog from Phase 1 onward
 - [x] Package-level README.md with quick start and architecture
 
 #### Definition of done

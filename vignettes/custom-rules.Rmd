@@ -1,0 +1,252 @@
+---
+title: "Custom Rules and Sponsor Overrides"
+author: "sdtmbuilder team"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Custom Rules and Sponsor Overrides}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+Every sponsor has study-specific requirements that go beyond the standard
+SDTM Implementation Guide.  `sdtmbuilder` supports customisation at three
+levels:
+
+1. **Rule types** — the derivation logic in `rule_type` / `rule_params`.
+2. **Sponsor overrides** — study-specific metadata patches via `config.yaml`.
+3. **Configuration policies** — imputation, unknown CT handling, etc.
+
+This vignette walks through each level with examples.
+
+## 1. Supported Rule Types
+
+The `derive_variable()` dispatcher currently supports these rule types:
+
+| Rule type | Purpose | Key params |
+|-----------|---------|------------|
+| `constant` | Fixed value for every row | `value` |
+| `direct_map` | Copy from source column | `dataset`, `column`, `transform` |
+| `ct_assign` | Controlled terminology mapping | `column`, `codelist_id`, `unknown_policy` |
+| `iso_dtc` | ISO 8601 date/time formatting | `date_col`, `time_col`, `partial_allowed` |
+| `dy` | Study day calculation | `dtc_var`, `ref_var` |
+| `seq` | Sequence number per subject | `by`, `order_by`, `ties` |
+| `epoch` | Epoch assignment from study-day windows | `dtc_var`, `ref_var` |
+| `join` | Value from joined reference data | (reserved) |
+
+### Writing a rule in target metadata
+
+Each rule is a JSON object in the `rule_params` column.  For example, an
+uppercase direct mapping:
+
+```json
+{
+  "dataset": "ae_raw",
+  "column": "aeterm",
+  "transform": "toupper"
+}
+```
+
+Available transforms for `direct_map`: `toupper`, `tolower`, `trimws`.
+
+### CT assignment with custom unknown policy
+
+```json
+{
+  "dataset": "ae_raw",
+  "column": "aesev_raw",
+  "codelist_id": "C66769",
+  "unknown_policy": "warn_and_keep"
+}
+```
+
+Policies:
+
+| Policy | Behaviour |
+|--------|-----------|
+| `"warn_and_keep"` | Keep the original value + emit a warning |
+| `"error"` | Stop the build if a value is not in the codelist |
+| `"map_to_na"` | Replace unrecognised values with NA |
+| `"keep_silent"` | Keep original value without warning |
+
+## 2. Sponsor Overrides
+
+### How they work
+
+`apply_study_overrides()` patches target metadata at run-time using a list
+of overrides stored in `config$sponsor_overrides`.  Each override targets a
+specific `domain + var` combination and replaces any metadata field.
+
+### config.yaml example
+
+```yaml
+sponsor_overrides:
+  - domain: AE
+    var: AESEV
+    codelist_id: SPONSOR_SEV
+    label: "Sponsor Severity Scale"
+  - domain: CM
+    var: CMDOSU
+    codelist_id: SPONSOR_UNIT
+```
+
+### Using overrides in code
+
+```{r overrides}
+library(sdtmbuilder)
+
+study  <- make_dummy_study(seed = 123)
+config <- study$config
+
+# Add a sponsor override
+config$sponsor_overrides <- list(
+  list(
+    domain = "AE",
+    var    = "AESEV",
+    label  = "Sponsor-Defined Severity"
+  )
+)
+
+# Apply the override to target metadata
+patched_meta <- apply_study_overrides(study$target_meta, config)
+
+# Check: the label was changed
+idx <- which(patched_meta$domain == "AE" & patched_meta$var == "AESEV")
+cat("Original label:", study$target_meta$label[idx], "\n")
+cat("Patched label: ", patched_meta$label[idx], "\n")
+```
+
+Overrides can modify any metadata column: `label`, `codelist_id`,
+`rule_type`, `rule_params`, `core`, `length`, etc.
+
+### Override a derivation rule
+
+To change how a variable is derived for a specific study, override the
+`rule_type` and `rule_params`:
+
+```{r override-rule}
+config$sponsor_overrides <- list(
+  list(
+    domain      = "AE",
+    var         = "AETERM",
+    rule_type   = "direct_map",
+    rule_params = '{"dataset":"ae_raw","column":"aeterm","transform":"trimws"}'
+  )
+)
+
+patched <- apply_study_overrides(study$target_meta, config)
+idx <- which(patched$domain == "AE" & patched$var == "AETERM")
+cat("New rule_type: ", patched$rule_type[idx], "\n")
+cat("New rule_params:", patched$rule_params[idx], "\n")
+```
+
+## 3. Configuration Policies
+
+The `config.yaml` file controls several study-wide policies:
+
+### Date imputation
+
+```yaml
+imputation_policy:
+  day: "first"      # Impute missing day as 01
+  month: null       # Do not impute missing month
+  year: null        # Do not impute missing year
+```
+
+### Epoch map
+
+```yaml
+epoch_map:
+  SCREENING:
+    start_day: null
+    end_day: -1
+  TREATMENT:
+    start_day: 1
+    end_day: 92
+  FOLLOW-UP:
+    start_day: 93
+    end_day: null
+```
+
+### Visit map
+
+```yaml
+visit_map:
+  - visit: "SCREENING"
+    visitnum: 1
+  - visit: "BASELINE"
+    visitnum: 2
+  - visit: "WEEK 2"
+    visitnum: 3
+    day_window_start: 8
+    day_window_end: 21
+```
+
+### CT unknown handling
+
+```yaml
+ct:
+  case_sensitive: false
+  unknown_policy: "warn_and_keep"
+```
+
+## 4. Adding a New Domain
+
+To add a domain (e.g., DS — Disposition):
+
+1. **Add rows to `target_meta.csv`** — one per variable:
+
+| domain | var | type | ... | rule_type | rule_params |
+|--------|-----|------|-----|-----------|-------------|
+| DS | STUDYID | char | ... | constant | `{"value":"STUDY-XYZ"}` |
+| DS | DOMAIN | char | ... | constant | `{"value":"DS"}` |
+| DS | USUBJID | char | ... | direct_map | `{"dataset":"ds_raw","column":"usubjid"}` |
+| DS | DSSEQ | num | ... | seq | `{"by":["USUBJID"],"order_by":["DSSTDTC"]}` |
+| DS | DSTERM | char | ... | direct_map | `{"dataset":"ds_raw","column":"dsterm","transform":"toupper"}` |
+| DS | DSDECOD | char | ... | ct_assign | `{"dataset":"ds_raw","column":"dsdecod","codelist_id":"C66727"}` |
+| DS | DSSTDTC | char | ... | iso_dtc | `{"date_col":{"dataset":"ds_raw","column":"dsstdat"}}` |
+
+2. **Add source columns to `source_meta.csv`**:
+
+| dataset | column | type | label |
+|---------|--------|------|-------|
+| ds_raw | usubjid | character | Subject ID |
+| ds_raw | dsterm | character | Disposition term |
+| ds_raw | dsdecod | character | Coded disposition |
+| ds_raw | dsstdat | character | Date |
+
+3. **Add CT entries** for any new codelists in `ct_codelist.csv`.
+
+4. **Provide the raw data** in your `raw_data` list as `ds_raw`.
+
+5. **Build**:
+
+```r
+rule_set <- compile_rules(target_meta, source_meta, ct_lib)
+ds_result <- build_domain("DS", target_meta, source_meta,
+                          raw_data, config, rule_set)
+```
+
+No R code changes required — everything is metadata-driven.
+
+## Summary
+
+| Level | Mechanism | When to use |
+|-------|-----------|-------------|
+| Rule types | `rule_type` + `rule_params` in metadata | Standard derivation patterns |
+| Sponsor overrides | `config$sponsor_overrides` | Study-specific metadata patches |
+| Policies | `config.yaml` fields | Study-wide behaviour (imputation, CT, epochs) |
+| New domains | Add rows to metadata CSVs | Extending beyond the 8 starter domains |
+
+The entire pipeline is driven by metadata and configuration—never by
+hard-coded R logic.  This makes it straightforward to adapt `sdtmbuilder`
+to any study's requirements.
