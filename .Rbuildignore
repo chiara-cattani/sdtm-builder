@@ -1,0 +1,14 @@
+^\.Rproj\.user$
+^.*\.Rproj$
+^\.Rhistory$
+^\.RData$
+^LICENSE\.md$
+^README\.Rmd$
+^\.github$
+^vignettes/.*_cache$
+^docs$
+^pkgdown$
+^_pkgdown\.yml$
+^\.lintr$
+^codecov\.yml$
+^ROADMAP\.md$

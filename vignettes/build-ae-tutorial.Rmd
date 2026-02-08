@@ -1,0 +1,222 @@
+---
+title: "Build AE from Metadata — End-to-End Tutorial"
+author: "sdtmbuilder team"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Build AE from Metadata}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Introduction
+
+This tutorial walks through building an **Adverse Events (AE)** SDTM domain
+from raw data using `sdtmbuilder`.
+The package follows a metadata-driven approach: every variable derivation is
+defined in a CSV metadata file, not hard-coded in R.
+
+By the end you will:
+
+1. Generate dummy clinical trial data
+2. Inspect the metadata that drives the pipeline
+3. Compile derivation rules
+4. Build the AE domain
+5. Inspect and validate the result
+6. Export to XPT
+
+## Step 1 — Load the package and generate data
+
+```{r load}
+library(sdtmbuilder)
+
+# Generate a 30-subject dummy study
+study <- make_dummy_study(seed = 123)
+
+# Unpack components
+config      <- study$config
+target_meta <- study$target_meta
+source_meta <- study$source_meta
+ct_lib      <- study$ct_lib
+raw_data    <- study$raw_data
+```
+
+Our dummy study contains **`r nrow(raw_data$dm_raw)` subjects** across
+`r length(unique(raw_data$dm_raw$siteid))` sites, with
+`r nrow(raw_data$ae_raw)` adverse events.
+
+## Step 2 — Understand the metadata
+
+The `target_meta` dataframe tells sdtmbuilder exactly how each SDTM variable
+should be derived:
+
+```{r metadata}
+# Show the AE target metadata
+ae_meta <- target_meta[target_meta$domain == "AE", ]
+ae_meta[, c("var", "type", "core", "rule_type", "depends_on")]
+```
+
+Each row is one SDTM variable. Key columns:
+
+- **`rule_type`** — the derivation method (`constant`, `direct_map`, `ct_assign`,
+  `iso_dtc`, `dy`, `seq`)
+- **`rule_params`** — JSON parameters for the rule (source column, codelist, etc.)
+- **`depends_on`** — variables that must be derived first
+
+The source metadata describes the raw datasets:
+
+```{r source-meta}
+source_meta[source_meta$dataset == "ae_raw", c("dataset", "column", "type", "label")]
+```
+
+And the controlled terminology maps raw values to CDISC standard values:
+
+```{r ct}
+ct_lib[ct_lib$codelist_id == "C66769", c("codelist_id", "input_value", "coded_value")]
+```
+
+## Step 3 — Compile rules
+
+The `compile_rules()` function reads the metadata and produces a structured
+rule set:
+
+```{r compile}
+rule_set <- compile_rules(target_meta, source_meta, ct_lib)
+
+# AE has 12 rules
+cat("AE rules:", length(rule_set$rules$AE), "\n")
+
+# Show rule types
+vapply(rule_set$rules$AE, function(r) r$type, character(1))
+```
+
+The rule compiler:
+
+1. Parses JSON parameters
+2. Resolves dependencies (e.g., AESEQ depends on AESTDTC)
+3. Enriches CT rules with codelist mappings
+4. Validates required columns exist
+
+## Step 4 — Build the AE domain
+
+Now the main event — `build_domain()` orchestrates the full derivation:
+
+```{r build}
+ae_result <- build_domain(
+  domain      = "AE",
+  target_meta = target_meta,
+  source_meta = source_meta,
+  raw_data    = raw_data,
+  config      = config,
+  rule_set    = rule_set,
+  verbose     = FALSE
+)
+```
+
+### What happened inside?
+
+1. **Load**: Raw `ae_raw` data loaded (`r nrow(raw_data$ae_raw)` rows)
+2. **Join**: DM data joined to get RFSTDTC for study day calculations
+3. **Dependency sort**: Variables ordered (STUDYID → DOMAIN → ... → AESTDY)
+4. **Derive**: Each variable derived using its rule:
+   - `STUDYID` ← constant "STUDY-XYZ"
+   - `AETERM` ← direct map from `aeterm`, uppercased
+   - `AESEV` ← CT assignment using codelist C66769
+   - `AESTDTC` ← ISO 8601 formatting with optional time
+   - `AESTDY` ← study day from AESTDTC and RFSTDTC
+   - `AESEQ` ← sequence number by subject, ordered by start date
+5. **Finalize**: Select target variables, enforce types, apply labels
+6. **Validate**: Check required vars, key uniqueness, ISO dates, CT values
+
+## Step 5 — Inspect the result
+
+```{r inspect}
+ae <- ae_result$data
+
+# Dimensions
+cat("AE domain:", nrow(ae), "rows x", ncol(ae), "columns\n")
+
+# Variables
+names(ae)
+
+# First few rows
+head(ae[, c("STUDYID", "USUBJID", "AESEQ", "AETERM", "AESEV", "AESTDTC", "AESTDY")])
+```
+
+### Severity distribution (after CT mapping)
+
+```{r severity}
+table(ae$AESEV)
+```
+
+All values are now in CDISC standard format (MILD, MODERATE, SEVERE),
+regardless of the original mixed-case input.
+
+### Study days
+
+```{r study-day}
+# AESTDY: positive = after ref start, negative = before
+summary(ae$AESTDY)
+```
+
+### Validation report
+
+```{r validation}
+ae_result$report$findings
+```
+
+Zero errors means the AE domain passes all structural validation checks.
+
+## Step 6 — Export to XPT
+
+```{r export}
+output_dir <- tempdir()
+export_xpt(ae, "AE", output_dir, target_meta)
+cat("Exported:", file.path(output_dir, "ae.xpt"), "\n")
+cat("File size:", file.size(file.path(output_dir, "ae.xpt")), "bytes\n")
+```
+
+## Building all 8 domains
+
+The same pipeline works for any domain defined in the metadata.
+sdtmbuilder currently supports:
+
+| Domain | Class | Description | Rows |
+|--------|-------|-------------|------|
+| DM | Special Purpose | Demographics | `r nrow(study$raw_data$dm_raw)` |
+| AE | Events | Adverse Events | `r nrow(study$raw_data$ae_raw)` |
+| CM | Interventions | Concomitant Meds | `r nrow(study$raw_data$cm_raw)` |
+| MH | Events | Medical History | `r nrow(study$raw_data$mh_raw)` |
+| PR | Events | Procedures | `r nrow(study$raw_data$pr_raw)` |
+| EX | Interventions | Exposure | `r nrow(study$raw_data$ex_raw)` |
+| VS | Findings | Vital Signs | `r nrow(study$raw_data$vs_raw)` |
+| LB | Findings | Laboratory | `r nrow(study$raw_data$lb_raw)` |
+
+```{r all-domains}
+# Quick end-to-end check for all domains
+for (dom in names(rule_set$rules)) {
+  res <- build_domain(dom, target_meta, source_meta, raw_data,
+                      config, rule_set, verbose = FALSE)
+  n_err <- sum(res$report$findings$severity == "ERROR")
+  cat(sprintf("  %s: %d rows x %d cols | Errors: %d\n",
+              dom, nrow(res$data), ncol(res$data), n_err))
+}
+```
+
+## Next steps
+
+- **Your own data**: Replace `make_dummy_study()` with your real raw datasets
+- **Add domains**: Add rows to `target_meta.csv` for new domains
+- **Custom rules**: Edit `rule_params` JSON to change derivation logic
+- **Controlled terminology**: Add rows to `ct_codelist.csv` for new mappings
+- **Validation**: Review validation reports before submission
+
+See `?build_domain`, `?compile_rules`, and `?make_dummy_study` for full
+documentation.

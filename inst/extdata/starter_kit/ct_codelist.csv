@@ -1,0 +1,51 @@
+codelist_id,codelist_name,input_value,coded_value,decode,case_sensitive,notes
+C66769,Severity/Intensity Scale for Adverse Events,mild,MILD,Mild,N,AESEV
+C66769,Severity/Intensity Scale for Adverse Events,moderate,MODERATE,Moderate,N,AESEV
+C66769,Severity/Intensity Scale for Adverse Events,severe,SEVERE,Severe,N,AESEV
+C66769,Severity/Intensity Scale for Adverse Events,MILD,MILD,Mild,N,AESEV uppercase
+C66769,Severity/Intensity Scale for Adverse Events,MODERATE,MODERATE,Moderate,N,AESEV uppercase
+C66769,Severity/Intensity Scale for Adverse Events,SEVERE,SEVERE,Severe,N,AESEV uppercase
+C66769,Severity/Intensity Scale for Adverse Events,Mild,MILD,Mild,N,AESEV mixed case
+C66769,Severity/Intensity Scale for Adverse Events,Moderate,MODERATE,Moderate,N,AESEV mixed case
+C66769,Severity/Intensity Scale for Adverse Events,Severe,SEVERE,Severe,N,AESEV mixed case
+C66770,Causality,related,RELATED,Related,N,AEREL
+C66770,Causality,not related,NOT RELATED,Not Related,N,AEREL
+C66770,Causality,possibly related,POSSIBLY RELATED,Possibly Related,N,AEREL
+C66770,Causality,RELATED,RELATED,Related,N,AEREL uppercase
+C66770,Causality,NOT RELATED,NOT RELATED,Not Related,N,AEREL uppercase
+C66770,Causality,POSSIBLY RELATED,POSSIBLY RELATED,Possibly Related,N,AEREL uppercase
+YN,Yes/No Response,y,Y,Yes,N,generic Y/N
+YN,Yes/No Response,n,N,No,N,generic Y/N
+YN,Yes/No Response,Y,Y,Yes,N,generic Y/N uppercase
+YN,Yes/No Response,N,N,No,N,generic Y/N uppercase
+YN,Yes/No Response,yes,Y,Yes,N,generic Y/N
+YN,Yes/No Response,no,N,No,N,generic Y/N
+ROUTE,Route of Administration,oral,ORAL,Oral,N,CMROUTE
+ROUTE,Route of Administration,iv,INTRAVENOUS,Intravenous,N,CMROUTE
+ROUTE,Route of Administration,topical,TOPICAL,Topical,N,CMROUTE
+ROUTE,Route of Administration,ORAL,ORAL,Oral,N,CMROUTE uppercase
+ROUTE,Route of Administration,INTRAVENOUS,INTRAVENOUS,Intravenous,N,CMROUTE
+ROUTE,Route of Administration,subcutaneous,SUBCUTANEOUS,Subcutaneous,N,CMROUTE
+UNIT,Unit,mg,mg,mg,Y,dose units
+UNIT,Unit,ml,mL,mL,N,dose units
+UNIT,Unit,g,g,g,Y,dose units
+UNIT,Unit,mcg,mcg,mcg,Y,dose units
+FREQ,Frequency,qd,QD,Every Day,N,CMDOSFRQ
+FREQ,Frequency,bid,BID,Twice a Day,N,CMDOSFRQ
+FREQ,Frequency,tid,TID,Three Times a Day,N,CMDOSFRQ
+FREQ,Frequency,prn,PRN,As Needed,N,CMDOSFRQ
+FREQ,Frequency,QD,QD,Every Day,N,CMDOSFRQ uppercase
+FREQ,Frequency,BID,BID,Twice a Day,N,CMDOSFRQ uppercase
+SEX,Sex,M,M,Male,N,DM SEX
+SEX,Sex,F,F,Female,N,DM SEX
+SEX,Sex,m,M,Male,N,DM SEX lowercase
+SEX,Sex,f,F,Female,N,DM SEX lowercase
+RACE,Race,WHITE,WHITE,White,N,DM RACE
+RACE,Race,BLACK OR AFRICAN AMERICAN,BLACK OR AFRICAN AMERICAN,Black or African American,N,DM RACE
+RACE,Race,ASIAN,ASIAN,Asian,N,DM RACE
+RACE,Race,OTHER,OTHER,Other,N,DM RACE
+RACE,Race,white,WHITE,White,N,DM RACE lowercase
+RACE,Race,asian,ASIAN,Asian,N,DM RACE lowercase
+AGEU,Age Unit,YEARS,YEARS,Years,N,DM AGEU
+AGEU,Age Unit,years,YEARS,Years,N,DM AGEU lowercase
+AGEU,Age Unit,Years,YEARS,Years,N,DM AGEU mixed

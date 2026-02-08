@@ -1,0 +1,329 @@
+---
+title: "Build Pipeline"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Build Pipeline}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# sdtmbuilder Build Pipeline
+
+This vignette walks through the recommended end-to-end pipeline for
+building one or more SDTM domains with `sdtmbuilder`.
+
+---
+
+## 1. Pipeline Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     sdtmbuilder Pipeline                        │
+│                                                                 │
+│  Step 1 ─ Configure   ───► new_sdtm_config()                   │
+│  Step 2 ─ Ingest      ───► read_target_meta / read_source_meta  │
+│                             read_ct_library                     │
+│  Step 3 ─ Validate    ───► validate_target_meta, etc.           │
+│  Step 4 ─ Compile     ───► compile_rules()                      │
+│  Step 5 ─ Dependency  ───► build_dependency_graph()              │
+│                             topo_sort_rules()                   │
+│  Step 6 ─ Load Data   ───► load_raw_data()                      │
+│  Step 7 ─ Build       ───► build_domain()                       │
+│  Step 8 ─ Validate    ───► validate_domain_structure()           │
+│  Step 9 ─ Export      ───► export_xpt() / export_rds_csv()      │
+│  Step 10─ Codegen     ───► gen_domain_script() [optional]        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Step-by-Step Walkthrough
+
+### Step 1: Configure the Study
+
+```r
+library(sdtmbuilder)
+
+cfg <- new_sdtm_config(
+  studyid        = "CDISCPILOT01",
+  timezone       = "UTC",
+  ref_start_rule = list(var = "RFSTDTC", source = "DM"),
+  ct_paths       = c("path/to/cdisc_ct_2024-09-27.csv",
+                      "path/to/sponsor_ct.csv"),
+  visit_map      = readr::read_csv("metadata/visit_map.csv"),
+  imputation_policy = list(
+    day   = "first",
+    month = NULL,
+    year  = NULL
+  ),
+  sponsor_overrides = list(
+    ae_max_length = 500,
+    custom_epoch_logic = TRUE
+  ),
+  log_level = "INFO"
+)
+```
+
+### Step 2: Ingest Metadata
+
+```r
+# Read the three metadata inputs
+target_meta <- read_target_meta("metadata/target_var_meta.xlsx", format = "excel")
+source_meta <- read_source_meta("metadata/source_col_meta.csv")
+ct_lib      <- read_ct_library(cfg$ct_paths)
+
+# Bundle them
+mb <- new_meta_bundle(
+  target_meta = target_meta,
+  source_meta = source_meta,
+  ct_lib      = ct_lib
+)
+```
+
+### Step 3: Validate Metadata
+
+```r
+# Structural validation of each metadata input
+validate_target_meta(mb$target_meta)
+validate_source_meta(mb$source_meta)
+validate_ct_library(mb$ct_lib)
+
+# Normalize (uppercase domain/var, trim whitespace, etc.)
+mb$target_meta <- normalize_target_meta(mb$target_meta)
+mb$source_meta <- normalize_source_meta(mb$source_meta)
+
+# Optionally expand value-level metadata
+vlm <- readr::read_csv("metadata/value_level_meta.csv")
+mb$target_meta <- expand_value_level_meta(mb$target_meta, vlm)
+```
+
+### Step 4: Compile Rules
+
+```r
+# For each domain, compile derivation rules from the metadata
+domains <- unique(mb$target_meta$domain)
+
+rule_sets <- lapply(domains, function(dom) {
+  domain_meta <- resolve_domain_model(mb$target_meta, domain = dom)
+  rs <- compile_rules(domain_meta, domain = dom)
+  rs <- enrich_rules_with_ct(rs$rules, mb$ct_lib)
+  new_rule_set(rules = rs, domain = dom)
+})
+names(rule_sets) <- domains
+```
+
+### Step 5: Resolve Dependencies
+
+```r
+# For each domain, build the DAG → topological sort → execution plan
+for (dom in domains) {
+  rs <- rule_sets[[dom]]
+
+  cycles <- detect_cycles(rs$rules)
+  if (length(cycles) > 0) {
+    cli::cli_abort("Circular dependency in {dom}: {cycles}")
+  }
+
+  rs$rules <- topo_sort_rules(rs$rules)
+  rule_sets[[dom]] <- rs
+}
+```
+
+### Step 6: Load Raw Data
+
+```r
+# Identify all source datasets needed
+all_datasets <- unique(mb$source_meta$dataset)
+
+data_list <- lapply(all_datasets, function(ds) {
+  path <- file.path("rawdata", paste0(ds, ".csv"))
+  df <- load_raw_data(path, format = "csv")
+  df <- standardize_names(df, convention = "upper_snake")
+  df <- standardize_types(df, mb$source_meta[mb$source_meta$dataset == ds, ])
+  df <- apply_missing_conventions(df, blank_is_na = TRUE)
+  df <- derive_core_keys(df, cfg)
+  df
+})
+names(data_list) <- all_datasets
+```
+
+### Step 7: Build Domains
+
+```r
+# Recommended build order (trial design first, then DM, then others)
+build_order <- c("TA", "TV", "TE", "TS",   # Trial design
+                 "DM",                        # Demographics
+                 "SV", "SE",                  # Subject visits / elements
+                 sort(setdiff(domains,
+                   c("TA","TV","TE","TS","DM","SV","SE"))))
+
+results <- list()
+for (dom in build_order) {
+  if (!dom %in% names(rule_sets)) next
+  log_info("Building domain: {dom}")
+
+  ctx <- new_build_context(
+    config      = cfg,
+    meta_bundle = mb,
+    rule_set    = rule_sets[[dom]],
+    domain      = dom
+  )
+
+  results[[dom]] <- build_domain(
+    context   = ctx,
+    data_list = data_list
+  )
+}
+```
+
+### Step 8: Validate Built Domains
+
+```r
+all_reports <- list()
+for (dom in names(results)) {
+  domain_target <- mb$target_meta[mb$target_meta$domain == dom, ]
+  vr <- validate_domain_structure(results[[dom]], domain_target, domain = dom)
+
+  # Cross-domain: ensure all USUBJIDs exist in DM
+  if (dom != "DM" && "DM" %in% names(results)) {
+    xd <- validate_cross_domain(results[[dom]], results[["DM"]],
+                                 key = "USUBJID", domain = dom)
+    for (f in xd) vr <- add_finding(vr, level = "ERROR", check = "cross_domain", message = f)
+  }
+
+  all_reports[[dom]] <- vr
+  summary <- summarize_validation_report(vr)
+  log_info("{dom}: {summary$n_errors} errors, {summary$n_warnings} warnings")
+}
+```
+
+### Step 9: Export
+
+```r
+output_dir <- "output/sdtm"
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+for (dom in names(results)) {
+  domain_target <- mb$target_meta[mb$target_meta$domain == dom, ]
+
+  # Finalize: column order, variable selection, labels
+  final <- finalize_domain(results[[dom]], domain_target)
+
+  # Write XPT
+  export_xpt(final,
+             path = file.path(output_dir, paste0(tolower(dom), ".xpt")),
+             domain = dom,
+             target_meta = domain_target)
+
+  # Write RDS + CSV for convenience
+  export_rds_csv(final, dir = output_dir, domain = dom)
+}
+```
+
+### Step 10 (Optional): Generate Reproducible Scripts
+
+```r
+script_dir <- "programs/sdtm"
+dir.create(script_dir, recursive = TRUE, showWarnings = FALSE)
+
+for (dom in names(rule_sets)) {
+  # R script
+  code <- gen_domain_script(domain = dom, rules = rule_sets[[dom]]$rules,
+                            template = "default", comments = TRUE)
+  writeLines(code, file.path(script_dir, paste0(tolower(dom), ".R")))
+
+  # Quarto document
+  qmd <- gen_qmd_domain(domain = dom, rules = rule_sets[[dom]]$rules)
+  writeLines(qmd, file.path(script_dir, paste0(tolower(dom), ".qmd")))
+}
+
+# Shared utilities
+utils_code <- gen_shared_utils_script(config = cfg)
+writeLines(utils_code, file.path(script_dir, "00_shared_utils.R"))
+```
+
+---
+
+## 3. Recommended Domain Build Order
+
+| Phase | Domains | Reason |
+|-------|---------|--------|
+| 1. Trial Design | TA, TV, TE, TS | Reference data for all other domains |
+| 2. Demographics | DM | RFSTDTC, RFENDTC, USUBJID baseline |
+| 3. Subject-level | SV, SE | Visit / element structure |
+| 4. Interventions | CM, EX, EC, SU | Concomitant meds, exposure, substances |
+| 5. Events | AE, DS, MH, DV, CE | Adverse events, disposition, medical history |
+| 6. Findings | LB, VS, EG, PE, SC, QS, MB, MS, MI | Labs, vitals, ECG, physical exam |
+| 7. Supplemental | SUPPAE, SUPPCM, ... | After parent domain is built |
+| 8. Relationships | RELREC | After all linked domains exist |
+| 9. Comments | CO | Last |
+
+---
+
+## 4. Single-Domain Quick Build
+
+For rapid iteration on a single domain:
+```r
+# Quick build for AE only
+cfg  <- new_sdtm_config(studyid = "STUDY01", ref_start_rule = list(var = "RFSTDTC", source = "DM"))
+meta <- read_target_meta("metadata/target_var_meta.xlsx", format = "excel")
+ct   <- read_ct_library("metadata/cdisc_ct.csv")
+smeta <- read_source_meta("metadata/source_col_meta.csv")
+
+mb <- new_meta_bundle(target_meta = meta, source_meta = smeta, ct_lib = ct)
+ae_meta <- resolve_domain_model(mb$target_meta, domain = "AE")
+rs <- compile_rules(ae_meta, domain = "AE")
+rs$rules <- topo_sort_rules(rs$rules)
+
+ae_raw <- load_raw_data("rawdata/ae_raw.csv", format = "csv") |>
+  standardize_names() |>
+  derive_core_keys(cfg)
+
+dm_raw <- load_raw_data("rawdata/dm_raw.csv", format = "csv") |>
+  standardize_names()
+
+ctx <- new_build_context(config = cfg, meta_bundle = mb, rule_set = rs, domain = "AE")
+ae <- build_domain(context = ctx, data_list = list(ae_raw = ae_raw, dm_raw = dm_raw))
+
+vr <- validate_domain_structure(ae, ae_meta, domain = "AE")
+print(vr)
+
+export_xpt(ae, path = "output/ae.xpt", domain = "AE", target_meta = ae_meta)
+```
+
+---
+
+## 5. Error Handling Strategy
+
+Throughout the pipeline, `sdtmbuilder` uses structured error handling:
+
+- **Fatal errors** (`stop_with_context()`): Missing required metadata, circular
+  dependencies, type mismatches that cannot be resolved. Pipeline halts.
+- **Warnings** (`warn_with_context()`): Unexpected CT values, duplicate records
+  resolved by rule, partial dates. Pipeline continues; findings collected in
+  the validation report.
+- **Informational** (`log_info()`): Progress messages, row counts, timing.
+
+All messages include contextual metadata (domain, variable, rule type) for
+easy debugging.
+
+---
+
+## 6. Parallelization Notes
+
+Domains within the same build phase (see §3) can be built in parallel since
+they have no cross-dependencies. Use `future` / `furrr` for parallel execution:
+
+```r
+library(future)
+library(furrr)
+plan(multisession, workers = 4)
+
+phase5_domains <- c("AE", "DS", "MH", "DV", "CE")
+results_p5 <- future_map(phase5_domains, function(dom) {
+  ctx <- new_build_context(config = cfg, meta_bundle = mb,
+                           rule_set = rule_sets[[dom]], domain = dom)
+  build_domain(context = ctx, data_list = data_list)
+}, .options = furrr_options(seed = TRUE))
+names(results_p5) <- phase5_domains
+```

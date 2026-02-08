@@ -1,0 +1,234 @@
+# ==============================================================================
+# Module C: Rule Compilation
+# ==============================================================================
+
+#' Compile derivation rules from metadata
+#'
+#' @param target_meta Tibble (validated, normalized).
+#' @param source_meta Tibble (validated, normalized).
+#' @param ct_lib Tibble or `NULL`.
+#' @param dsl Character. Default `"json"`.
+#' @param strict Logical. Default `TRUE`.
+#' @return `rule_set` object.
+#' @export
+compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
+                          dsl = "json", strict = TRUE) {
+  domains <- unique(target_meta$domain)
+  all_rules  <- list()
+  dep_info   <- list()
+  type_accum <- character()
+  compile_log <- character()
+
+
+  for (dom in domains) {
+    dom_meta <- dplyr::filter(target_meta, .data$domain == dom)
+    dom_rules <- list()
+
+    for (i in seq_len(nrow(dom_meta))) {
+      row <- dom_meta[i, ]
+      var_name  <- row$var
+      rule_type <- row$rule_type
+
+      if (is.na(rule_type) || rule_type == "") {
+        compile_log <- c(compile_log,
+                         glue::glue("{dom}.{var_name}: no rule_type, skipping"))
+        next
+      }
+
+      # Parse rule params
+      params <- list()
+      if (!is.na(row$rule_params) && nchar(row$rule_params) > 0) {
+        params <- tryCatch(
+          jsonlite::fromJSON(row$rule_params, simplifyVector = FALSE),
+          error = function(e) {
+            compile_log <<- c(compile_log,
+                              glue::glue("{dom}.{var_name}: JSON parse error: {e$message}"))
+            list()
+          }
+        )
+      }
+
+      # Parse depends_on
+      deps <- character()
+      if (!is.na(row$depends_on) && nchar(row$depends_on) > 0) {
+        deps <- trimws(strsplit(row$depends_on, ";")[[1]])
+      }
+
+      rule_obj <- list(
+        domain     = dom,
+        var        = var_name,
+        type       = rule_type,
+        params     = params,
+        depends_on = deps,
+        codelist_id = if (!is.na(row$codelist_id)) row$codelist_id else NULL,
+        label      = row$label,
+        target_type = row$type,
+        core       = row$core,
+        order      = row$order
+      )
+
+      dom_rules[[var_name]] <- rule_obj
+      type_accum <- c(type_accum, rule_type)
+    }
+
+    all_rules[[dom]] <- dom_rules
+
+    # Build dependency edges
+    edges <- tibble::tibble(from_var = character(), to_var = character(),
+                            domain = character())
+    for (var_name in names(dom_rules)) {
+      rule <- dom_rules[[var_name]]
+      for (dep in rule$depends_on) {
+        edges <- dplyr::bind_rows(edges, tibble::tibble(
+          from_var = dep, to_var = var_name, domain = dom))
+      }
+    }
+    dep_info[[dom]] <- edges
+  }
+
+  # Enrich CT rules
+  if (!is.null(ct_lib)) {
+    for (dom in names(all_rules)) {
+      for (var_name in names(all_rules[[dom]])) {
+        rule <- all_rules[[dom]][[var_name]]
+        if (rule$type == "ct_assign" && !is.null(rule$codelist_id)) {
+          cl <- dplyr::filter(ct_lib, .data$codelist_id == rule$codelist_id)
+          if (nrow(cl) > 0) {
+            rule$params$ct_map <- stats::setNames(cl$coded_value,
+                                                   tolower(cl$input_value))
+            rule$params$ct_resolved <- TRUE
+          } else {
+            compile_log <- c(compile_log,
+                             glue::glue("{dom}.{var_name}: codelist {rule$codelist_id} not found in CT library"))
+            rule$params$ct_resolved <- FALSE
+          }
+          all_rules[[dom]][[var_name]] <- rule
+        }
+      }
+    }
+  }
+
+  new_rule_set(
+    rules          = all_rules,
+    dependency_info = dep_info,
+    rule_types     = unique(type_accum),
+    compile_log    = compile_log
+  )
+}
+
+#' Parse a rule JSON specification
+#' @param rule_json Character or list.
+#' @param var Character. Target variable name.
+#' @return Named list.
+#' @export
+parse_rule_json <- function(rule_json, var = NA_character_) {
+  if (is.character(rule_json)) {
+    parsed <- tryCatch(
+      jsonlite::fromJSON(rule_json, simplifyVector = FALSE),
+      error = function(e) abort(glue::glue("JSON parse error for {var}: {e$message}"))
+    )
+  } else {
+    parsed <- rule_json
+  }
+  parsed
+}
+
+#' Parse a rule DSL specification
+#' @param rule_text Character.
+#' @param var Character. Target variable name.
+#' @return Named list.
+#' @export
+parse_rule_dsl <- function(rule_text, var = NA_character_) {
+  # Minimal DSL parser for future expansion
+  parts <- strsplit(rule_text, ":\\s*", perl = TRUE)[[1]]
+  if (length(parts) < 2) abort(glue::glue("Malformed DSL rule for {var}: {rule_text}"))
+  list(type = trimws(parts[1]), params = list(raw = trimws(parts[2])),
+       source_refs = character())
+}
+
+#' Validate compiled rules
+#' @param rule_set `rule_set` object.
+#' @param source_meta Tibble.
+#' @param ct_lib Tibble or `NULL`.
+#' @return Updated `rule_set`.
+#' @export
+validate_rules <- function(rule_set, source_meta, ct_lib = NULL) {
+  log <- rule_set$compile_log
+  for (dom in names(rule_set$rules)) {
+    for (var_name in names(rule_set$rules[[dom]])) {
+      rule <- rule_set$rules[[dom]][[var_name]]
+      # Check source refs exist
+      if (!is.null(rule$params$dataset)) {
+        ds <- tolower(rule$params$dataset)
+        if (!ds %in% tolower(source_meta$dataset)) {
+          log <- c(log, glue::glue("WARN: {dom}.{var_name} references unknown dataset '{ds}'"))
+        }
+      }
+    }
+  }
+  rule_set$compile_log <- log
+  rule_set
+}
+
+#' Enrich rules with CT details
+#' @param rule_set `rule_set` object.
+#' @param ct_lib Tibble.
+#' @return Updated `rule_set`.
+#' @export
+enrich_rules_with_ct <- function(rule_set, ct_lib) {
+  for (dom in names(rule_set$rules)) {
+    for (var_name in names(rule_set$rules[[dom]])) {
+      rule <- rule_set$rules[[dom]][[var_name]]
+      if (rule$type %in% c("ct_assign", "ct_decode") && !is.null(rule$codelist_id)) {
+        cl <- dplyr::filter(ct_lib, .data$codelist_id == rule$codelist_id)
+        if (nrow(cl) > 0) {
+          rule$params$ct_map <- stats::setNames(cl$coded_value,
+                                                 tolower(cl$input_value))
+          rule$params$ct_resolved <- TRUE
+        } else {
+          rule$params$ct_resolved <- FALSE
+        }
+        rule_set$rules[[dom]][[var_name]] <- rule
+      }
+    }
+  }
+  rule_set
+}
+
+#' Infer inter-variable dependencies from rules
+#' @param rule_set `rule_set` object.
+#' @return Updated `rule_set`.
+#' @export
+infer_rule_dependencies <- function(rule_set) {
+  # Already done during compile_rules; this is a passthrough for re-inference
+  for (dom in names(rule_set$rules)) {
+    edges <- tibble::tibble(from_var = character(), to_var = character(),
+                            domain = character())
+    for (var_name in names(rule_set$rules[[dom]])) {
+      rule <- rule_set$rules[[dom]][[var_name]]
+      for (dep in rule$depends_on) {
+        edges <- dplyr::bind_rows(edges, tibble::tibble(
+          from_var = dep, to_var = var_name, domain = dom))
+      }
+    }
+    rule_set$dependency_info[[dom]] <- edges
+  }
+  rule_set
+}
+
+#' Canonicalize rules to standard form
+#' @param rule_set `rule_set` object.
+#' @return Canonicalized `rule_set`.
+#' @export
+canonicalize_rules <- function(rule_set) {
+  # Idempotent normalization
+  for (dom in names(rule_set$rules)) {
+    for (var_name in names(rule_set$rules[[dom]])) {
+      rule <- rule_set$rules[[dom]][[var_name]]
+      rule$type <- tolower(rule$type)
+      rule_set$rules[[dom]][[var_name]] <- rule
+    }
+  }
+  rule_set$rule_types <- unique(tolower(rule_set$rule_types))
+  rule_set
+}

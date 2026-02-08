@@ -1,0 +1,79 @@
+dataset,column,type,label,is_key,notes
+dm_raw,usubjid,character,Unique Subject Identifier,Y,
+dm_raw,subjid,character,Subject Identifier within Site,N,
+dm_raw,siteid,character,Study Site Identifier,N,
+dm_raw,rfstdtc,character,Subject Reference Start Date/Time,N,ISO 8601 full date
+dm_raw,rfendtc,character,Subject Reference End Date/Time,N,ISO 8601 full date
+dm_raw,brthdtc,character,Date/Time of Birth,N,ISO 8601 date
+dm_raw,age,numeric,Age,N,years
+dm_raw,sex,character,Sex,N,M or F
+dm_raw,race,character,Race,N,free text
+dm_raw,armcd,character,Planned Arm Code,N,
+dm_raw,arm,character,Description of Planned Arm,N,
+ae_raw,usubjid,character,Unique Subject Identifier,Y,
+ae_raw,aeid,character,Sponsor-defined AE identifier,N,for traceability
+ae_raw,aeterm,character,Reported AE term,N,free text
+ae_raw,aedecod,character,Dictionary-coded AE term,N,pre-coded
+ae_raw,aesev_raw,character,Severity raw value,N,values: mild/moderate/severe (mixed case)
+ae_raw,aeser_raw,character,Serious event raw,N,values: y/n
+ae_raw,aerel_raw,character,Causality raw value,N,values: related/not related/possibly related
+ae_raw,aestdat,character,Start date raw,N,format YYYY-MM-DD or partial YYYY-MM
+ae_raw,aestim,character,Start time raw,N,format HH:MM; ~40% missing
+ae_raw,aeendat,character,End date raw,N,format YYYY-MM-DD; some missing (ongoing)
+ae_raw,aeentim,character,End time raw,N,format HH:MM; mostly missing
+cm_raw,usubjid,character,Unique Subject Identifier,Y,
+cm_raw,cmid,character,Sponsor-defined CM identifier,N,
+cm_raw,cmtrt,character,Medication name,N,free text
+cm_raw,cmdecod,character,Standardized medication name,N,pre-coded
+cm_raw,cmroute_raw,character,Route of administration raw,N,values: oral/iv/topical
+cm_raw,cmdose,numeric,Dose amount,N,
+cm_raw,cmdosu_raw,character,Dose unit raw,N,values: mg/ml/g
+cm_raw,cmdosfrq_raw,character,Dosing frequency raw,N,values: qd/bid/tid/prn
+cm_raw,cmstdat,character,Start date raw,N,YYYY-MM-DD
+cm_raw,cmendat,character,End date raw,N,YYYY-MM-DD; missing for ongoing
+mh_raw,usubjid,character,Unique Subject Identifier,Y,
+mh_raw,mhid,character,Sponsor-defined MH identifier,N,
+mh_raw,mhterm,character,Medical history term,N,free text
+mh_raw,mhdecod,character,Dictionary-coded MH term,N,pre-coded
+mh_raw,mhcat,character,Category (e.g. General or Surgical),N,
+mh_raw,mhstdat,character,Start date raw,N,"YYYY-MM-DD, YYYY-MM, or YYYY (partial)"
+mh_raw,mhendat,character,End date raw,N,"YYYY-MM-DD or missing; ~50% ongoing"
+pr_raw,usubjid,character,Unique Subject Identifier,Y,
+pr_raw,prid,character,Sponsor-defined PR identifier,N,
+pr_raw,prtrt,character,Procedure name,N,free text
+pr_raw,prcat,character,Procedure category,N,e.g. Diagnostic/Surgical/Monitoring
+pr_raw,prpresp_raw,character,Pre-specified flag raw,N,values: y/n
+pr_raw,prstdat,character,Start date raw,N,YYYY-MM-DD
+pr_raw,prstim,character,Start time raw,N,HH:MM; ~60% present
+pr_raw,prendat,character,End date raw,N,YYYY-MM-DD; ~70% present
+dm_raw,ageu_raw,character,Age unit raw,N,values: YEARS
+ex_raw,usubjid,character,Unique Subject Identifier,Y,
+ex_raw,exid,character,Sponsor-defined EX identifier,N,for traceability
+ex_raw,extrt,character,Treatment name,N,matches arm assignment
+ex_raw,exdose,numeric,Dose amount,N,
+ex_raw,exdosu_raw,character,Dose unit raw,N,values: mg/ml
+ex_raw,exdosfrq_raw,character,Dosing frequency raw,N,values: qd/bid
+ex_raw,exroute_raw,character,Route raw,N,values: oral/iv/subcutaneous
+ex_raw,exstdat,character,Start date raw,N,YYYY-MM-DD
+ex_raw,exendat,character,End date raw,N,YYYY-MM-DD
+vs_raw,usubjid,character,Unique Subject Identifier,Y,
+vs_raw,vsid,character,Sponsor-defined VS identifier,N,
+vs_raw,vstestcd,character,Vital signs test code,N,e.g. SYSBP/DIABP/HR/TEMP/WEIGHT
+vs_raw,vstest,character,Vital signs test name,N,full name
+vs_raw,vsorres,character,Result value,N,numeric as character
+vs_raw,vsorresu,character,Original units,N,e.g. mmHg/beats/min/C/kg
+vs_raw,vsdat,character,Assessment date,N,YYYY-MM-DD
+vs_raw,vstim,character,Assessment time,N,HH:MM; ~80% present
+vs_raw,visit,character,Visit name,N,from visit schedule
+vs_raw,visitnum,numeric,Visit number,N,from visit schedule
+vs_raw,vsblfl,character,Baseline flag,N,Y or blank
+lb_raw,usubjid,character,Unique Subject Identifier,Y,
+lb_raw,lbid,character,Sponsor-defined LB identifier,N,
+lb_raw,lbtestcd,character,Lab test code,N,e.g. ALT/AST/GLUC/WBC/HGB
+lb_raw,lbtest,character,Lab test name,N,full name
+lb_raw,lborres,character,Result value,N,numeric as character
+lb_raw,lborresu,character,Original units,N,e.g. U/L/mg/dL/10^9/L
+lb_raw,lbdat,character,Specimen collection date,N,YYYY-MM-DD
+lb_raw,lbtim,character,Specimen collection time,N,HH:MM; ~70% present
+lb_raw,visit,character,Visit name,N,from visit schedule
+lb_raw,visitnum,numeric,Visit number,N,from visit schedule
