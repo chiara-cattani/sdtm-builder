@@ -2,6 +2,18 @@
 # Module B: Metadata Ingestion & Normalization
 # ==============================================================================
 
+#' Read target (SDTM) metadata
+#'
+#' Reads a CSV or Excel file containing one row per SDTM variable per domain.
+#' Column names are lowercased automatically. Duplicate `(domain, var)` pairs
+#' cause an error.
+#'
+#' @param path Character. Path to `.csv` or `.xlsx` file.
+#' @param sheet Integer. Sheet index for Excel files. Default `1`.
+#' @param domain Character or `NULL`. If supplied, filter to this domain.
+#' @param colmap Named list or `NULL`. Column rename mapping.
+#' @param encoding Character. File encoding. Default `"UTF-8"`.
+#' @return A tibble with standard target metadata columns.
 #' @export
 read_target_meta <- function(path, sheet = 1L, domain = NULL,
                              colmap = NULL, encoding = "UTF-8") {
@@ -36,6 +48,15 @@ read_target_meta <- function(path, sheet = 1L, domain = NULL,
   df
 }
 
+#' Read source (raw) metadata
+#'
+#' Reads a CSV or Excel file describing raw-data columns: dataset, column, type.
+#'
+#' @param path Character. Path to `.csv` or `.xlsx` file.
+#' @param sheet Integer. Sheet index for Excel files. Default `1`.
+#' @param colmap Named list or `NULL`. Column rename mapping.
+#' @param encoding Character. File encoding. Default `"UTF-8"`.
+#' @return A tibble with source metadata columns.
 #' @export
 read_source_meta <- function(path, sheet = 1L, colmap = NULL, encoding = "UTF-8") {
   checkmate::assert_string(path, min.chars = 1L)
@@ -57,6 +78,17 @@ read_source_meta <- function(path, sheet = 1L, colmap = NULL, encoding = "UTF-8"
   df
 }
 
+#' Read controlled terminology library
+#'
+#' Reads a CSV or Excel file containing codelist-level mappings. Required
+#' columns: `codelist_id`, `coded_value`.
+#'
+#' @param path Character. Path to `.csv` or `.xlsx` file.
+#' @param sheet Integer. Sheet index for Excel files. Default `1`.
+#' @param colmap Named list or `NULL`. Column rename mapping.
+#' @param version Character or `NULL`. CT version tag to attach.
+#' @param sponsor_extension Data frame or `NULL`. Extra sponsor terms to append.
+#' @return A tibble with CT library rows.
 #' @export
 read_ct_library <- function(path, sheet = 1L, colmap = NULL,
                             version = NULL, sponsor_extension = NULL) {
@@ -81,6 +113,14 @@ read_ct_library <- function(path, sheet = 1L, colmap = NULL,
   df
 }
 
+#' Validate target metadata
+#'
+#' Checks that required columns exist and no duplicate `(domain, var)` pairs
+#' are present.
+#'
+#' @param target_meta Tibble. Target metadata to validate.
+#' @param strict Logical. Reserved for future stricter checks. Default `FALSE`.
+#' @return Invisible `target_meta` (for piping).
 #' @export
 validate_target_meta <- function(target_meta, strict = FALSE) {
   checkmate::assert_tibble(target_meta, min.rows = 1L)
@@ -92,6 +132,13 @@ validate_target_meta <- function(target_meta, strict = FALSE) {
   invisible(target_meta)
 }
 
+#' Validate source metadata
+#'
+#' Checks that required columns (`dataset`, `column`, `type`) exist.
+#'
+#' @param source_meta Tibble. Source metadata to validate.
+#' @param strict Logical. Reserved for future stricter checks. Default `FALSE`.
+#' @return Invisible `source_meta` (for piping).
 #' @export
 validate_source_meta <- function(source_meta, strict = FALSE) {
   checkmate::assert_tibble(source_meta, min.rows = 1L)
@@ -101,6 +148,12 @@ validate_source_meta <- function(source_meta, strict = FALSE) {
   invisible(source_meta)
 }
 
+#' Validate controlled terminology library
+#'
+#' Checks that required columns (`codelist_id`, `coded_value`) exist.
+#'
+#' @param ct_lib Tibble. CT library to validate.
+#' @return Invisible `ct_lib` (for piping).
 #' @export
 validate_ct_library <- function(ct_lib) {
   checkmate::assert_tibble(ct_lib, min.rows = 1L)
@@ -109,6 +162,14 @@ validate_ct_library <- function(ct_lib) {
   invisible(ct_lib)
 }
 
+#' Normalize target metadata
+#'
+#' Trims whitespace, standardizes `type` to `"char"`/`"num"`, normalizes
+#' `core` to `"Req"`/`"Exp"`/`"Perm"`, and uppercases domain names.
+#'
+#' @param target_meta Tibble. Target metadata to normalize.
+#' @param config `sdtm_config` or `NULL`. Currently unused.
+#' @return Normalized tibble.
 #' @export
 normalize_target_meta <- function(target_meta, config = NULL) {
   df <- target_meta
@@ -136,6 +197,14 @@ normalize_target_meta <- function(target_meta, config = NULL) {
   df
 }
 
+#' Normalize source metadata
+#'
+#' Trims whitespace, lowercases dataset/column names, and standardizes
+#' type strings.
+#'
+#' @param source_meta Tibble. Source metadata to normalize.
+#' @param config `sdtm_config` or `NULL`. Currently unused.
+#' @return Normalized tibble.
 #' @export
 normalize_source_meta <- function(source_meta, config = NULL) {
   df <- source_meta
@@ -154,6 +223,14 @@ normalize_source_meta <- function(source_meta, config = NULL) {
   df
 }
 
+#' Expand value-level metadata
+#'
+#' Joins value-level metadata rows into the target metadata when a
+#' `value_level_id` column is present.
+#'
+#' @param target_meta Tibble. Target metadata with optional `value_level_id`.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata to join.
+#' @return Expanded tibble.
 #' @export
 expand_value_level_meta <- function(target_meta, value_level_meta) {
   if (is.null(value_level_meta) || nrow(value_level_meta) == 0L) return(target_meta)
@@ -166,6 +243,14 @@ expand_value_level_meta <- function(target_meta, value_level_meta) {
   dplyr::bind_rows(non, expanded)
 }
 
+#' Apply sponsor overrides to target metadata
+#'
+#' Patches target metadata fields (e.g., label, codelist_id) based on
+#' `config$sponsor_overrides`.
+#'
+#' @param target_meta Tibble. Target metadata to patch.
+#' @param config `sdtm_config` with `sponsor_overrides` list.
+#' @return Updated tibble.
 #' @export
 apply_study_overrides <- function(target_meta, config) {
   if (is.null(config$sponsor_overrides) || length(config$sponsor_overrides) == 0L) return(target_meta)
@@ -181,6 +266,15 @@ apply_study_overrides <- function(target_meta, config) {
   target_meta
 }
 
+#' Resolve domain model from metadata
+#'
+#' Extracts and optionally sorts the metadata rows for a single domain.
+#'
+#' @param domain Character. Domain abbreviation (e.g., `"AE"`).
+#' @param target_meta Tibble. Full target metadata.
+#' @param config `sdtm_config`.
+#' @param ig_version Character. SDTM IG version. Default `"3.4"`.
+#' @return Tibble filtered and ordered for the domain.
 #' @export
 resolve_domain_model <- function(domain, target_meta, config, ig_version = "3.4") {
   dm <- dplyr::filter(target_meta, .data$domain == !!toupper(domain))

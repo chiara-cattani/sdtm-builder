@@ -356,12 +356,123 @@ derive_variable <- function(data, var, rule, context) {
     epoch = {
       dtc_var   <- params$dtc_var
       ref_var   <- params$ref_var %||% "RFSTDTC"
-      epoch_map <- context$config$epoch_map  # from config.yaml
+      epoch_map <- context$config$epoch_map
       if (!is.null(epoch_map) && length(epoch_map) > 0L) {
         data <- derive_epoch(data, var, dtc_var, epoch_map, ref_var)
       } else {
         data[[var]] <- NA_character_
       }
+    },
+    coalesce = {
+      sources <- unlist(params$sources)
+      # Resolve column names
+      actual <- character()
+      for (s in sources) {
+        if (s %in% names(data)) actual <- c(actual, s)
+        else if (tolower(s) %in% names(data)) actual <- c(actual, tolower(s))
+      }
+      if (length(actual) > 0L) {
+        data <- derive_coalesce(data, var, actual)
+      } else {
+        data[[var]] <- NA_character_
+      }
+    },
+    if_else = {
+      cond       <- params$condition
+      true_val   <- params$true_value
+      false_val  <- params$false_value
+      miss_val   <- params$missing_value %||% NA
+      data <- derive_if_else(data, var, cond, true_val, false_val, miss_val)
+    },
+    case_when = {
+      conds   <- params$conditions
+      default <- params$default %||% NA
+      data <- derive_case_when(data, var, conds, default)
+    },
+    ct_decode = {
+      src_col     <- params$column
+      codelist_id <- params$codelist_id %||% rule$codelist_id
+      if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+        src_col <- tolower(src_col)
+      }
+      ct_tbl <- context$ct_lib
+      if (!is.null(ct_tbl)) {
+        data <- decode_ct(data, var, src_col, codelist_id, ct_tbl)
+      } else {
+        data[[var]] <- NA_character_
+      }
+    },
+    concat = {
+      sources <- unlist(params$sources)
+      sep     <- params$sep %||% ""
+      actual  <- character()
+      for (s in sources) {
+        if (s %in% names(data)) actual <- c(actual, s)
+        else if (tolower(s) %in% names(data)) actual <- c(actual, tolower(s))
+      }
+      if (length(actual) > 0L) {
+        data <- derive_concat(data, var, actual, sep = sep)
+      } else {
+        data[[var]] <- NA_character_
+      }
+    },
+    visit = {
+      dy_var    <- params$dy_var %||% NULL
+      visit_map <- context$config$visit_map
+      data <- derive_visit(data, var, visit_map, dy_var = dy_var)
+    },
+    visitnum = {
+      visit_var <- params$visit_var %||% "VISIT"
+      if (!visit_var %in% names(data) && tolower(visit_var) %in% names(data)) {
+        visit_var <- tolower(visit_var)
+      }
+      visit_map <- context$config$visit_map
+      data <- derive_visitnum(data, var, visit_map, visit_var = visit_var)
+    },
+    baseline_flag = {
+      visit_var      <- params$visit_var %||% "VISIT"
+      baseline_visit <- params$baseline_visit %||% "BASELINE"
+      by_vars        <- unlist(params$by %||% list("USUBJID"))
+      if (!visit_var %in% names(data) && tolower(visit_var) %in% names(data)) {
+        visit_var <- tolower(visit_var)
+      }
+      actual_by <- character()
+      for (b in by_vars) {
+        if (b %in% names(data)) actual_by <- c(actual_by, b)
+        else if (tolower(b) %in% names(data)) actual_by <- c(actual_by, tolower(b))
+      }
+      if (length(actual_by) == 0L) actual_by <- "USUBJID"
+      data <- derive_baseline_flag(data, var, by = actual_by,
+                                   baseline_visit = baseline_visit,
+                                   visit_var = visit_var)
+    },
+    occurrence = {
+      src_var       <- params$source_var
+      present_val   <- params$present_value %||% "Y"
+      absent_val    <- params$absent_value %||% NA_character_
+      if (!is.null(src_var) && !src_var %in% names(data) &&
+          tolower(src_var) %in% names(data)) {
+        src_var <- tolower(src_var)
+      }
+      data <- derive_occurrence(data, var, source_var = src_var,
+                                present_value = present_val,
+                                absent_value = absent_val)
+    },
+    status = {
+      result_var    <- params$result_var
+      done_val      <- params$done_value %||% NA_character_
+      not_done_val  <- params$not_done_value %||% "NOT DONE"
+      if (!result_var %in% names(data) && tolower(result_var) %in% names(data)) {
+        result_var <- tolower(result_var)
+      }
+      data <- derive_status(data, var, result_var,
+                            done_value = done_val, not_done_value = not_done_val)
+    },
+    duration = {
+      start_dtc <- params$start_dtc
+      end_dtc   <- params$end_dtc
+      units     <- params$units %||% "days"
+      data <- derive_duration(data, var, start_dtc, end_dtc, units = units)
     },
     {
       # Unknown rule type — set NA with warning
@@ -543,7 +654,7 @@ build_dm_plugin <- function(target_meta, source_meta, raw_data,
 build_ta_tv_te_ts_plugins <- function(domains = c("TA","TV","TE","TS"),
                                        target_meta, config, rule_set,
                                        trial_design_data = list()) {
-  # Placeholder for non-MVP domains
+  rlang::inform("Trial design domains (TA/TV/TE/TS) are not yet implemented.")
   list()
 }
 
@@ -557,6 +668,6 @@ build_ta_tv_te_ts_plugins <- function(domains = c("TA","TV","TE","TS"),
 #' @export
 build_sv_plugin <- function(target_meta, source_meta, raw_data,
                             config, rule_set) {
-  # Placeholder
+  rlang::inform("SV domain plugin is not yet implemented.")
   list()
 }

@@ -155,6 +155,11 @@ reference:
       - validate_lengths_types_labels
       - validate_value_level
       - validate_cross_domain
+      - validate_domain_value
+      - validate_studyid_constant
+      - validate_no_allna_reqexp
+      - validate_seq_integrity
+      - validate_no_duplicate_rows
       - summarize_validation_report
       - add_finding
 

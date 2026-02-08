@@ -4,22 +4,35 @@
 \alias{derive_epoch}
 \title{Derive EPOCH}
 \usage{
-derive_epoch(data, target_var = "EPOCH", dtc_var, epoch_map, by = "USUBJID")
+derive_epoch(
+  data,
+  target_var = "EPOCH",
+  dtc_var,
+  epoch_map,
+  ref_var = "RFSTDTC",
+  by = "USUBJID"
+)
 }
 \arguments{
 \item{data}{Tibble.}
 
 \item{target_var}{Character. Default \code{"EPOCH"}.}
 
-\item{dtc_var}{Character.}
+\item{dtc_var}{Character. The DTC variable whose date determines the epoch.}
 
-\item{epoch_map}{Tibble or function.}
+\item{epoch_map}{A list of lists (or data-frame), each with \code{epoch},
+\code{start_day} (integer or \code{NULL}), and \code{end_day} (integer or \code{NULL}).}
 
-\item{by}{Character vector. Default \code{"USUBJID"}.}
+\item{ref_var}{Character. Reference-date column in \code{data}. Default
+\code{"RFSTDTC"}.}
+
+\item{by}{Character vector. Grouping columns (unused for now, reserved for
+multi-arm studies).}
 }
 \value{
-Tibble.
+Tibble with \code{target_var} populated.
 }
 \description{
-Derive EPOCH
+Assigns EPOCH values by comparing each observation's date with study-day
+windows defined in \code{epoch_map}.
 }

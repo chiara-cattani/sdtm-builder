@@ -41,6 +41,12 @@ The `derive_variable()` dispatcher currently supports these rule types:
 | `dy` | Study day calculation | `dtc_var`, `ref_var` |
 | `seq` | Sequence number per subject | `by`, `order_by`, `ties` |
 | `epoch` | Epoch assignment from study-day windows | `dtc_var`, `ref_var` |
+| `visit` | Map study day to visit name via visit_map | `dy_var` |
+| `visitnum` | Derive visit number from visit name | `visit_var` |
+| `baseline_flag` | Flag baseline observations | `visit_var`, `baseline_visit`, `by` |
+| `coalesce` | First non-missing from multiple sources | `sources` |
+| `if_else` | Conditional derivation | `condition`, `true_value`, `false_value` |
+| `case_when` | Multi-condition derivation | `conditions`, `default` |
 | `join` | Value from joined reference data | (reserved) |
 
 ### Writing a rule in target metadata

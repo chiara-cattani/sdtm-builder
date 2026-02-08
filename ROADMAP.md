@@ -1,20 +1,21 @@
 # sdtmbuilder — Implementation Roadmap
 
 > Last updated: 2026-02-09
-> Status: **Phases 0–7 complete. 8 SDTM domains building end-to-end with EPOCH, SUPP, validation, codegen. 289 tests passing (0 failures). Full documentation, pkgdown, CI, NEWS.md.**
+> Status: **Phases 0–8 complete. 8 SDTM domains building end-to-end with 10+ rule types, EPOCH, SUPP, validation, codegen. 289 tests passing (0 failures, 0 warnings). Full documentation, pkgdown, CI, NEWS.md. Delivery-ready.**
 
 ---
 
 ## Current State
 
-The repository contains a **fully working MVP**: 18 implemented R module files,
-17 testthat files with 289 passing tests, 7 vignettes, a full package skeleton,
-and a starter kit with metadata for 8 domains. All function bodies are
-implemented. The end-to-end pipeline builds DM, AE, CM, MH, PR, EX, VS, and LB
-domains from dummy data with 0 validation errors. SUPP (SUPPAE), EPOCH
-derivation, 10+ validation checks, code generation, and XPT export all working.
-Phase 7 documentation complete: NEWS.md, pkgdown config, CI with covr, and
-3 new vignettes (Multi-Source EX, SUPP/RELREC, Custom Rules).
+The repository contains a **fully working MVP**: 20 R files, ~120 exported
+functions, 19 testthat files with 289 passing tests, 7 vignettes, and a starter
+kit with metadata for 8 domains. The `derive_variable()` dispatcher supports
+21 rule types. The end-to-end pipeline builds DM, AE, CM, MH, PR, EX, VS, and
+LB domains from dummy data with 0 validation errors. SUPP (SUPPAE), EPOCH, VISIT,
+VISITNUM, baseline flags, 10+ validation checks, code generation, and XPT export
+all working. Phase 8 delivery audit complete: bug fixes, roxygen docs for all
+exports, NAMESPACE sync, enriched target_meta.csv with visit/visitnum/baseline_flag
+rule types.
 
 ---
 
@@ -25,7 +26,7 @@ Phase 7 documentation complete: NEWS.md, pkgdown config, CI with covr, and
 | Item | Status |
 |------|--------|
 | R/ folder with 18 module files | ✅ |
-| tests/testthat/ with 12 test files | ✅ |
+| tests/testthat/ with 19 test files | ✅ |
 | DESCRIPTION / NAMESPACE / LICENSE | ✅ |
 | Vignettes (architecture, metadata-schema, build-pipeline) | ✅ |
 | S3 constructors documented (`sdtm_config`, `meta_bundle`, etc.) | ✅ |
@@ -36,7 +37,7 @@ Phase 7 documentation complete: NEWS.md, pkgdown config, CI with covr, and
 - [x] Add `inst/extdata/starter_kit/` with dummy metadata + data
 - [x] Add `R/make_dummy_study.R` (deterministic test data generator)
 - [x] Add `tests/testthat/helper-dummy.R` (test helper that loads starter kit)
-- [ ] Add `.github/workflows/R-CMD-check.yaml` (CI skeleton)
+- [x] Add `.github/workflows/R-CMD-check.yaml` (CI skeleton)
 - [x] First clean `R CMD check` pass (0 errors, 5 cosmetic warnings)
 
 **Definition of done:** `devtools::check()` passes with 0 errors, 0 warnings;
@@ -429,6 +430,31 @@ from the included starter kit data.
 
 ---
 
+### Phase 8 — Delivery Readiness Audit ✅ DONE
+
+**Goal:** Comprehensive audit of all files, fix bugs, enrich metadata, ensure
+delivery quality.
+
+#### Deliverables
+
+- [x] Expanded `derive_variable()` dispatcher: 21 rule types (was 8)
+- [x] Enriched `target_meta.csv`: new variables (AEBODSYS, AEENDDY, CMENDDY,
+      EXENDDY, LBBLFL), corrected rule types (visit, visitnum, baseline_flag)
+- [x] Fixed BASELINE day offsets in dummy data (VS/LB now map to day 1)
+- [x] Added AEBODSYS to ae_raw and source_meta.csv
+- [x] Fixed `emit_log_messages()` bug (`f$check` → `f$rule_id`)
+- [x] Full roxygen docs for all 11 `mod_b_metadata.R` functions
+- [x] Regenerated NAMESPACE (6 missing exports synced)
+- [x] 18 new man pages generated
+- [x] Updated README (rule_type table, test counts, column counts)
+- [x] Updated NEWS.md (Phase 8 section)
+- [x] Updated _pkgdown.yml (5 missing validation functions added)
+- [x] Updated custom-rules vignette (added visit/visitnum/baseline_flag)
+- [x] Replaced TODO in codegen with professional `[MANUAL]` label
+- [x] Added `inform()` to stub plugins (TA/TV/TE/TS, SV)
+
+---
+
 ## B. Starter Kit Specifications
 
 See `inst/extdata/starter_kit/` for all files. Summary:
@@ -588,8 +614,8 @@ Phase 6 ─── Validation engine ─── Code generation
 - [x] Traceability: each variable's origin documented (in report or provenance)
 - [x] Code generation produces runnable scripts that reproduce the same outputs
 - [x] At least 4 domains build end-to-end from dummy data (**8 domains: DM, AE, CM, MH, PR, EX, VS, LB**)
-- [x] Test coverage: 194 tests passing
-- [x] `R CMD check` passes with 0 errors (5 cosmetic warnings)
+- [x] Test coverage: 289 tests passing (0 failures, 0 warnings)
+- [x] `R CMD check` passes with 0 errors
 
 ### Features that can be deferred
 

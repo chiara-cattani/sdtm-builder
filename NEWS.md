@@ -97,6 +97,26 @@
 * Test coverage reporting with `covr`.
 * README with quick-start guide and architecture diagram.
 
+## Phase 8 — Delivery Readiness Audit
+
+* Expanded `derive_variable()` dispatcher from 8 to 21 rule types including
+  `visit`, `visitnum`, `baseline_flag`, `coalesce`, `if_else`, `case_when`,
+  `ct_decode`, `concat`, `occurrence`, `status`, and `duration`.
+* Enriched `target_meta.csv` starter kit:
+    - New variables: AEBODSYS, AEENDDY, CMENDDY, EXENDDY, LBBLFL.
+    - Corrected rule types: VS/LB VISIT (`visit`), VISITNUM (`visitnum`),
+      VSBLFL/LBBLFL (`baseline_flag`).
+    - 10+ distinct rule types now exercised across the starter kit.
+* Fixed BASELINE visit day offsets in dummy study generator so VS/LB
+  observations correctly map to the BASELINE window (study day 1).
+* Added AEBODSYS (Body System or Organ Class) to `ae_raw` dummy data and
+  `source_meta.csv`.
+* Fixed `emit_log_messages()` bug (`f$check` → `f$rule_id`).
+* Full roxygen documentation for all 11 functions in `mod_b_metadata.R`.
+* Regenerated NAMESPACE and man pages (18 new `.Rd` files).
+* Replaced TODO comment in code generator with professional `[MANUAL]` label.
+* Added `inform()` messages to stub plugins (TA/TV/TE/TS, SV).
+
 ## Test Suite
 
 * 289 tests passing, 0 failures, 0 warnings.

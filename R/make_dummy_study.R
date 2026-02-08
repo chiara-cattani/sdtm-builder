@@ -159,6 +159,12 @@ make_dummy_study <- function(seed = 123,
                 "RASH", "DIARRHEA", "VOMITING", "COUGH", "BACK PAIN",
                 "ARTHRALGIA", "NASOPHARYNGITIS")
   ae_decods <- ae_terms  # simplified: same as term (no real MedDRA)
+  ae_bodsys <- c("NERVOUS SYSTEM DISORDERS", "GASTROINTESTINAL DISORDERS",
+                 "NERVOUS SYSTEM DISORDERS", "GENERAL DISORDERS",
+                 "PSYCHIATRIC DISORDERS", "SKIN AND SUBCUTANEOUS TISSUE DISORDERS",
+                 "GASTROINTESTINAL DISORDERS", "GASTROINTESTINAL DISORDERS",
+                 "RESPIRATORY DISORDERS", "MUSCULOSKELETAL DISORDERS",
+                 "MUSCULOSKELETAL DISORDERS", "INFECTIONS AND INFESTATIONS")
   sev_values <- c("mild", "Mild", "MILD", "moderate", "Moderate", "severe")
   rel_values <- c("related", "not related", "possibly related",
                    "NOT RELATED", "RELATED")
@@ -210,6 +216,7 @@ make_dummy_study <- function(seed = 123,
         aestim    = stim,
         aeendat   = end_dat,
         aeentim   = if (!ongoing) etim else NA_character_,
+        aebodsys  = ae_bodsys[term_idx],
         aession   = ae_sess,
         aetrtem   = paste0(ae_terms[term_idx], " (local)")
       )
@@ -411,7 +418,7 @@ make_dummy_study <- function(seed = 123,
     for (vi in seq_along(vs_visit_info)) {
       vinfo <- vs_visit_info[[vi]]
       # Visit day offset relative to rfstdtc
-      day_offsets <- c(-7, 1, 5, 12, 29)
+      day_offsets <- c(-7, 0, 5, 12, 29)
       vdate <- rfst + day_offsets[vi]
       is_baseline <- (vinfo$vnum == 2)
 
@@ -470,7 +477,7 @@ make_dummy_study <- function(seed = 123,
     rfst <- rfstdtc_dates[i]
     for (vi in seq_along(lb_visit_info)) {
       vinfo <- lb_visit_info[[vi]]
-      day_offsets <- c(-7, 1, 5, 29)
+      day_offsets <- c(-7, 0, 5, 29)
       vdate <- rfst + day_offsets[vi]
 
       for (ti in seq_along(lb_tests)) {

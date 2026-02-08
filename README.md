@@ -43,8 +43,8 @@ result <- check_end_to_end(verbose = TRUE, return_data = TRUE)
 
 # 2. Inspect built domains
 str(result$DM$data)   # 30 rows x 16 columns (Demographics)
-str(result$AE$data)   # 65 rows x 12 columns (Adverse Events)
-str(result$VS$data)   # 750 rows x 16 columns (Vital Signs)
+str(result$AE$data)   # 65 rows x 15 columns (Adverse Events)
+str(result$VS$data)   # 750 rows x 15 columns (Vital Signs)
 str(result$LB$data)   # 600 rows x 15 columns (Laboratory)
 
 # 3. Or run the full demo script
@@ -76,14 +76,18 @@ One row per SDTM variable you want to produce. Required columns:
 
 **Supported `rule_type` values:**
 
-| `rule_type`   | What it does                                     | Key `rule_params` fields                                   |
-|---------------|--------------------------------------------------|-------------------------------------------------------------|
-| `constant`    | Set a fixed value                                | `{"value": "AE"}`                                           |
-| `direct_map`  | Copy from source column                          | `{"dataset": "ae_raw", "column": "aeterm"}`                 |
-| `ct_assign`   | Map through controlled terminology               | `{"dataset":"ae_raw","column":"aesev","codelist_id":"C66769"}` |
-| `iso_dtc`     | Parse date to ISO 8601                           | `{"date_col": {"dataset":"ae_raw","column":"aestdt"}}`      |
-| `dy`          | Compute study day (no Day 0)                     | `{"dtc_var":"AESTDTC","ref_var":"RFSTDTC"}`                 |
-| `seq`         | Sequence number within subject                   | `{"by":["USUBJID"],"order_by":["AESTDTC"]}`                |
+| `rule_type`      | What it does                                     | Key `rule_params` fields                                   |
+|------------------|--------------------------------------------------|-------------------------------------------------------------|
+| `constant`       | Set a fixed value                                | `{"value": "AE"}`                                           |
+| `direct_map`     | Copy from source column                          | `{"dataset": "ae_raw", "column": "aeterm"}`                 |
+| `ct_assign`      | Map through controlled terminology               | `{"dataset":"ae_raw","column":"aesev","codelist_id":"C66769"}` |
+| `iso_dtc`        | Parse date to ISO 8601                           | `{"date_col": {"dataset":"ae_raw","column":"aestdt"}}`      |
+| `dy`             | Compute study day (no Day 0)                     | `{"dtc_var":"AESTDTC","ref_var":"RFSTDTC"}`                 |
+| `seq`            | Sequence number within subject                   | `{"by":["USUBJID"],"order_by":["AESTDTC"]}`                |
+| `epoch`          | Assign epoch from study-day windows              | `{"dtc_var":"AESTDTC","ref_var":"RFSTDTC"}`                 |
+| `visit`          | Map study day to visit name via visit_map        | `{"dy_var":"VSDY"}`                                         |
+| `visitnum`       | Derive visit number from visit name              | `{"visit_var":"VISIT"}`                                     |
+| `baseline_flag`  | Flag baseline observations                       | `{"visit_var":"VISIT","baseline_visit":"BASELINE","by":["USUBJID","VSTESTCD"]}` |
 
 #### `source_meta.csv`
 
@@ -275,10 +279,8 @@ Metadata Files (CSV/YAML)
 
 ```r
 devtools::test()
-# FAIL 0 | WARN 25 | SKIP 0 | PASS 185
+# FAIL 0 | WARN 0 | SKIP 0 | PASS 289
 ```
-
-The 25 warnings are a harmless igraph deprecation notice (`is.igraph()` -> `is_igraph()`).
 
 ---
 
@@ -286,14 +288,14 @@ The 25 warnings are a harmless igraph deprecation notice (`is.igraph()` -> `is_i
 
 | Component          | Status |
 |--------------------|--------|
-| Core functions     | Complete — 18 module files, 80+ exported functions |
+| Core functions     | Complete — 20 R files, ~120 exported functions |
 | End-to-end pipeline| Verified — 8 domains: DM, AE, CM, MH, PR, EX, VS, LB all PASS |
 | XPT export         | Working — all 8 domains export to SAS transport |
-| Test suite         | 194 tests passing (FAIL 0) |
+| Test suite         | 289 tests passing (FAIL 0, WARN 0) |
 | Code generation    | Generates standalone R scripts |
 | Validation         | P21-style checks (required vars, keys, ISO dates, types, CT) |
 | Demo               | `inst/examples/demo_full_pipeline.R` — full 8-domain walkthrough |
-| Vignettes          | 4 vignettes including "Build AE from Metadata" tutorial |
+| Vignettes          | 7 vignettes covering tutorials, architecture, and customization |
 
 ---
 

@@ -338,7 +338,7 @@ summarize_validation_report <- function(report, verbose = TRUE) {
 emit_log_messages <- function(report, sink = NULL) {
   for (i in seq_len(nrow(report$findings))) {
     f <- report$findings[i, ]
-    msg <- glue::glue("[{f$severity}] {f$check}: {f$message}")
+    msg <- glue::glue("[{f$severity}] {f$rule_id}: {f$message}")
     switch(f$severity,
       ERROR   = log_error(msg),
       WARNING = log_warn(msg),

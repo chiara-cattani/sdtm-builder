@@ -133,7 +133,7 @@ render_rule_code <- function(var, rule, style = "tidyverse") {
     epoch = {
       glue::glue('data <- derive_epoch(data, "{var}", "{p$dtc_var}", config$epoch_map, "{p$ref_var %||% "RFSTDTC"}")')
     },
-    glue::glue('# TODO: {var} ({rule$type})')
+    glue::glue('# [MANUAL] Derive {var} (rule_type: {rule$type})')
   )
 }
 

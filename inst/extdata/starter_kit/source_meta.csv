@@ -21,6 +21,7 @@ ae_raw,aestdat,character,Start date raw,N,format YYYY-MM-DD or partial YYYY-MM
 ae_raw,aestim,character,Start time raw,N,format HH:MM; ~40% missing
 ae_raw,aeendat,character,End date raw,N,format YYYY-MM-DD; some missing (ongoing)
 ae_raw,aeentim,character,End time raw,N,format HH:MM; mostly missing
+ae_raw,aebodsys,character,Body system or organ class,N,e.g. NERVOUS SYSTEM DISORDERS
 ae_raw,aession,character,AE Assessment Session,N,e.g. VISIT 1/VISIT 2/UNSCHEDULED
 ae_raw,aetrtem,character,AE term in local language,N,free text
 cm_raw,usubjid,character,Unique Subject Identifier,Y,
