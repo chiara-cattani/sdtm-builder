@@ -4,7 +4,7 @@
 # This script demonstrates the complete sdtmbuilder pipeline:
 #   1. Generate dummy clinical data (or load your own)
 #   2. Compile derivation rules from metadata
-#   3. Build 8 SDTM domains end-to-end
+#   3. Build 10 SDTM domains end-to-end
 #   4. Inspect and validate results
 #   5. Export to XPT format
 #
@@ -17,7 +17,7 @@ library(sdtmbuilder)
 cat("
 ================================================================================
   sdtmbuilder — Full Pipeline Demo
-  Building 8 SDTM domains from metadata-driven rules
+  Building 10 SDTM domains from metadata-driven rules
 ================================================================================
 \n")
 
@@ -29,7 +29,7 @@ cat("STEP 1: Generating dummy study data (30 subjects, seed=123)...\n\n")
 study <- make_dummy_study(seed = 123)
 
 # study contains:
-#   $raw_data    — 8 raw source datasets (dm_raw, ae_raw, cm_raw, etc.)
+#   $raw_data    — 10 raw source datasets (dm_raw, ae_raw, cm_raw, ds_raw, qs_raw, etc.)
 #   $target_meta — SDTM variable definitions + derivation rules
 #   $source_meta — raw dataset column descriptions
 #   $ct_lib      — controlled terminology codelists
@@ -77,10 +77,15 @@ cat("\n")
 cat("STEP 3: Building SDTM domains...\n")
 cat(strrep("-", 60), "\n\n")
 
+# Ensure DM is built first (other domains need RFSTDTC)
 all_domains <- names(rule_set$rules)
+if ("DM" %in% all_domains) {
+  all_domains <- c("DM", setdiff(all_domains, "DM"))
+}
 built_data  <- list()
 build_ok    <- character()
 build_fail  <- character()
+dm_built    <- NULL
 
 for (dom in all_domains) {
   result <- tryCatch({
@@ -91,6 +96,7 @@ for (dom in all_domains) {
       raw_data    = raw_data,
       config      = config,
       rule_set    = rule_set,
+      dm_data     = dm_built,
       verbose     = FALSE
     )
   }, error = function(e) {
@@ -100,6 +106,7 @@ for (dom in all_domains) {
 
   if (!is.null(result)) {
     built_data[[dom]] <- result
+    if (dom == "DM") dm_built <- result$data
     n_err  <- sum(result$report$findings$severity == "ERROR")
     n_warn <- sum(result$report$findings$severity == "WARNING")
     status <- if (n_err == 0) "PASS" else "WARN"
@@ -218,6 +225,37 @@ if ("PR" %in% build_ok) {
   cat(sprintf("  %d records\n", nrow(pr)))
   cat("  Categories:\n")
   print(table(pr$PRCAT))
+  cat("\n")
+}
+
+# --- DS (Disposition) ---
+if ("DS" %in% build_ok) {
+  ds <- built_data$DS$data
+  cat("DS — Disposition\n")
+  cat(sprintf("  %d records across %d subjects\n", nrow(ds),
+              length(unique(ds$USUBJID))))
+  cat("  Rule types demonstrated: coalesce, case_when, if_else, concat\n")
+  cat("  Category distribution (case_when):\n")
+  print(table(ds$DSCAT))
+  cat("  Sub-category distribution (if_else):\n")
+  print(table(ds$DSSCAT))
+  cat("  Sample DSREFID (concat):", head(ds$DSREFID, 3), "\n")
+  cat("  Sample DSDECOD (coalesce):", head(ds$DSDECOD, 3), "\n")
+  cat("\n")
+}
+
+# --- QS (Questionnaires) ---
+if ("QS" %in% build_ok) {
+  qs <- built_data$QS$data
+  cat("QS — Questionnaires\n")
+  cat(sprintf("  %d records across %d subjects, %d visits\n", nrow(qs),
+              length(unique(qs$USUBJID)), length(unique(qs$VISIT))))
+  cat("  Rule types demonstrated: ct_decode, occurrence, baseline_flag\n")
+  cat("  Tests (ct_decode from QSTESTCD):\n")
+  print(table(qs$QSTEST))
+  cat("  Status (occurrence):\n")
+  print(table(qs$QSSTAT, useNA = "always"))
+  cat("  Baseline flags:", sum(qs$QSBLFL == "Y", na.rm = TRUE), "records\n")
   cat("\n")
 }
 

@@ -3,7 +3,7 @@ Title: Metadata-Driven SDTM Domain Builder and Code Generator
 Version: 0.1.0
 Authors@R: 
     person("Chiara", "Cattani", role = c("aut", "cre"),
-           email = "chiara.cattani@example.com")
+           email = "chiara.cattani.it@gmail.com")
 Description: Auto-generates SDTM domain programs (R scripts / Quarto documents)
     from structured metadata. Given SDTM target metadata, source metadata, and
     study-level configuration, the package produces domain-building code for all

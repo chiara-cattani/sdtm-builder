@@ -80,3 +80,21 @@ lb_raw,lbdat,character,Specimen collection date,N,YYYY-MM-DD
 lb_raw,lbtim,character,Specimen collection time,N,HH:MM; ~70% present
 lb_raw,visit,character,Visit name,N,from visit schedule
 lb_raw,visitnum,numeric,Visit number,N,from visit schedule
+ds_raw,usubjid,character,Unique Subject Identifier,Y,
+ds_raw,dsid,character,Sponsor-defined DS identifier,N,
+ds_raw,dsterm,character,Reported disposition term,N,free text
+ds_raw,dsdecod_raw,character,Pre-coded disposition term,N,may duplicate dsterm
+ds_raw,dscat_raw,character,Raw category for disposition,N,
+ds_raw,dsscat_raw,character,Raw subcategory for disposition,N,
+ds_raw,dsstdat,character,Disposition event date raw,N,YYYY-MM-DD
+qs_raw,usubjid,character,Unique Subject Identifier,Y,
+qs_raw,qsid,character,Sponsor-defined QS identifier,N,
+qs_raw,qstestcd,character,Questionnaire test code,N,e.g. FUNC01/FUNC02/FUNC03
+qs_raw,qstest,character,Questionnaire test name,N,full name
+qs_raw,qscat,character,Questionnaire category,N,e.g. FUNCTIONAL ASSESSMENT
+qs_raw,qsorres,character,Result value,N,numeric as character; NA if not done
+qs_raw,qsorresu,character,Original units,N,e.g. SCORE
+qs_raw,qsdat,character,Assessment date,N,YYYY-MM-DD
+qs_raw,qstim,character,Assessment time,N,HH:MM; ~70% present
+qs_raw,visit,character,Visit name,N,from visit schedule
+qs_raw,visitnum,numeric,Visit number,N,from visit schedule

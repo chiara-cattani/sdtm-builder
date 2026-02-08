@@ -107,13 +107,17 @@ derive_if_else <- function(data, target_var, condition, true_value,
 #' @return Tibble.
 #' @export
 derive_case_when <- function(data, target_var, conditions, default = NA) {
-  args <- list()
+  n <- nrow(data)
+  result  <- rep(as.character(default), n)
+  matched <- rep(FALSE, n)
   for (cond_expr in names(conditions)) {
     mask <- rlang::eval_tidy(rlang::parse_expr(cond_expr), data = data)
-    args <- c(args, list(mask ~ conditions[[cond_expr]]))
+    mask[is.na(mask)] <- FALSE
+    to_set <- mask & !matched
+    result[to_set] <- conditions[[cond_expr]]
+    matched <- matched | mask
   }
-  args <- c(args, list(TRUE ~ default))
-  data[[target_var]] <- rlang::eval_tidy(rlang::call2(dplyr::case_when, !!!args))
+  data[[target_var]] <- result
   data
 }
 

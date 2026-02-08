@@ -11,7 +11,7 @@
 #' @description
 #' Creates a named list containing:
 #' - `raw_data`: named list of tibbles (`dm_raw`, `ae_raw`, `cm_raw`, `mh_raw`,
-#'   `pr_raw`)
+#'   `pr_raw`, `ex_raw`, `vs_raw`, `lb_raw`, `ds_raw`, `qs_raw`)
 #' - `target_meta`: tibble loaded from starter kit
 #' - `source_meta`: tibble loaded from starter kit
 #' - `ct_lib`: tibble loaded from starter kit
@@ -507,7 +507,116 @@ make_dummy_study <- function(seed = 123,
   lb_raw <- dplyr::bind_rows(lb_rows)
 
   # ---------------------------------------------------------------------------
-  # Bad-case injection
+
+  # DS raw (Disposition)
+  # ---------------------------------------------------------------------------
+  ds_milestones <- list(
+    list(term = "INFORMED CONSENT OBTAINED", cat = "PROTOCOL MILESTONE",
+         scat = NA_character_, offset = -14),
+    list(term = "RANDOMIZED",               cat = "PROTOCOL MILESTONE",
+         scat = NA_character_, offset = 0)
+  )
+  ds_outcomes <- list(
+    list(term = "COMPLETED",                cat = "DISPOSITION EVENT",
+         scat = "STUDY TREATMENT"),
+    list(term = "WITHDRAWN BY SUBJECT",     cat = "DISPOSITION EVENT",
+         scat = "STUDY TREATMENT"),
+    list(term = "ADVERSE EVENT",            cat = "DISPOSITION EVENT",
+         scat = "STUDY TREATMENT"),
+    list(term = "LOST TO FOLLOW-UP",        cat = "DISPOSITION EVENT",
+         scat = "STUDY TREATMENT")
+  )
+
+  ds_rows <- list()
+  ds_counter <- 0
+  for (i in seq_len(n_subjects)) {
+    rfst <- rfstdtc_dates[i]
+    rfend <- as.Date(dm_raw$rfendtc[i])
+    # Everyone gets consent + randomization
+    for (ms in ds_milestones) {
+      ds_counter <- ds_counter + 1
+      ds_date <- rfst + ms$offset
+      ds_rows[[ds_counter]] <- tibble::tibble(
+        usubjid     = subject_ids[i],
+        dsid        = sprintf("DS-%04d", ds_counter),
+        dsterm      = ms$term,
+        dsdecod_raw = ms$term,
+        dscat_raw   = ms$cat,
+        dsscat_raw  = ms$scat %||% NA_character_,
+        dsstdat     = format(ds_date, "%Y-%m-%d")
+      )
+    }
+    # Each subject gets one outcome (80% completed, 20% other)
+    outcome_idx <- if (stats::runif(1) < 0.80) 1 else sample(2:4, 1)
+    outcome <- ds_outcomes[[outcome_idx]]
+    ds_counter <- ds_counter + 1
+    ds_rows[[ds_counter]] <- tibble::tibble(
+      usubjid     = subject_ids[i],
+      dsid        = sprintf("DS-%04d", ds_counter),
+      dsterm      = outcome$term,
+      dsdecod_raw = outcome$term,
+      dscat_raw   = outcome$cat,
+      dsscat_raw  = outcome$scat,
+      dsstdat     = format(rfend, "%Y-%m-%d")
+    )
+  }
+  ds_raw <- dplyr::bind_rows(ds_rows)
+
+  # ---------------------------------------------------------------------------
+  # QS raw (Questionnaires — Functional Assessment)
+  # ---------------------------------------------------------------------------
+  qs_items <- list(
+    list(cd = "FUNC01", nm = "Physical Functioning Score",   u = "SCORE", lo = 0, hi = 100),
+    list(cd = "FUNC02", nm = "Emotional Well-Being Score",   u = "SCORE", lo = 0, hi = 100),
+    list(cd = "FUNC03", nm = "Pain Interference Score",      u = "SCORE", lo = 0, hi = 10)
+  )
+  qs_visit_info <- list(
+    list(vnum = 1, vname = "SCREENING"),
+    list(vnum = 2, vname = "BASELINE"),
+    list(vnum = 3, vname = "WEEK 1"),
+    list(vnum = 5, vname = "WEEK 4")
+  )
+
+  qs_rows <- list()
+  qs_counter <- 0
+  for (i in seq_len(n_subjects)) {
+    rfst <- rfstdtc_dates[i]
+    for (vi in seq_along(qs_visit_info)) {
+      vinfo <- qs_visit_info[[vi]]
+      day_offsets <- c(-7, 0, 5, 29)
+      vdate <- rfst + day_offsets[vi]
+
+      for (ti in seq_along(qs_items)) {
+        tst <- qs_items[[ti]]
+        qs_counter <- qs_counter + 1
+
+        # ~5% NOT DONE (qsorres is NA)
+        not_done <- stats::runif(1) < 0.05
+        val <- if (not_done) NA_character_ else as.character(
+          round(stats::runif(1, tst$lo, tst$hi))
+        )
+
+        has_time <- stats::runif(1) < 0.70
+        qstim <- if (has_time) sprintf("%02d:%02d", sample(8:16, 1),
+                                       sample(0:59, 1)) else NA_character_
+
+        qs_rows[[qs_counter]] <- tibble::tibble(
+          usubjid  = subject_ids[i],
+          qsid     = sprintf("QS-%05d", qs_counter),
+          qstestcd = tst$cd,
+          qstest   = tst$nm,
+          qscat    = "FUNCTIONAL ASSESSMENT",
+          qsorres  = val,
+          qsorresu = tst$u,
+          qsdat    = format(vdate, "%Y-%m-%d"),
+          qstim    = qstim,
+          visit    = vinfo$vname,
+          visitnum = vinfo$vnum
+        )
+      }
+    }
+  }
+  qs_raw <- dplyr::bind_rows(qs_rows)
   # ---------------------------------------------------------------------------
   if (!is.null(bad_case)) {
     if (bad_case == "dup_dm_key") {
@@ -539,7 +648,9 @@ make_dummy_study <- function(seed = 123,
       pr_raw = pr_raw,
       ex_raw = ex_raw,
       vs_raw = vs_raw,
-      lb_raw = lb_raw
+      lb_raw = lb_raw,
+      ds_raw = ds_raw,
+      qs_raw = qs_raw
     ),
     target_meta = target_meta,
     source_meta = source_meta,

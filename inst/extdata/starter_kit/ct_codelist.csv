@@ -49,3 +49,6 @@ RACE,Race,asian,ASIAN,Asian,N,DM RACE lowercase
 AGEU,Age Unit,YEARS,YEARS,Years,N,DM AGEU
 AGEU,Age Unit,years,YEARS,Years,N,DM AGEU lowercase
 AGEU,Age Unit,Years,YEARS,Years,N,DM AGEU mixed
+QSTEST,Questionnaire Test Name,FUNC01,FUNC01,Physical Functioning Score,N,QS decode
+QSTEST,Questionnaire Test Name,FUNC02,FUNC02,Emotional Well-Being Score,N,QS decode
+QSTEST,Questionnaire Test Name,FUNC03,FUNC03,Pain Interference Score,N,QS decode

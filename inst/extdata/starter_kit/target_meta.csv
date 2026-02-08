@@ -115,3 +115,33 @@ LB,VISIT,char,40,Visit Name,Timing,Exp,,14,N,N,visit,"{""dy_var"":""LBDY""}",LBD
 LB,VISITNUM,num,8,Visit Number,Timing,Exp,,15,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
 LB,LBBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,16,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""LBTESTCD""]}",VISIT
 LB,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""LBDTC"",""ref_var"":""RFSTDTC""}",LBDTC
+DS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+DS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""DS""}",
+DS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""ds_raw"",""column"":""usubjid""}",
+DS,DSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""DSSTDTC"",""DSDECOD""],""ties"":""dense""}",DSSTDTC;DSDECOD
+DS,DSTERM,char,200,Reported Term for the Disposition Event,Topic,Req,,5,N,N,direct_map,"{""dataset"":""ds_raw"",""column"":""dsterm"",""transform"":""toupper""}",
+DS,DSDECOD,char,200,Standardized Disposition Term,Synonym Qualifier,Req,,6,N,N,coalesce,"{""sources"":[""dsdecod_raw"",""dsterm""]}",
+DS,DSCAT,char,40,Category for Disposition Event,Grouping Qualifier,Req,,7,N,N,case_when,"{""conditions"":{""grepl('CONSENT|RANDOMIZ', dsterm, ignore.case = TRUE)"":""PROTOCOL MILESTONE"",""TRUE"":""DISPOSITION EVENT""},""default"":""DISPOSITION EVENT""}",
+DS,DSSCAT,char,40,Subcategory for Disposition Event,Grouping Qualifier,Perm,,8,N,N,if_else,"{""condition"":""DSCAT == 'DISPOSITION EVENT'"",""true_value"":""STUDY TREATMENT"",""false_value"":""INFORMED CONSENT"",""missing_value"":""NA""}",DSCAT
+DS,DSREFID,char,40,Reference ID,Identifier,Perm,,9,N,N,concat,"{""sources"":[""STUDYID"",""dsid""],""sep"":""-""}",STUDYID
+DS,DSSTDTC,char,20,Start Date/Time of Disposition Event,Timing,Exp,,10,N,N,iso_dtc,"{""date_col"":{""dataset"":""ds_raw"",""column"":""dsstdat""},""time_col"":null,""partial_allowed"":true}",
+DS,DSSTDY,num,8,Study Day of Disposition Event,Timing,Exp,,11,N,N,dy,"{""dtc_var"":""DSSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",DSSTDTC
+DS,EPOCH,char,20,Epoch,Timing,Perm,,12,N,N,epoch,"{""dtc_var"":""DSSTDTC"",""ref_var"":""RFSTDTC""}",DSSTDTC
+QS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+QS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""QS""}",
+QS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""qs_raw"",""column"":""usubjid""}",
+QS,QSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""QSDTC"",""QSTESTCD""],""ties"":""dense""}",QSDTC;QSTESTCD
+QS,QSTESTCD,char,8,Questionnaire Test Short Name,Topic,Req,,5,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qstestcd"",""transform"":""toupper""}",
+QS,QSTEST,char,40,Questionnaire Test Name,Synonym Qualifier,Req,QSTEST,6,N,N,ct_decode,"{""column"":""QSTESTCD"",""codelist_id"":""QSTEST""}",QSTESTCD
+QS,QSCAT,char,40,Category for Questionnaire,Grouping Qualifier,Req,,7,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qscat"",""transform"":""toupper""}",
+QS,QSORRES,char,40,Result or Finding in Original Units,Result Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
+QS,QSORRESU,char,20,Original Units,Variable Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorresu""}",
+QS,QSSTRESC,char,40,Character Result in Std Format,Result Qualifier,Exp,,10,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
+QS,QSSTRESN,num,8,Numeric Result in Standard Units,Result Qualifier,Exp,,11,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
+QS,QSSTAT,char,8,Completion Status,Record Qualifier,Perm,,12,N,N,occurrence,"{""source_var"":""qsorres"",""present_value"":""NA"",""absent_value"":""NOT DONE""}",
+QS,QSDTC,char,20,Date/Time of Assessment,Timing,Exp,,13,N,N,iso_dtc,"{""date_col"":{""dataset"":""qs_raw"",""column"":""qsdat""},""time_col"":{""dataset"":""qs_raw"",""column"":""qstim""},""partial_allowed"":true}",
+QS,QSDY,num,8,Study Day of Assessment,Timing,Exp,,14,N,N,dy,"{""dtc_var"":""QSDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",QSDTC
+QS,VISIT,char,40,Visit Name,Timing,Exp,,15,N,N,visit,"{""dy_var"":""QSDY""}",QSDY
+QS,VISITNUM,num,8,Visit Number,Timing,Exp,,16,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
+QS,QSBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,17,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""QSTESTCD""]}",VISIT
+QS,EPOCH,char,20,Epoch,Timing,Perm,,18,N,N,epoch,"{""dtc_var"":""QSDTC"",""ref_var"":""RFSTDTC""}",QSDTC

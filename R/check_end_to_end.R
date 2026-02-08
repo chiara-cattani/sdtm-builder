@@ -81,11 +81,12 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
 
   # ------ Step 3: Build each domain ------------------------------------------
   .log("Step 3: Building domains...")
-  mvp_domains <- intersect(c("DM", "AE", "CM", "MH", "PR", "EX", "VS", "LB"), domains_in_rules)
+  mvp_domains <- intersect(c("DM", "AE", "CM", "MH", "PR", "EX", "VS", "LB", "DS", "QS"), domains_in_rules)
   built <- list()
   reports <- list()
   domain_summaries <- list()
   any_error <- FALSE
+  dm_built <- NULL
 
   for (dom in mvp_domains) {
     .log(glue::glue("  Building {dom}..."))
@@ -97,6 +98,7 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
         raw_data    = raw_data,
         config      = config,
         rule_set    = rule_set,
+        dm_data     = dm_built,
         verbose     = verbose
       ),
       error = function(e) {
@@ -115,6 +117,7 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
 
     built[[dom]] <- result$data
     reports[[dom]] <- result$report
+    if (dom == "DM") dm_built <- result$data
 
     n_err  <- sum(result$report$findings$severity == "ERROR")
     n_warn <- sum(result$report$findings$severity == "WARNING")

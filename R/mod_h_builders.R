@@ -67,6 +67,10 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
   # Join DM data for RFSTDTC (needed for DY calculations) - skip for DM itself
   if (domain != "DM") {
     if (!is.null(dm_data)) {
+      # Auto-extract $data if a build_domain result list was passed
+      if (is.list(dm_data) && "data" %in% names(dm_data) && !is.data.frame(dm_data)) {
+        dm_data <- dm_data[["data"]]
+      }
       # Add RFSTDTC from DM
       dm_ref <- dm_data
       if (!"RFSTDTC" %in% names(dm_ref) && "rfstdtc" %in% names(dm_ref)) {
@@ -113,7 +117,8 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
 
     tryCatch({
       data <- derive_variable(data, var_name, rule,
-                               context = list(config = config, ct_lib = NULL,
+                               context = list(config = config,
+                                              ct_lib = rule_set$ct_lib,
                                               domain = domain))
       provenance <- dplyr::bind_rows(provenance, tibble::tibble(
         var = var_name, rule_type = rule$type,
@@ -450,6 +455,9 @@ derive_variable <- function(data, var, rule, context) {
       src_var       <- params$source_var
       present_val   <- params$present_value %||% "Y"
       absent_val    <- params$absent_value %||% NA_character_
+      # Allow "NA" string to represent actual NA
+      if (identical(present_val, "NA")) present_val <- NA_character_
+      if (identical(absent_val, "NA"))  absent_val  <- NA_character_
       if (!is.null(src_var) && !src_var %in% names(data) &&
           tolower(src_var) %in% names(data)) {
         src_var <- tolower(src_var)

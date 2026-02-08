@@ -13,7 +13,7 @@ test_that("raw_data contains all expected datasets", {
   study <- make_dummy_study(seed = 123, starter_kit_dir = starter_kit_path)
   expect_named(study$raw_data,
                c("dm_raw", "ae_raw", "cm_raw", "mh_raw", "pr_raw",
-                 "ex_raw", "vs_raw", "lb_raw"))
+                 "ex_raw", "vs_raw", "lb_raw", "ds_raw", "qs_raw"))
 })
 
 test_that("dm_raw has one row per subject", {
