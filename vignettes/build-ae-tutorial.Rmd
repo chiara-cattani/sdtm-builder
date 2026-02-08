@@ -4,7 +4,7 @@ author: "sdtmbuilder team"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Build AE from Metadata}
+  %\VignetteIndexEntry{Build AE from Metadata — End-to-End Tutorial}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

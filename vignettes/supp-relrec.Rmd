@@ -4,7 +4,7 @@ author: "sdtmbuilder team"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{SUPP and RELREC}
+  %\VignetteIndexEntry{SUPP and RELREC — Supplemental Qualifiers}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---

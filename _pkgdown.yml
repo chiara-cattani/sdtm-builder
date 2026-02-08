@@ -11,7 +11,7 @@ home:
 
 navbar:
   structure:
-    left:  [intro, reference, articles, news]
+    left:  [intro, reference, articles]
     right: [search, github]
   components:
     github:
@@ -23,6 +23,7 @@ reference:
     desc: "The main entry points for building SDTM domains."
     contents:
       - build_domain
+      - build_all_domains
       - build_domain_from_sources
       - compile_rules
       - make_dummy_study
@@ -190,6 +191,7 @@ reference:
       - assert_types
       - stop_with_context
       - warn_with_context
+      - warn_with_context
 
 articles:
   - title: "Getting Started"
@@ -210,6 +212,3 @@ articles:
       - multi-source-ex
       - supp-relrec
       - custom-rules
-
-news:
-  one_page: true

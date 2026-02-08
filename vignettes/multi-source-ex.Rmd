@@ -146,7 +146,7 @@ cat("Before dedup:", nrow(dup_data), "\n")
 deduped <- deduplicate_by_rule(
   dup_data,
   keys = c("usubjid", "extrt", "exstdat"),
-  method = "first"
+  strategy = "first"
 )
 cat("After dedup:", nrow(deduped), "\n")
 ```

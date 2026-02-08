@@ -1,6 +1,7 @@
 # sdtmbuilder
 
 <!-- badges: start -->
+[![R-CMD-check](https://github.com/chiara-cattani/sdtm-builder/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/chiara-cattani/sdtm-builder/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 > **A metadata-driven R package for building SDTM domains from raw clinical
