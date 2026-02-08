@@ -138,7 +138,7 @@ format_iso_dtc <- function(parsed, time = NULL, keep_partial = TRUE,
     if (!is.na(parsed$day[i]))   iso <- sprintf("%s-%02d", iso, parsed$day[i])
 
     # Add time if available
-    if (!is.na(parsed$hour[i]) && "hour" %in% names(parsed)) {
+    if ("hour" %in% names(parsed) && !is.na(parsed$hour[i])) {
       iso <- sprintf("%sT%02d:%02d", iso, parsed$hour[i], parsed$minute[i])
       if ("second" %in% names(parsed) && !is.na(parsed$second[i])) {
         iso <- sprintf("%s:%02d", iso, parsed$second[i])
@@ -202,17 +202,74 @@ derive_dy <- function(data, target_var, dtc_var, ref_var = "RFSTDTC",
 }
 
 #' Derive EPOCH
+#'
+#' Assigns EPOCH values by comparing each observation's date with study-day
+#' windows defined in `epoch_map`.
+#'
 #' @param data Tibble.
 #' @param target_var Character. Default `"EPOCH"`.
-#' @param dtc_var Character.
-#' @param epoch_map Tibble or function.
-#' @param by Character vector. Default `"USUBJID"`.
-#' @return Tibble.
+#' @param dtc_var Character. The DTC variable whose date determines the epoch.
+#' @param epoch_map A list of lists (or data-frame), each with `epoch`,
+#'   `start_day` (integer or `NULL`), and `end_day` (integer or `NULL`).
+#' @param ref_var Character. Reference-date column in `data`. Default
+#'   `"RFSTDTC"`.
+#' @param by Character vector. Grouping columns (unused for now, reserved for
+#'   multi-arm studies).
+#' @return Tibble with `target_var` populated.
 #' @export
 derive_epoch <- function(data, target_var = "EPOCH", dtc_var,
-                         epoch_map, by = "USUBJID") {
-  # Placeholder for non-MVP - just set NA
-  data[[target_var]] <- NA_character_
+                         epoch_map, ref_var = "RFSTDTC",
+                         by = "USUBJID") {
+  n <- nrow(data)
+  result <- rep(NA_character_, n)
+
+ # If epoch_map is empty / NULL, return early
+  if (is.null(epoch_map) || length(epoch_map) == 0L) {
+    data[[target_var]] <- result
+    return(data)
+  }
+
+  # Normalise epoch_map to a list-of-lists
+  if (is.data.frame(epoch_map)) {
+    emap <- lapply(seq_len(nrow(epoch_map)), function(i) as.list(epoch_map[i, ]))
+  } else {
+    emap <- epoch_map
+  }
+
+  has_dtc <- dtc_var %in% names(data)
+  has_ref <- ref_var %in% names(data)
+
+  if (!has_dtc || !has_ref) {
+    data[[target_var]] <- result
+    return(data)
+  }
+
+  for (i in seq_len(n)) {
+    dtc <- data[[dtc_var]][i]
+    ref <- data[[ref_var]][i]
+    if (is.na(dtc) || is.na(ref) || nchar(dtc) < 10 || nchar(ref) < 10) next
+
+    dtc_date <- tryCatch(as.Date(substr(dtc, 1, 10)), error = function(e) NA)
+    ref_date <- tryCatch(as.Date(substr(ref, 1, 10)), error = function(e) NA)
+    if (is.na(dtc_date) || is.na(ref_date)) next
+
+    diff_days <- as.integer(dtc_date - ref_date)
+    # Convert to study-day convention (no day 0)
+    sdy <- if (diff_days >= 0) diff_days + 1L else diff_days
+
+    for (ep in emap) {
+      lo <- ep$start_day  # NULL means -Inf
+      hi <- ep$end_day    # NULL means +Inf
+      if (is.null(lo)) lo <- -.Machine$integer.max
+      if (is.null(hi)) hi <- .Machine$integer.max
+      if (sdy >= lo && sdy <= hi) {
+        result[i] <- ep$epoch
+        break
+      }
+    }
+  }
+
+  data[[target_var]] <- result
   data
 }
 

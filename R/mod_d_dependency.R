@@ -82,7 +82,7 @@ build_dependency_graph <- function(rule_set, domain,
 #' @return Character vector of variable names in derivation order.
 #' @export
 topo_sort_rules <- function(graph) {
-  if (is.list(graph) && !igraph::is.igraph(graph)) {
+  if (is.list(graph) && !igraph::is_igraph(graph)) {
     if (!is.null(graph$order)) return(graph$order)
     graph <- graph$graph
   }
@@ -96,7 +96,7 @@ topo_sort_rules <- function(graph) {
 #' @return List of cycle paths.
 #' @export
 detect_cycles <- function(graph) {
-  if (is.null(graph) || !igraph::is.igraph(graph)) return(list())
+  if (is.null(graph) || !igraph::is_igraph(graph)) return(list())
   comps <- igraph::components(graph, mode = "strong")
   cycles <- list()
   for (i in seq_len(comps$no)) {

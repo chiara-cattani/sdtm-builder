@@ -52,3 +52,55 @@ test_that("gen_shared_utils_script contains STUDYID", {
   script <- gen_shared_utils_script(cfg)
   expect_true(grepl("DEMO-001", script))
 })
+
+test_that("gen_domain_script produces parseable R code for AE", {
+  skip_if_no_starter_kit()
+
+  rs <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
+  script <- gen_domain_script("AE", rs, dummy_meta, dummy_smeta, dummy_cfg)
+  # Should parse without error
+  parsed <- tryCatch(parse(text = script), error = function(e) NULL)
+  expect_false(is.null(parsed),
+               info = "Generated AE script should be parseable R code")
+})
+
+test_that("gen_domain_script works for all 8 domains", {
+  skip_if_no_starter_kit()
+
+  rs <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
+  domains <- c("DM", "AE", "CM", "MH", "PR", "EX", "VS", "LB")
+  for (dom in domains) {
+    script <- gen_domain_script(dom, rs, dummy_meta, dummy_smeta, dummy_cfg)
+    expect_true(nchar(script) > 50,
+                info = paste0("Script for ", dom, " should have content"))
+    expect_true(grepl(dom, script),
+                info = paste0("Script should reference domain ", dom))
+    # Should be parseable
+    parsed <- tryCatch(parse(text = script), error = function(e) NULL)
+    expect_false(is.null(parsed),
+                 info = paste0(dom, " script should be parseable R code"))
+  }
+})
+
+test_that("gen_domain_script writes to file", {
+  skip_if_no_starter_kit()
+
+  rs <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
+  tmp <- tempfile(fileext = ".R")
+  on.exit(unlink(tmp))
+  script <- gen_domain_script("AE", rs, dummy_meta, dummy_smeta, dummy_cfg,
+                              output_path = tmp)
+  expect_true(file.exists(tmp))
+  content <- readLines(tmp)
+  expect_true(length(content) > 5)
+})
+
+test_that("gen_qmd_domain produces Quarto markdown", {
+  skip_if_no_starter_kit()
+
+  rs <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
+  qmd <- gen_qmd_domain("AE", rs, dummy_meta)
+  expect_true(grepl("title:", qmd))
+  expect_true(grepl("SDTM AE", qmd))
+  expect_true(grepl("AETERM", qmd))
+})

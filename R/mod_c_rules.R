@@ -108,12 +108,14 @@ compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
     }
   }
 
-  new_rule_set(
+  rs <- new_rule_set(
     rules          = all_rules,
     dependency_info = dep_info,
     rule_types     = unique(type_accum),
     compile_log    = compile_log
   )
+  rs$ct_lib <- ct_lib
+  rs
 }
 
 #' Parse a rule JSON specification

@@ -72,11 +72,17 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
       if (!"RFSTDTC" %in% names(dm_ref) && "rfstdtc" %in% names(dm_ref)) {
         dm_ref$RFSTDTC <- dm_ref$rfstdtc
       }
-      if ("usubjid" %in% names(data) && "usubjid" %in% names(dm_ref)) {
-        # Only take subject-level columns from DM
-        dm_cols <- intersect(names(dm_ref), c("usubjid", "RFSTDTC", "rfstdtc"))
+      # Determine join key — built DM has UPPERCASE names, raw data lowercase
+      data_key <- if ("usubjid" %in% names(data)) "usubjid" else
+                  if ("USUBJID" %in% names(data)) "USUBJID" else NULL
+      dm_key   <- if ("usubjid" %in% names(dm_ref)) "usubjid" else
+                  if ("USUBJID" %in% names(dm_ref)) "USUBJID" else NULL
+      if (!is.null(data_key) && !is.null(dm_key)) {
+        # Normalise dm_ref key to match data
+        if (data_key != dm_key) dm_ref[[data_key]] <- dm_ref[[dm_key]]
+        dm_cols <- intersect(names(dm_ref), c(data_key, "RFSTDTC", "rfstdtc"))
         dm_slim <- dplyr::distinct(dm_ref[, dm_cols, drop = FALSE])
-        data <- safe_join(data, dm_slim, by = "usubjid",
+        data <- safe_join(data, dm_slim, by = data_key,
                           type = "left", cardinality = "m:1",
                           on_violation = "warn")
       }
@@ -120,7 +126,24 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
 
   .log(glue::glue("Derived {ncol(data)} columns, {nrow(data)} rows"))
 
-  # Finalize
+  # Identify SUPP variables (non-standard vars to move to SUPP--)
+  supp_vars <- character()
+  if ("to_supp" %in% names(dom_meta)) {
+    supp_flags <- dom_meta$to_supp
+    supp_vars <- dom_meta$var[!is.na(supp_flags) & toupper(supp_flags) == "Y"]
+  }
+
+  # Build SUPP dataset before finalize removes extra columns
+  supp_data <- NULL
+  if (length(supp_vars) > 0L) {
+    .log(glue::glue("Building SUPP{domain} for {length(supp_vars)} variable(s): {paste(supp_vars, collapse=', ')}"))
+    supp_data <- build_supp(data, domain, dom_meta, vars_to_supp = supp_vars)
+    if (!is.null(supp_data)) {
+      .log(glue::glue("SUPP{domain}: {nrow(supp_data)} rows"))
+    }
+  }
+
+  # Finalize (selects only non-SUPP target variables)
   final <- finalize_domain(data, domain, dom_meta, config,
                            create_seq = FALSE, create_supp = FALSE)
   data <- final$data
@@ -128,12 +151,14 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
   # Validate
   report <- new_validation_report(domain = domain)
   if (validate) {
-    report <- validate_domain_structure(data, dom_meta, domain, config)
+    ct_lib <- rule_set$ct_lib
+    report <- validate_domain_structure(data, dom_meta, domain, config,
+                                        ct_lib = ct_lib)
   }
 
   result <- list(
     data       = data,
-    supp       = final$supp,
+    supp       = supp_data,
     relrec     = NULL,
     report     = report,
     log        = log_msgs,
@@ -328,6 +353,16 @@ derive_variable <- function(data, var, rule, context) {
       # Handle join-based derivation
       data[[var]] <- NA_character_
     },
+    epoch = {
+      dtc_var   <- params$dtc_var
+      ref_var   <- params$ref_var %||% "RFSTDTC"
+      epoch_map <- context$config$epoch_map  # from config.yaml
+      if (!is.null(epoch_map) && length(epoch_map) > 0L) {
+        data <- derive_epoch(data, var, dtc_var, epoch_map, ref_var)
+      } else {
+        data[[var]] <- NA_character_
+      }
+    },
     {
       # Unknown rule type — set NA with warning
       warn(glue::glue("Unknown rule type '{type}' for variable {var}"))
@@ -353,6 +388,13 @@ finalize_domain <- function(data, domain, target_meta, config,
                             strict_labels = TRUE) {
   dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
   target_vars <- dom_meta$var
+
+  # Exclude SUPP variables from the main dataset
+  if ("to_supp" %in% names(dom_meta)) {
+    supp_flags <- dom_meta$to_supp
+    non_supp <- is.na(supp_flags) | toupper(supp_flags) != "Y"
+    target_vars <- dom_meta$var[non_supp]
+  }
 
   # Ensure all target variables exist (add NA columns for missing)
   for (v in target_vars) {
@@ -422,9 +464,18 @@ build_supp <- function(domain_data, domain, target_meta,
   seq_var <- paste0(domain, "SEQ")
   if (is.null(idvar)) idvar <- seq_var
 
+  # Build label lookup from metadata
+  dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
+  label_lookup <- stats::setNames(dom_meta$label, dom_meta$var)
+
   rows <- list()
   for (v in vars_to_supp) {
     if (!v %in% names(domain_data)) next
+    qlabel <- if (!is.null(label_lookup[[v]]) && !is.na(label_lookup[[v]])) {
+      label_lookup[[v]]
+    } else {
+      v
+    }
     for (i in seq_len(nrow(domain_data))) {
       val <- domain_data[[v]][i]
       if (is.na(val)) next
@@ -435,7 +486,7 @@ build_supp <- function(domain_data, domain, target_meta,
         IDVAR    = idvar,
         IDVARVAL = as.character(domain_data[[idvar]][i]),
         QNAM     = substr(v, 1, 8),
-        QLABEL   = v,
+        QLABEL   = qlabel,
         QVAL     = as.character(val),
         QORIG    = "CRF",
         QEVAL    = qeval

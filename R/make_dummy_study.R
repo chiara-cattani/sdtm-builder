@@ -109,6 +109,9 @@ make_dummy_study <- function(seed = 123,
     log_level      = cfg_yaml$log_level %||% "INFO"
   )
 
+  # Attach epoch_map (list-of-lists from config.yaml) -------------------------
+  config$epoch_map <- cfg_yaml$epoch_map
+
   # ---------------------------------------------------------------------------
   # Helper vectors
   # ---------------------------------------------------------------------------
@@ -194,6 +197,7 @@ make_dummy_study <- function(seed = 123,
         format(ae_start, "%Y-%m-%d")
 
       term_idx <- sample(length(ae_terms), 1)
+      ae_sess <- sample(c("VISIT 1", "VISIT 2", "VISIT 3", "UNSCHEDULED"), 1)
       ae_rows[[ae_counter]] <- tibble::tibble(
         usubjid   = subject_ids[i],
         aeid      = sprintf("AE-%04d", ae_counter),
@@ -205,7 +209,9 @@ make_dummy_study <- function(seed = 123,
         aestdat   = start_dat,
         aestim    = stim,
         aeendat   = end_dat,
-        aeentim   = if (!ongoing) etim else NA_character_
+        aeentim   = if (!ongoing) etim else NA_character_,
+        aession   = ae_sess,
+        aetrtem   = paste0(ae_terms[term_idx], " (local)")
       )
     }
   }

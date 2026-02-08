@@ -47,6 +47,19 @@ ct:
   files:
     - "inst/extdata/starter_kit/ct_codelist.csv"
 
+# Epoch definitions — study-day windows relative to RFSTDTC
+# Use start_day: null for "no lower bound" and end_day: null for "no upper bound"
+epoch_map:
+  - epoch: "SCREENING"
+    start_day: null
+    end_day: -1
+  - epoch: "TREATMENT"
+    start_day: 1
+    end_day: 92
+  - epoch: "FOLLOW-UP"
+    start_day: 93
+    end_day: null
+
 policies:
   unknown_ct: "WARN_AND_KEEP"
   date_partial_allowed: true

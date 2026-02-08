@@ -34,6 +34,21 @@ validate_domain_structure <- function(data, target_meta, domain, config,
   if ("all" %in% checks || "ct_conformance" %in% checks) {
     rpt <- validate_ct_conformance(data, target_meta, domain, ct_lib, rpt)
   }
+  if ("all" %in% checks || "domain_value" %in% checks) {
+    rpt <- validate_domain_value(data, domain, rpt)
+  }
+  if ("all" %in% checks || "studyid_constant" %in% checks) {
+    rpt <- validate_studyid_constant(data, domain, rpt)
+  }
+  if ("all" %in% checks || "no_allna_reqexp" %in% checks) {
+    rpt <- validate_no_allna_reqexp(data, target_meta, domain, rpt)
+  }
+  if ("all" %in% checks || "seq_integrity" %in% checks) {
+    rpt <- validate_seq_integrity(data, domain, rpt)
+  }
+  if ("all" %in% checks || "no_duplicate_rows" %in% checks) {
+    rpt <- validate_no_duplicate_rows(data, domain, rpt)
+  }
 
   rpt
 }
@@ -331,4 +346,119 @@ emit_log_messages <- function(report, sink = NULL) {
     )
   }
   invisible(NULL)
+}
+
+# ==============================================================================
+# Additional validation helpers (Phase 6)
+# ==============================================================================
+
+#' Validate DOMAIN variable value matches domain abbreviation
+#' @param data Tibble.
+#' @param domain Character.
+#' @param report `validation_report`.
+#' @return Updated `validation_report`.
+#' @export
+validate_domain_value <- function(data, domain, report) {
+  if (!"DOMAIN" %in% names(data)) return(report)
+  bad <- data$DOMAIN[!is.na(data$DOMAIN) & data$DOMAIN != domain]
+  if (length(bad) > 0L) {
+    report <- add_finding(report, rule_id = "domain_value",
+                          severity = "ERROR",
+                          message = glue::glue("DOMAIN contains values other than '{domain}': {paste(unique(bad), collapse=', ')}"),
+                          variable = "DOMAIN", domain = domain)
+  }
+  report
+}
+
+#' Validate STUDYID is constant across all rows
+#' @param data Tibble.
+#' @param domain Character.
+#' @param report `validation_report`.
+#' @return Updated `validation_report`.
+#' @export
+validate_studyid_constant <- function(data, domain, report) {
+  if (!"STUDYID" %in% names(data)) return(report)
+  unique_ids <- unique(data$STUDYID[!is.na(data$STUDYID)])
+  if (length(unique_ids) > 1L) {
+    report <- add_finding(report, rule_id = "studyid_constant",
+                          severity = "ERROR",
+                          message = glue::glue("STUDYID has {length(unique_ids)} distinct values: {paste(unique_ids, collapse=', ')}"),
+                          variable = "STUDYID", domain = domain)
+  }
+  report
+}
+
+#' Validate no Required/Expected variable is entirely NA
+#' @param data Tibble.
+#' @param target_meta Tibble.
+#' @param domain Character.
+#' @param report `validation_report`.
+#' @return Updated `validation_report`.
+#' @export
+validate_no_allna_reqexp <- function(data, target_meta, domain, report) {
+  dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
+  reqexp <- dom_meta$var[!is.na(dom_meta$core) &
+                         toupper(dom_meta$core) %in% c("REQ", "EXP")]
+
+  for (v in reqexp) {
+    if (!v %in% names(data)) next
+    if (all(is.na(data[[v]]) | data[[v]] == "")) {
+      report <- add_finding(report, rule_id = "no_allna_reqexp",
+                            severity = "ERROR",
+                            message = glue::glue("{v} (core={dom_meta$core[dom_meta$var == v]}) is entirely missing/blank"),
+                            variable = v, domain = domain)
+    }
+  }
+  report
+}
+
+#' Validate --SEQ is a positive integer with no gaps per subject
+#' @param data Tibble.
+#' @param domain Character.
+#' @param report `validation_report`.
+#' @return Updated `validation_report`.
+#' @export
+validate_seq_integrity <- function(data, domain, report) {
+  seq_var <- paste0(domain, "SEQ")
+  if (!seq_var %in% names(data)) return(report)
+
+  vals <- data[[seq_var]]
+  non_na <- vals[!is.na(vals)]
+
+  # Check positive
+  if (length(non_na) > 0L && any(non_na <= 0)) {
+    report <- add_finding(report, rule_id = "seq_integrity",
+                          severity = "ERROR",
+                          message = glue::glue("{seq_var} contains non-positive values"),
+                          variable = seq_var, domain = domain)
+  }
+
+  # Check integer-valued
+  if (length(non_na) > 0L && any(non_na != floor(non_na))) {
+    report <- add_finding(report, rule_id = "seq_integrity",
+                          severity = "ERROR",
+                          message = glue::glue("{seq_var} contains non-integer values"),
+                          variable = seq_var, domain = domain)
+  }
+
+  report
+}
+
+#' Validate no fully duplicate rows
+#' @param data Tibble.
+#' @param domain Character.
+#' @param report `validation_report`.
+#' @return Updated `validation_report`.
+#' @export
+validate_no_duplicate_rows <- function(data, domain, report) {
+  n_total <- nrow(data)
+  n_unique <- nrow(dplyr::distinct(data))
+  if (n_unique < n_total) {
+    n_dups <- n_total - n_unique
+    report <- add_finding(report, rule_id = "no_duplicate_rows",
+                          severity = "ERROR",
+                          message = glue::glue("{domain}: {n_dups} fully duplicate row(s)"),
+                          domain = domain)
+  }
+  report
 }

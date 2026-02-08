@@ -11,6 +11,9 @@ AE,AEREL,char,20,Causality,Record Qualifier,Exp,C66770,9,N,N,ct_assign,"{""datas
 AE,AESTDTC,char,20,Start Date/Time of Adverse Event,Timing,Exp,,10,N,N,iso_dtc,"{""date_col"":{""dataset"":""ae_raw"",""column"":""aestdat""},""time_col"":{""dataset"":""ae_raw"",""column"":""aestim""},""partial_allowed"":true}",
 AE,AEENDTC,char,20,End Date/Time of Adverse Event,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""ae_raw"",""column"":""aeendat""},""time_col"":{""dataset"":""ae_raw"",""column"":""aeentim""},""partial_allowed"":true}",
 AE,AESTDY,num,8,Study Day of Start of Adverse Event,Timing,Exp,,12,N,N,dy,"{""dtc_var"":""AESTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",AESTDTC
+AE,AESSION,char,20,AE Assessment Session,Record Qualifier,Perm,,13,N,Y,direct_map,"{""dataset"":""ae_raw"",""column"":""aession""}",
+AE,AETRTEM,char,200,AE Reported Term Modified,Record Qualifier,Perm,,14,N,Y,direct_map,"{""dataset"":""ae_raw"",""column"":""aetrtem""}",
+AE,EPOCH,char,20,Epoch,Timing,Perm,,15,N,N,epoch,"{""dtc_var"":""AESTDTC"",""ref_var"":""RFSTDTC""}",AESTDTC
 CM,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
 CM,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""CM""}",
 CM,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""cm_raw"",""column"":""usubjid""}",
@@ -24,6 +27,7 @@ CM,CMDOSFRQ,char,20,Dosing Frequency per Interval,Record Qualifier,Exp,FREQ,10,N
 CM,CMSTDTC,char,20,Start Date/Time of Medication,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""cm_raw"",""column"":""cmstdat""},""time_col"":null,""partial_allowed"":true}",
 CM,CMENDTC,char,20,End Date/Time of Medication,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""cm_raw"",""column"":""cmendat""},""time_col"":null,""partial_allowed"":true}",
 CM,CMSTDY,num,8,Study Day of Start of Medication,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""CMSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",CMSTDTC
+CM,EPOCH,char,20,Epoch,Timing,Perm,,14,N,N,epoch,"{""dtc_var"":""CMSTDTC"",""ref_var"":""RFSTDTC""}",CMSTDTC
 MH,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
 MH,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""MH""}",
 MH,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""mh_raw"",""column"":""usubjid""}",
@@ -43,6 +47,7 @@ PR,PRPRESP,char,2,Procedure Pre-Specified,Record Qualifier,Perm,YN,7,N,N,ct_assi
 PR,PRSTDTC,char,20,Start Date/Time of Procedure,Timing,Exp,,8,N,N,iso_dtc,"{""date_col"":{""dataset"":""pr_raw"",""column"":""prstdat""},""time_col"":{""dataset"":""pr_raw"",""column"":""prstim""},""partial_allowed"":true}",
 PR,PRENDTC,char,20,End Date/Time of Procedure,Timing,Perm,,9,N,N,iso_dtc,"{""date_col"":{""dataset"":""pr_raw"",""column"":""prendat""},""time_col"":null,""partial_allowed"":true}",
 PR,PRSTDY,num,8,Study Day of Start of Procedure,Timing,Exp,,10,N,N,dy,"{""dtc_var"":""PRSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",PRSTDTC
+PR,EPOCH,char,20,Epoch,Timing,Perm,,11,N,N,epoch,"{""dtc_var"":""PRSTDTC"",""ref_var"":""RFSTDTC""}",PRSTDTC
 DM,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
 DM,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""DM""}",
 DM,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""dm_raw"",""column"":""usubjid""}",
@@ -71,6 +76,7 @@ EX,EXROUTE,char,40,Route of Administration,Record Qualifier,Exp,ROUTE,9,N,N,ct_a
 EX,EXSTDTC,char,20,Start Date/Time of Treatment,Timing,Exp,,10,N,N,iso_dtc,"{""date_col"":{""dataset"":""ex_raw"",""column"":""exstdat""},""time_col"":null,""partial_allowed"":true}",
 EX,EXENDTC,char,20,End Date/Time of Treatment,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""ex_raw"",""column"":""exendat""},""time_col"":null,""partial_allowed"":true}",
 EX,EXSTDY,num,8,Study Day of Start of Treatment,Timing,Exp,,12,N,N,dy,"{""dtc_var"":""EXSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",EXSTDTC
+EX,EPOCH,char,20,Epoch,Timing,Perm,,13,N,N,epoch,"{""dtc_var"":""EXSTDTC"",""ref_var"":""RFSTDTC""}",EXSTDTC
 VS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
 VS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""VS""}",
 VS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""vs_raw"",""column"":""usubjid""}",
@@ -87,6 +93,7 @@ VS,VSDY,num,8,Study Day of Vital Signs,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""VSD
 VS,VISIT,char,40,Visit Name,Timing,Exp,,14,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""visit""}",
 VS,VISITNUM,num,8,Visit Number,Timing,Exp,,15,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""visitnum""}",
 VS,VSBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,16,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsblfl""}",
+VS,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""VSDTC"",""ref_var"":""RFSTDTC""}",VSDTC
 LB,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
 LB,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""LB""}",
 LB,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""lb_raw"",""column"":""usubjid""}",
@@ -102,3 +109,4 @@ LB,LBDTC,char,20,Date/Time of Specimen Collection,Timing,Exp,,12,N,N,iso_dtc,"{"
 LB,LBDY,num,8,Study Day of Specimen Collection,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""LBDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",LBDTC
 LB,VISIT,char,40,Visit Name,Timing,Exp,,14,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""visit""}",
 LB,VISITNUM,num,8,Visit Number,Timing,Exp,,15,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""visitnum""}",
+LB,EPOCH,char,20,Epoch,Timing,Perm,,16,N,N,epoch,"{""dtc_var"":""LBDTC"",""ref_var"":""RFSTDTC""}",LBDTC

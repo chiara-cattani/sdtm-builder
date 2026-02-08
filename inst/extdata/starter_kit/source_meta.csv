@@ -21,6 +21,8 @@ ae_raw,aestdat,character,Start date raw,N,format YYYY-MM-DD or partial YYYY-MM
 ae_raw,aestim,character,Start time raw,N,format HH:MM; ~40% missing
 ae_raw,aeendat,character,End date raw,N,format YYYY-MM-DD; some missing (ongoing)
 ae_raw,aeentim,character,End time raw,N,format HH:MM; mostly missing
+ae_raw,aession,character,AE Assessment Session,N,e.g. VISIT 1/VISIT 2/UNSCHEDULED
+ae_raw,aetrtem,character,AE term in local language,N,free text
 cm_raw,usubjid,character,Unique Subject Identifier,Y,
 cm_raw,cmid,character,Sponsor-defined CM identifier,N,
 cm_raw,cmtrt,character,Medication name,N,free text
