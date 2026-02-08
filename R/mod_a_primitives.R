@@ -33,6 +33,10 @@
 #'   Default `"INFO"`.
 #' @param legacy_quirks Named list. Backward-compat flags, e.g.
 #'   `list(seq_zero_based = FALSE, blank_as_na = TRUE)`.
+#' @param create_supp Logical. Default `TRUE`. When `FALSE`, supplemental
+#'   qualifier variables are kept in the main domain instead of being
+#'   split into a SUPP-- dataset. `build_domain()` uses this value
+#'   unless explicitly overridden.
 #'
 #' @return An S3 object of class `sdtm_config` (a named list).
 #'
@@ -59,7 +63,8 @@ new_sdtm_config <- function(studyid,
                             sponsor_overrides = list(),
                             imputation_policy = list(),
                             log_level = "INFO",
-                            legacy_quirks = list()) {
+                            legacy_quirks = list(),
+                            create_supp = TRUE) {
   # --- input validation -------------------------------------------------------
   checkmate::assert_string(studyid, min.chars = 1L)
 
@@ -96,6 +101,7 @@ new_sdtm_config <- function(studyid,
     imputation_policy  = imputation_policy,
     log_level          = log_level,
     legacy_quirks      = legacy_quirks,
+    create_supp        = create_supp,
     .created_at        = Sys.time()
   )
 

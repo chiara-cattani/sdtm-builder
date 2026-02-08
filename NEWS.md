@@ -1,15 +1,39 @@
 # sdtmbuilder 0.1.0
 
-## Phase 1 — Metadata Schema & Rule Compiler
+## Phase 10 — Enterprise-Readiness Features
 
-* S3 classes for study config, meta bundle, rule set, validation report, and
-  build result (`mod_a_primitives.R`).
-* Readers and validators for target metadata, source metadata, and controlled
-  terminology library (`mod_b_metadata.R`).
-* `compile_rules()` parses JSON rule parameters, resolves dependencies, and
-  enriches CT rules with codelist mappings (`mod_c_rules.R`).
-* `build_dependency_graph()` and `topo_sort_rules()` using igraph to
-  guarantee correct derivation order (`mod_d_dependency.R`).
+* **`build_all_domains()`**: New orchestrator that automatically determines
+  domain build order (DM first, then all others), passes `dm_data` downstream,
+  and returns a named list of build results.
+* **SELECT column filtering**: Metadata files (target\_meta, source\_meta,
+  ct\_codelist) can now include a `select` column. Only rows with
+  `select = "Y"` are loaded — rows without "Y" are silently excluded. This
+  allows maintaining a global metadata set and selecting study-specific subsets.
+  Backward-compatible: if no `select` column is present, all rows load.
+* **SUPP domain toggle** (`create_supp`): New parameter on `build_domain()`,
+  `build_all_domains()`, and `new_sdtm_config()`. Set `FALSE` to keep all
+  variables in the main domain rather than splitting to SUPP-- datasets.
+  Resolution order: explicit parameter > `config$create_supp` > `TRUE`.
+* **Extra columns tolerated**: Metadata readers already only check for
+  required columns. Extra columns in user files are silently preserved — no
+  error, no data loss.
+* Starter kit CSV and XLSX files updated with `select` column (all "Y").
+* `check_end_to_end()` and `demo_full_pipeline.R` refactored to use
+  `build_all_domains()`.
+* Removed stale ROADMAP.md development artifact.
+
+## Phase 9 — DS and QS Domains
+
+* Added DS (Disposition) and QS (Questionnaires) domains — 10 total.
+* New rule types exercised: `coalesce`, `case_when`, `if_else`, `concat`,
+  `ct_decode`, `occurrence` semantics for QSSTAT.
+* `build_domain()` auto-extracts `$data` when `dm_data` is a full
+  `build_result` object.
+* Excel (.xlsx) starter kit files alongside CSV.
+* README rewritten as comprehensive programmer guide documenting all
+  131 exported functions.
+
+## Phase 1 — Metadata Schema & Rule Compiler
 
 ## Phase 2 — build_domain MVP
 

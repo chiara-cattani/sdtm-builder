@@ -79,23 +79,37 @@ rule_set <- compile_rules(
 )
 print(rule_set)  # shows 10 domains, 146 rules
 
-# 3. Build DM first (other domains need RFSTDTC)
-dm <- build_domain("DM", study$target_meta, study$source_meta,
-                   study$raw_data, study$config, rule_set)
+# 3. Build ALL domains in dependency order (DM first, then the rest)
+results <- build_all_domains(
+  target_meta = study$target_meta,
+  source_meta = study$source_meta,
+  raw_data    = study$raw_data,
+  config      = study$config,
+  rule_set    = rule_set
+)
 
-# 4. Build any other domain
+# 4. Inspect results
+head(results$AE$data)       # the SDTM AE dataset
+results$AE$supp             # SUPPAE (if any SUPP variables)
+results$AE$report           # validation report
+
+# 5. Build without SUPP domains (keep all vars in main domain)
+results_no_supp <- build_all_domains(
+  target_meta = study$target_meta,
+  source_meta = study$source_meta,
+  raw_data    = study$raw_data,
+  config      = study$config,
+  rule_set    = rule_set,
+  create_supp = FALSE
+)
+
+# 6. Or build a single domain manually
 ae <- build_domain("AE", study$target_meta, study$source_meta,
                    study$raw_data, study$config, rule_set,
-                   dm_data = dm$data)
+                   dm_data = results$DM$data)
 
-# 5. Inspect results
-head(ae$data)       # the SDTM AE dataset
-ae$supp             # SUPPAE (if any SUPP variables)
-ae$report           # validation report
-ae$provenance       # column-level derivation log
-
-# 6. Export
-export_xpt(ae$data, "AE", "output/")
+# 7. Export
+export_xpt(results$AE$data, "AE", "output/")
 ```
 
 ---
@@ -190,7 +204,8 @@ config <- new_sdtm_config(
   studyid        = "STUDY-XYZ",
   timezone       = "UTC",
   ref_start_rule = list(var = "rfstdtc", source = "dm_raw"),
-  visit_map      = visit_map_tibble  # tibble with VISITNUM, VISIT, START_DAY, END_DAY
+  visit_map      = visit_map_tibble,  # tibble with VISITNUM, VISIT, START_DAY, END_DAY
+  create_supp    = TRUE               # set FALSE to keep all vars in main domain
 )
 ```
 
@@ -219,8 +234,29 @@ declared in `depends_on`, and enriches rules with codelist information.
 
 ### Step 4 — Build Domains
 
-Always build DM first — other domains need `RFSTDTC` for study-day, epoch,
-and visit derivations.
+The simplest way is `build_all_domains()` — it auto-detects that DM must be
+built first (other domains need `RFSTDTC`) and passes `dm_data` downstream.
+
+```r
+# Build all domains in dependency order
+results <- build_all_domains(
+  target_meta, source_meta, raw_data, config, rule_set
+)
+
+# Build only specific domains
+results <- build_all_domains(
+  target_meta, source_meta, raw_data, config, rule_set,
+  domains = c("DM", "AE", "VS")
+)
+
+# Build without SUPP domains (keep all vars in main domain)
+results <- build_all_domains(
+  target_meta, source_meta, raw_data, config, rule_set,
+  create_supp = FALSE
+)
+```
+
+Or build domains individually:
 
 ```r
 # Build DM first
@@ -264,20 +300,36 @@ gen_domain_script("AE", rule_set, target_meta, source_meta, config,
 
 ## Metadata Files
 
+> **Extra columns are tolerated.** Metadata readers only require certain
+> columns (see tables below). Any additional columns in your files are
+> silently preserved — no error, no data loss.
+
+### SELECT Column — Study-Specific Filtering
+
+All three metadata files support an optional `select` column. When present,
+only rows with `select = "Y"` (case-insensitive) are loaded; all other rows
+are silently excluded. This allows you to maintain a **global metadata set**
+covering all studies and select the study-specific subset via the `select`
+column.
+
+If the `select` column is absent, **all rows are loaded** (backward
+compatible).
+
 ### target\_meta.csv / target\_meta.xlsx
 
 Each row defines one SDTM variable for one domain.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `domain` | char | SDTM domain abbreviation (DM, AE, VS, ...) |
-| `var` | char | SDTM variable name (STUDYID, AETERM, ...) |
-| `type` | char | `char` or `num` |
-| `length` | num | Max character length or numeric width |
-| `label` | char | Variable label (max 40 chars) |
-| `role` | char | CDISC role (Identifier, Topic, ...) |
-| `core` | char | `Req`, `Exp`, or `Perm` |
-| `codelist_id` | char | CT codelist ID (e.g. C66769, YN, ROUTE) |
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| `select` | char | No | `Y` to include this row for the study |
+| `domain` | char | **Yes** | SDTM domain abbreviation (DM, AE, VS, ...) |
+| `var` | char | **Yes** | SDTM variable name (STUDYID, AETERM, ...) |
+| `type` | char | **Yes** | `char` or `num` |
+| `length` | num | No | Max character length or numeric width |
+| `label` | char | **Yes** | Variable label (max 40 chars) |
+| `role` | char | No | CDISC role (Identifier, Topic, ...) |
+| `core` | char | No | `Req`, `Exp`, or `Perm` |
+| `codelist_id` | char | No | CT codelist ID (e.g. C66769, YN, ROUTE) |
 | `order` | num | Display order within the domain |
 | `is_key` | char | `Y` if part of the natural key |
 | `to_supp` | char | `Y` to move this variable to SUPP-- |
@@ -289,28 +341,30 @@ Each row defines one SDTM variable for one domain.
 
 Each row describes one column in a raw dataset.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `dataset` | char | Raw dataset name (dm\_raw, ae\_raw, ...) |
-| `column` | char | Column name |
-| `type` | char | `character` or `numeric` |
-| `label` | char | Description |
-| `is_key` | char | `Y` if key column |
-| `notes` | char | Free-text notes |
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| `select` | char | No | `Y` to include this row for the study |
+| `dataset` | char | **Yes** | Raw dataset name (dm\_raw, ae\_raw, ...) |
+| `column` | char | **Yes** | Column name |
+| `type` | char | **Yes** | `character` or `numeric` |
+| `label` | char | No | Description |
+| `is_key` | char | No | `Y` if key column |
+| `notes` | char | No | Free-text notes |
 
 ### ct\_codelist.csv / ct\_codelist.xlsx
 
 Controlled terminology mappings.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `codelist_id` | char | Codelist identifier (C66769, YN, ROUTE, ...) |
-| `codelist_name` | char | Codelist description |
-| `input_value` | char | Value found in raw data |
-| `coded_value` | char | CDISC-coded value |
-| `decode` | char | Human-readable decode |
-| `case_sensitive` | char | `Y` or `N` |
-| `notes` | char | Free-text notes |
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| `select` | char | No | `Y` to include this row for the study |
+| `codelist_id` | char | **Yes** | Codelist identifier (C66769, YN, ROUTE, ...) |
+| `codelist_name` | char | No | Codelist description |
+| `input_value` | char | No | Value found in raw data |
+| `coded_value` | char | **Yes** | CDISC-coded value |
+| `decode` | char | No | Human-readable decode |
+| `case_sensitive` | char | No | `Y` or `N` |
+| `notes` | char | No | Free-text notes |
 
 ### config.yaml
 

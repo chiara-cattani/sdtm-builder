@@ -79,58 +79,60 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
     .log(glue::glue("    {dom}: {n_rules} rules"))
   }
 
-  # ------ Step 3: Build each domain ------------------------------------------
-  .log("Step 3: Building domains...")
+  # ------ Step 3: Build each domain (auto-ordered, DM first) ------------------
+  .log("Step 3: Building all domains in dependency order...")
   mvp_domains <- intersect(c("DM", "AE", "CM", "MH", "PR", "EX", "VS", "LB", "DS", "QS"), domains_in_rules)
+
+  all_results <- tryCatch(
+    build_all_domains(
+      target_meta = target_meta,
+      source_meta = source_meta,
+      raw_data    = raw_data,
+      config      = config,
+      rule_set    = rule_set,
+      domains     = mvp_domains,
+      verbose     = verbose
+    ),
+    error = function(e) {
+      .log(glue::glue("FATAL: build_all_domains failed: {e$message}"))
+      return(NULL)
+    }
+  )
+
   built <- list()
   reports <- list()
   domain_summaries <- list()
   any_error <- FALSE
-  dm_built <- NULL
 
-  for (dom in mvp_domains) {
-    .log(glue::glue("  Building {dom}..."))
-    result <- tryCatch(
-      build_domain(
-        domain      = dom,
-        target_meta = target_meta,
-        source_meta = source_meta,
-        raw_data    = raw_data,
-        config      = config,
-        rule_set    = rule_set,
-        dm_data     = dm_built,
-        verbose     = verbose
-      ),
-      error = function(e) {
-        .log(glue::glue("  ERROR building {dom}: {e$message}"))
-        return(NULL)
+  if (is.null(all_results)) {
+    any_error <- TRUE
+  } else {
+    for (dom in mvp_domains) {
+      result <- all_results[[dom]]
+      if (is.null(result)) {
+        any_error <- TRUE
+        domain_summaries[[dom]] <- list(
+          status = "FAIL", nrow = 0, ncol = 0, errors = 1, warnings = 0
+        )
+        next
       }
-    )
 
-    if (is.null(result)) {
-      any_error <- TRUE
+      built[[dom]] <- result$data
+      reports[[dom]] <- result$report
+
+      n_err  <- sum(result$report$findings$severity == "ERROR")
+      n_warn <- sum(result$report$findings$severity == "WARNING")
+
       domain_summaries[[dom]] <- list(
-        status = "FAIL", nrow = 0, ncol = 0, errors = 1, warnings = 0
+        status   = if (n_err == 0) "PASS" else "WARN",
+        nrow     = nrow(result$data),
+        ncol     = ncol(result$data),
+        errors   = n_err,
+        warnings = n_warn
       )
-      next
+
+      .log(glue::glue("  {dom}: {nrow(result$data)} rows x {ncol(result$data)} cols | Errors: {n_err}, Warnings: {n_warn}"))
     }
-
-    built[[dom]] <- result$data
-    reports[[dom]] <- result$report
-    if (dom == "DM") dm_built <- result$data
-
-    n_err  <- sum(result$report$findings$severity == "ERROR")
-    n_warn <- sum(result$report$findings$severity == "WARNING")
-
-    domain_summaries[[dom]] <- list(
-      status   = if (n_err == 0) "PASS" else "WARN",
-      nrow     = nrow(result$data),
-      ncol     = ncol(result$data),
-      errors   = n_err,
-      warnings = n_warn
-    )
-
-    .log(glue::glue("  {dom}: {nrow(result$data)} rows x {ncol(result$data)} cols | Errors: {n_err}, Warnings: {n_warn}"))
   }
 
   # ------ Step 4: Export (optional) ------------------------------------------

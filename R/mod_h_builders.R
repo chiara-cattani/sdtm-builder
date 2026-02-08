@@ -14,8 +14,13 @@
 #' @param raw_data Named list of tibbles.
 #' @param config `sdtm_config`.
 #' @param rule_set `rule_set`.
-#' @param dm_data Tibble or `NULL`.
+#' @param dm_data Tibble or `NULL`. DM data for RFSTDTC; also accepts
+#'   a full `build_result` list (auto-extracts `$data`).
 #' @param sv_data Tibble or `NULL`.
+#' @param create_supp Logical or `NULL`. Default `NULL`, which means the
+#'   value from `config$create_supp` is used (itself defaulting to `TRUE`).
+#'   Set `FALSE` to keep all variables in the main domain instead of
+#'   splitting to SUPP--.
 #' @param return_provenance Logical. Default `TRUE`.
 #' @param validate Logical. Default `TRUE`.
 #' @param verbose Logical. Default `TRUE`.
@@ -23,9 +28,14 @@
 #' @export
 build_domain <- function(domain, target_meta, source_meta, raw_data,
                          config, rule_set, dm_data = NULL, sv_data = NULL,
+                         create_supp = NULL,
                          return_provenance = TRUE, validate = TRUE,
                          verbose = TRUE) {
   domain <- toupper(domain)
+  # Resolve create_supp: explicit param > config > TRUE
+  if (is.null(create_supp)) {
+    create_supp <- if (!is.null(config$create_supp)) config$create_supp else TRUE
+  }
   log_msgs <- character()
   .log <- function(msg) {
     log_msgs <<- c(log_msgs, paste(Sys.time(), msg))
@@ -133,7 +143,7 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
 
   # Identify SUPP variables (non-standard vars to move to SUPP--)
   supp_vars <- character()
-  if ("to_supp" %in% names(dom_meta)) {
+  if (create_supp && "to_supp" %in% names(dom_meta)) {
     supp_flags <- dom_meta$to_supp
     supp_vars <- dom_meta$var[!is.na(supp_flags) & toupper(supp_flags) == "Y"]
   }
@@ -148,9 +158,10 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
     }
   }
 
-  # Finalize (selects only non-SUPP target variables)
+  # Finalize (selects only non-SUPP target variables when create_supp=TRUE,
+  # or keeps all target variables when create_supp=FALSE)
   final <- finalize_domain(data, domain, dom_meta, config,
-                           create_seq = FALSE, create_supp = FALSE)
+                           create_seq = FALSE, create_supp = create_supp)
   data <- final$data
 
   # Validate
@@ -508,8 +519,8 @@ finalize_domain <- function(data, domain, target_meta, config,
   dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
   target_vars <- dom_meta$var
 
-  # Exclude SUPP variables from the main dataset
-  if ("to_supp" %in% names(dom_meta)) {
+  # Exclude SUPP variables from the main dataset (only when create_supp=TRUE)
+  if (isTRUE(create_supp) && "to_supp" %in% names(dom_meta)) {
     supp_flags <- dom_meta$to_supp
     non_supp <- is.na(supp_flags) | toupper(supp_flags) != "Y"
     target_vars <- dom_meta$var[non_supp]
@@ -678,4 +689,92 @@ build_sv_plugin <- function(target_meta, source_meta, raw_data,
                             config, rule_set) {
   rlang::inform("SV domain plugin is not yet implemented.")
   list()
+}
+
+
+#' Build all domains in dependency order
+#'
+#' Automatically determines domain build order from metadata dependencies
+#' (DM is always built first, then domains that need DM data, etc.) and
+#' builds each domain sequentially, passing upstream results downstream.
+#'
+#' @param target_meta Tibble.
+#' @param source_meta Tibble.
+#' @param raw_data Named list of tibbles.
+#' @param config `sdtm_config`.
+#' @param rule_set `rule_set`.
+#' @param domains Character vector or `NULL`. If `NULL`, builds all domains
+#'   in the rule\_set. Otherwise builds only the listed domains.
+#' @param create_supp Logical or `NULL`. Default `NULL` (inherits from
+#'   `config$create_supp`, itself defaulting to `TRUE`). Set `FALSE` to
+#'   keep all variables in the main domain instead of splitting to SUPP--.
+#' @param validate Logical. Default `TRUE`.
+#' @param verbose Logical. Default `TRUE`.
+#' @return Named list of `build_result` objects, keyed by domain.
+#' @export
+build_all_domains <- function(target_meta, source_meta, raw_data,
+                              config, rule_set,
+                              domains = NULL,
+                              create_supp = NULL,
+                              validate = TRUE,
+                              verbose = TRUE) {
+  all_doms <- names(rule_set$rules)
+  if (!is.null(domains)) {
+    all_doms <- intersect(toupper(domains), all_doms)
+  }
+  if (length(all_doms) == 0L) {
+    abort("No domains found to build.")
+  }
+
+  # Determine build order: DM first, then others
+ # Scan rules to identify which domains reference dm_data / RFSTDTC
+  needs_dm <- character()
+  for (dom in all_doms) {
+    if (dom == "DM") next
+    dom_rules <- rule_set$rules[[dom]]
+    for (r in dom_rules) {
+      if (r$type %in% c("dy", "epoch") ||
+          (!is.null(r$params$ref_var) && toupper(r$params$ref_var) == "RFSTDTC")) {
+        needs_dm <- c(needs_dm, dom)
+        break
+      }
+    }
+  }
+
+  # Build order: DM first (if present), then everything else
+  ordered <- character()
+  if ("DM" %in% all_doms) ordered <- "DM"
+  ordered <- c(ordered, setdiff(all_doms, ordered))
+
+  results <- list()
+  dm_built <- NULL
+
+  for (dom in ordered) {
+    if (verbose) cli::cli_alert_info("Building {dom}...")
+    result <- tryCatch(
+      build_domain(
+        domain      = dom,
+        target_meta = target_meta,
+        source_meta = source_meta,
+        raw_data    = raw_data,
+        config      = config,
+        rule_set    = rule_set,
+        dm_data     = dm_built,
+        create_supp = create_supp,
+        validate    = validate,
+        verbose     = verbose
+      ),
+      error = function(e) {
+        if (verbose) cli::cli_alert_danger("ERROR building {dom}: {e$message}")
+        return(NULL)
+      }
+    )
+
+    if (!is.null(result)) {
+      results[[dom]] <- result
+      if (dom == "DM") dm_built <- result$data
+    }
+  }
+
+  results
 }

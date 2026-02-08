@@ -1,147 +1,147 @@
-domain,var,type,length,label,role,core,codelist_id,order,is_key,to_supp,rule_type,rule_params,depends_on
-AE,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-AE,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""AE""}",
-AE,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""ae_raw"",""column"":""usubjid""}",
-AE,AESEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""AESTDTC"",""AEDECOD""],""ties"":""dense""}",AESTDTC;AEDECOD
-AE,AETERM,char,200,Reported Term for the Adverse Event,Topic,Req,,5,N,N,direct_map,"{""dataset"":""ae_raw"",""column"":""aeterm"",""transform"":""toupper""}",
-AE,AEDECOD,char,200,Dictionary-Derived Term,Synonym Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""ae_raw"",""column"":""aedecod"",""transform"":""toupper""}",
-AE,AEBODSYS,char,200,Body System or Organ Class,Record Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""ae_raw"",""column"":""aebodsys"",""transform"":""toupper""}",
-AE,AESEV,char,10,Severity/Intensity,Record Qualifier,Exp,C66769,8,N,N,ct_assign,"{""dataset"":""ae_raw"",""column"":""aesev_raw"",""codelist_id"":""C66769"",""unknown_policy"":""warn_and_keep""}",
-AE,AESER,char,2,Serious Event,Record Qualifier,Exp,YN,9,N,N,ct_assign,"{""dataset"":""ae_raw"",""column"":""aeser_raw"",""codelist_id"":""YN""}",
-AE,AEREL,char,20,Causality,Record Qualifier,Exp,C66770,10,N,N,ct_assign,"{""dataset"":""ae_raw"",""column"":""aerel_raw"",""codelist_id"":""C66770"",""unknown_policy"":""warn_and_keep""}",
-AE,AESTDTC,char,20,Start Date/Time of Adverse Event,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""ae_raw"",""column"":""aestdat""},""time_col"":{""dataset"":""ae_raw"",""column"":""aestim""},""partial_allowed"":true}",
-AE,AEENDTC,char,20,End Date/Time of Adverse Event,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""ae_raw"",""column"":""aeendat""},""time_col"":{""dataset"":""ae_raw"",""column"":""aeentim""},""partial_allowed"":true}",
-AE,AESTDY,num,8,Study Day of Start of Adverse Event,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""AESTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",AESTDTC
-AE,AEENDDY,num,8,Study Day of End of Adverse Event,Timing,Exp,,14,N,N,dy,"{""dtc_var"":""AEENDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",AEENDTC
-AE,AESSION,char,20,AE Assessment Session,Record Qualifier,Perm,,15,N,Y,direct_map,"{""dataset"":""ae_raw"",""column"":""aession""}",
-AE,AETRTEM,char,200,AE Reported Term Modified,Record Qualifier,Perm,,16,N,Y,direct_map,"{""dataset"":""ae_raw"",""column"":""aetrtem""}",
-AE,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""AESTDTC"",""ref_var"":""RFSTDTC""}",AESTDTC
-CM,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-CM,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""CM""}",
-CM,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""cm_raw"",""column"":""usubjid""}",
-CM,CMSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""CMSTDTC"",""CMDECOD""],""ties"":""dense""}",CMSTDTC;CMDECOD
-CM,CMTRT,char,200,Reported Name of Drug or Therapy,Topic,Req,,5,N,N,direct_map,"{""dataset"":""cm_raw"",""column"":""cmtrt"",""transform"":""toupper""}",
-CM,CMDECOD,char,200,Standardized Medication Name,Synonym Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""cm_raw"",""column"":""cmdecod"",""transform"":""toupper""}",
-CM,CMROUTE,char,40,Route of Administration,Record Qualifier,Exp,ROUTE,7,N,N,ct_assign,"{""dataset"":""cm_raw"",""column"":""cmroute_raw"",""codelist_id"":""ROUTE""}",
-CM,CMDOSE,num,8,Dose per Administration,Record Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""cm_raw"",""column"":""cmdose""}",
-CM,CMDOSU,char,20,Dose Units,Variable Qualifier,Exp,UNIT,9,N,N,ct_assign,"{""dataset"":""cm_raw"",""column"":""cmdosu_raw"",""codelist_id"":""UNIT""}",
-CM,CMDOSFRQ,char,20,Dosing Frequency per Interval,Record Qualifier,Exp,FREQ,10,N,N,ct_assign,"{""dataset"":""cm_raw"",""column"":""cmdosfrq_raw"",""codelist_id"":""FREQ""}",
-CM,CMSTDTC,char,20,Start Date/Time of Medication,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""cm_raw"",""column"":""cmstdat""},""time_col"":null,""partial_allowed"":true}",
-CM,CMENDTC,char,20,End Date/Time of Medication,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""cm_raw"",""column"":""cmendat""},""time_col"":null,""partial_allowed"":true}",
-CM,CMSTDY,num,8,Study Day of Start of Medication,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""CMSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",CMSTDTC
-CM,CMENDDY,num,8,Study Day of End of Medication,Timing,Exp,,14,N,N,dy,"{""dtc_var"":""CMENDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",CMENDTC
-CM,EPOCH,char,20,Epoch,Timing,Perm,,15,N,N,epoch,"{""dtc_var"":""CMSTDTC"",""ref_var"":""RFSTDTC""}",CMSTDTC
-MH,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-MH,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""MH""}",
-MH,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""mh_raw"",""column"":""usubjid""}",
-MH,MHSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""MHSTDTC"",""MHDECOD""],""ties"":""dense""}",MHSTDTC;MHDECOD
-MH,MHTERM,char,200,Reported Term for the Medical History,Topic,Req,,5,N,N,direct_map,"{""dataset"":""mh_raw"",""column"":""mhterm"",""transform"":""toupper""}",
-MH,MHDECOD,char,200,Dictionary-Derived Term,Synonym Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""mh_raw"",""column"":""mhdecod"",""transform"":""toupper""}",
-MH,MHCAT,char,40,Category for Medical History,Grouping Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""mh_raw"",""column"":""mhcat"",""transform"":""toupper""}",
-MH,MHSTDTC,char,20,Start Date/Time of Medical History Event,Timing,Exp,,8,N,N,iso_dtc,"{""date_col"":{""dataset"":""mh_raw"",""column"":""mhstdat""},""time_col"":null,""partial_allowed"":true}",
-MH,MHENDTC,char,20,End Date/Time of Medical History Event,Timing,Perm,,9,N,N,iso_dtc,"{""date_col"":{""dataset"":""mh_raw"",""column"":""mhendat""},""time_col"":null,""partial_allowed"":true}",
-PR,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-PR,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""PR""}",
-PR,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""pr_raw"",""column"":""usubjid""}",
-PR,PRSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""PRSTDTC"",""PRTRT""],""ties"":""dense""}",PRSTDTC;PRTRT
-PR,PRTRT,char,200,Reported Name of Procedure,Topic,Req,,5,N,N,direct_map,"{""dataset"":""pr_raw"",""column"":""prtrt"",""transform"":""toupper""}",
-PR,PRCAT,char,40,Category for Procedure,Grouping Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""pr_raw"",""column"":""prcat"",""transform"":""toupper""}",
-PR,PRPRESP,char,2,Procedure Pre-Specified,Record Qualifier,Perm,YN,7,N,N,ct_assign,"{""dataset"":""pr_raw"",""column"":""prpresp_raw"",""codelist_id"":""YN""}",
-PR,PRSTDTC,char,20,Start Date/Time of Procedure,Timing,Exp,,8,N,N,iso_dtc,"{""date_col"":{""dataset"":""pr_raw"",""column"":""prstdat""},""time_col"":{""dataset"":""pr_raw"",""column"":""prstim""},""partial_allowed"":true}",
-PR,PRENDTC,char,20,End Date/Time of Procedure,Timing,Perm,,9,N,N,iso_dtc,"{""date_col"":{""dataset"":""pr_raw"",""column"":""prendat""},""time_col"":null,""partial_allowed"":true}",
-PR,PRSTDY,num,8,Study Day of Start of Procedure,Timing,Exp,,10,N,N,dy,"{""dtc_var"":""PRSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",PRSTDTC
-PR,EPOCH,char,20,Epoch,Timing,Perm,,11,N,N,epoch,"{""dtc_var"":""PRSTDTC"",""ref_var"":""RFSTDTC""}",PRSTDTC
-DM,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-DM,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""DM""}",
-DM,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""dm_raw"",""column"":""usubjid""}",
-DM,SUBJID,char,20,Subject Identifier for the Study,Identifier,Req,,4,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""subjid""}",
-DM,RFSTDTC,char,20,Subject Reference Start Date/Time,Timing,Req,,5,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""rfstdtc""}",
-DM,RFENDTC,char,20,Subject Reference End Date/Time,Timing,Exp,,6,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""rfendtc""}",
-DM,SITEID,char,20,Study Site Identifier,Record Qualifier,Req,,7,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""siteid""}",
-DM,BRTHDTC,char,20,Date/Time of Birth,Record Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""brthdtc""}",
-DM,AGE,num,8,Age,Record Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""age""}",
-DM,AGEU,char,10,Age Units,Record Qualifier,Exp,AGEU,10,N,N,ct_assign,"{""dataset"":""dm_raw"",""column"":""ageu_raw"",""codelist_id"":""AGEU""}",
-DM,SEX,char,2,Sex,Record Qualifier,Req,SEX,11,N,N,ct_assign,"{""dataset"":""dm_raw"",""column"":""sex"",""codelist_id"":""SEX""}",
-DM,RACE,char,60,Race,Record Qualifier,Exp,RACE,12,N,N,ct_assign,"{""dataset"":""dm_raw"",""column"":""race"",""codelist_id"":""RACE""}",
-DM,ARMCD,char,20,Planned Arm Code,Record Qualifier,Req,,13,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""armcd"",""transform"":""toupper""}",
-DM,ARM,char,200,Description of Planned Arm,Record Qualifier,Req,,14,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""arm""}",
-DM,ACTARMCD,char,20,Actual Arm Code,Record Qualifier,Req,,15,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""armcd"",""transform"":""toupper""}",
-DM,ACTARM,char,200,Description of Actual Arm,Record Qualifier,Req,,16,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""arm""}",
-EX,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-EX,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""EX""}",
-EX,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""ex_raw"",""column"":""usubjid""}",
-EX,EXSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""EXSTDTC"",""EXTRT""],""ties"":""dense""}",EXSTDTC;EXTRT
-EX,EXTRT,char,200,Name of Treatment,Topic,Req,,5,N,N,direct_map,"{""dataset"":""ex_raw"",""column"":""extrt"",""transform"":""toupper""}",
-EX,EXDOSE,num,8,Dose per Administration,Record Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""ex_raw"",""column"":""exdose""}",
-EX,EXDOSU,char,20,Dose Units,Variable Qualifier,Exp,UNIT,7,N,N,ct_assign,"{""dataset"":""ex_raw"",""column"":""exdosu_raw"",""codelist_id"":""UNIT""}",
-EX,EXDOSFRQ,char,20,Dosing Frequency per Interval,Record Qualifier,Exp,FREQ,8,N,N,ct_assign,"{""dataset"":""ex_raw"",""column"":""exdosfrq_raw"",""codelist_id"":""FREQ""}",
-EX,EXROUTE,char,40,Route of Administration,Record Qualifier,Exp,ROUTE,9,N,N,ct_assign,"{""dataset"":""ex_raw"",""column"":""exroute_raw"",""codelist_id"":""ROUTE""}",
-EX,EXSTDTC,char,20,Start Date/Time of Treatment,Timing,Exp,,10,N,N,iso_dtc,"{""date_col"":{""dataset"":""ex_raw"",""column"":""exstdat""},""time_col"":null,""partial_allowed"":true}",
-EX,EXENDTC,char,20,End Date/Time of Treatment,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""ex_raw"",""column"":""exendat""},""time_col"":null,""partial_allowed"":true}",
-EX,EXSTDY,num,8,Study Day of Start of Treatment,Timing,Exp,,12,N,N,dy,"{""dtc_var"":""EXSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",EXSTDTC
-EX,EXENDDY,num,8,Study Day of End of Treatment,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""EXENDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",EXENDTC
-EX,EPOCH,char,20,Epoch,Timing,Perm,,14,N,N,epoch,"{""dtc_var"":""EXSTDTC"",""ref_var"":""RFSTDTC""}",EXSTDTC
-VS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-VS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""VS""}",
-VS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""vs_raw"",""column"":""usubjid""}",
-VS,VSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""VSDTC"",""VSTESTCD""],""ties"":""dense""}",VSDTC;VSTESTCD
-VS,VSTESTCD,char,8,Vital Signs Test Short Name,Topic,Req,,5,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vstestcd"",""transform"":""toupper""}",
-VS,VSTEST,char,40,Vital Signs Test Name,Synonym Qualifier,Req,,6,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vstest""}",
-VS,VSORRES,char,40,Result or Finding in Original Units,Result Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorres""}",
-VS,VSORRESU,char,20,Original Units,Variable Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorresu""}",
-VS,VSSTRESC,char,40,Character Result in Std Format,Result Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorres""}",
-VS,VSSTRESN,num,8,Numeric Result in Standard Units,Result Qualifier,Exp,,10,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorres""}",
-VS,VSSTRESU,char,20,Standard Units,Variable Qualifier,Exp,,11,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorresu""}",
-VS,VSDTC,char,20,Date/Time of Measurements,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""vs_raw"",""column"":""vsdat""},""time_col"":{""dataset"":""vs_raw"",""column"":""vstim""},""partial_allowed"":true}",
-VS,VSDY,num,8,Study Day of Vital Signs,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""VSDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",VSDTC
-VS,VISIT,char,40,Visit Name,Timing,Exp,,14,N,N,visit,"{""dy_var"":""VSDY""}",VSDY
-VS,VISITNUM,num,8,Visit Number,Timing,Exp,,15,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
-VS,VSBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,16,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""VSTESTCD""]}",VISIT
-VS,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""VSDTC"",""ref_var"":""RFSTDTC""}",VSDTC
-LB,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-LB,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""LB""}",
-LB,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""lb_raw"",""column"":""usubjid""}",
-LB,LBSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""LBDTC"",""LBTESTCD""],""ties"":""dense""}",LBDTC;LBTESTCD
-LB,LBTESTCD,char,8,Lab Test or Examination Short Name,Topic,Req,,5,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lbtestcd"",""transform"":""toupper""}",
-LB,LBTEST,char,40,Lab Test or Examination Name,Synonym Qualifier,Req,,6,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lbtest""}",
-LB,LBORRES,char,40,Result or Finding in Original Units,Result Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborres""}",
-LB,LBORRESU,char,20,Original Units,Variable Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborresu""}",
-LB,LBSTRESC,char,40,Character Result in Std Format,Result Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborres""}",
-LB,LBSTRESN,num,8,Numeric Result in Standard Units,Result Qualifier,Exp,,10,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborres""}",
-LB,LBSTRESU,char,20,Standard Units,Variable Qualifier,Exp,,11,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborresu""}",
-LB,LBDTC,char,20,Date/Time of Specimen Collection,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""lb_raw"",""column"":""lbdat""},""time_col"":{""dataset"":""lb_raw"",""column"":""lbtim""},""partial_allowed"":true}",
-LB,LBDY,num,8,Study Day of Specimen Collection,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""LBDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",LBDTC
-LB,VISIT,char,40,Visit Name,Timing,Exp,,14,N,N,visit,"{""dy_var"":""LBDY""}",LBDY
-LB,VISITNUM,num,8,Visit Number,Timing,Exp,,15,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
-LB,LBBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,16,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""LBTESTCD""]}",VISIT
-LB,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""LBDTC"",""ref_var"":""RFSTDTC""}",LBDTC
-DS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-DS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""DS""}",
-DS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""ds_raw"",""column"":""usubjid""}",
-DS,DSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""DSSTDTC"",""DSDECOD""],""ties"":""dense""}",DSSTDTC;DSDECOD
-DS,DSTERM,char,200,Reported Term for the Disposition Event,Topic,Req,,5,N,N,direct_map,"{""dataset"":""ds_raw"",""column"":""dsterm"",""transform"":""toupper""}",
-DS,DSDECOD,char,200,Standardized Disposition Term,Synonym Qualifier,Req,,6,N,N,coalesce,"{""sources"":[""dsdecod_raw"",""dsterm""]}",
-DS,DSCAT,char,40,Category for Disposition Event,Grouping Qualifier,Req,,7,N,N,case_when,"{""conditions"":{""grepl('CONSENT|RANDOMIZ', dsterm, ignore.case = TRUE)"":""PROTOCOL MILESTONE"",""TRUE"":""DISPOSITION EVENT""},""default"":""DISPOSITION EVENT""}",
-DS,DSSCAT,char,40,Subcategory for Disposition Event,Grouping Qualifier,Perm,,8,N,N,if_else,"{""condition"":""DSCAT == 'DISPOSITION EVENT'"",""true_value"":""STUDY TREATMENT"",""false_value"":""INFORMED CONSENT"",""missing_value"":""NA""}",DSCAT
-DS,DSREFID,char,40,Reference ID,Identifier,Perm,,9,N,N,concat,"{""sources"":[""STUDYID"",""dsid""],""sep"":""-""}",STUDYID
-DS,DSSTDTC,char,20,Start Date/Time of Disposition Event,Timing,Exp,,10,N,N,iso_dtc,"{""date_col"":{""dataset"":""ds_raw"",""column"":""dsstdat""},""time_col"":null,""partial_allowed"":true}",
-DS,DSSTDY,num,8,Study Day of Disposition Event,Timing,Exp,,11,N,N,dy,"{""dtc_var"":""DSSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",DSSTDTC
-DS,EPOCH,char,20,Epoch,Timing,Perm,,12,N,N,epoch,"{""dtc_var"":""DSSTDTC"",""ref_var"":""RFSTDTC""}",DSSTDTC
-QS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-QS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""QS""}",
-QS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""qs_raw"",""column"":""usubjid""}",
-QS,QSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""QSDTC"",""QSTESTCD""],""ties"":""dense""}",QSDTC;QSTESTCD
-QS,QSTESTCD,char,8,Questionnaire Test Short Name,Topic,Req,,5,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qstestcd"",""transform"":""toupper""}",
-QS,QSTEST,char,40,Questionnaire Test Name,Synonym Qualifier,Req,QSTEST,6,N,N,ct_decode,"{""column"":""QSTESTCD"",""codelist_id"":""QSTEST""}",QSTESTCD
-QS,QSCAT,char,40,Category for Questionnaire,Grouping Qualifier,Req,,7,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qscat"",""transform"":""toupper""}",
-QS,QSORRES,char,40,Result or Finding in Original Units,Result Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
-QS,QSORRESU,char,20,Original Units,Variable Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorresu""}",
-QS,QSSTRESC,char,40,Character Result in Std Format,Result Qualifier,Exp,,10,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
-QS,QSSTRESN,num,8,Numeric Result in Standard Units,Result Qualifier,Exp,,11,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
-QS,QSSTAT,char,8,Completion Status,Record Qualifier,Perm,,12,N,N,occurrence,"{""source_var"":""qsorres"",""present_value"":""NA"",""absent_value"":""NOT DONE""}",
-QS,QSDTC,char,20,Date/Time of Assessment,Timing,Exp,,13,N,N,iso_dtc,"{""date_col"":{""dataset"":""qs_raw"",""column"":""qsdat""},""time_col"":{""dataset"":""qs_raw"",""column"":""qstim""},""partial_allowed"":true}",
-QS,QSDY,num,8,Study Day of Assessment,Timing,Exp,,14,N,N,dy,"{""dtc_var"":""QSDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",QSDTC
-QS,VISIT,char,40,Visit Name,Timing,Exp,,15,N,N,visit,"{""dy_var"":""QSDY""}",QSDY
-QS,VISITNUM,num,8,Visit Number,Timing,Exp,,16,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
-QS,QSBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,17,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""QSTESTCD""]}",VISIT
-QS,EPOCH,char,20,Epoch,Timing,Perm,,18,N,N,epoch,"{""dtc_var"":""QSDTC"",""ref_var"":""RFSTDTC""}",QSDTC
+select,domain,var,type,length,label,role,core,codelist_id,order,is_key,to_supp,rule_type,rule_params,depends_on
+Y,AE,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,AE,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""AE""}",
+Y,AE,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""ae_raw"",""column"":""usubjid""}",
+Y,AE,AESEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""AESTDTC"",""AEDECOD""],""ties"":""dense""}",AESTDTC;AEDECOD
+Y,AE,AETERM,char,200,Reported Term for the Adverse Event,Topic,Req,,5,N,N,direct_map,"{""dataset"":""ae_raw"",""column"":""aeterm"",""transform"":""toupper""}",
+Y,AE,AEDECOD,char,200,Dictionary-Derived Term,Synonym Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""ae_raw"",""column"":""aedecod"",""transform"":""toupper""}",
+Y,AE,AEBODSYS,char,200,Body System or Organ Class,Record Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""ae_raw"",""column"":""aebodsys"",""transform"":""toupper""}",
+Y,AE,AESEV,char,10,Severity/Intensity,Record Qualifier,Exp,C66769,8,N,N,ct_assign,"{""dataset"":""ae_raw"",""column"":""aesev_raw"",""codelist_id"":""C66769"",""unknown_policy"":""warn_and_keep""}",
+Y,AE,AESER,char,2,Serious Event,Record Qualifier,Exp,YN,9,N,N,ct_assign,"{""dataset"":""ae_raw"",""column"":""aeser_raw"",""codelist_id"":""YN""}",
+Y,AE,AEREL,char,20,Causality,Record Qualifier,Exp,C66770,10,N,N,ct_assign,"{""dataset"":""ae_raw"",""column"":""aerel_raw"",""codelist_id"":""C66770"",""unknown_policy"":""warn_and_keep""}",
+Y,AE,AESTDTC,char,20,Start Date/Time of Adverse Event,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""ae_raw"",""column"":""aestdat""},""time_col"":{""dataset"":""ae_raw"",""column"":""aestim""},""partial_allowed"":true}",
+Y,AE,AEENDTC,char,20,End Date/Time of Adverse Event,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""ae_raw"",""column"":""aeendat""},""time_col"":{""dataset"":""ae_raw"",""column"":""aeentim""},""partial_allowed"":true}",
+Y,AE,AESTDY,num,8,Study Day of Start of Adverse Event,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""AESTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",AESTDTC
+Y,AE,AEENDDY,num,8,Study Day of End of Adverse Event,Timing,Exp,,14,N,N,dy,"{""dtc_var"":""AEENDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",AEENDTC
+Y,AE,AESSION,char,20,AE Assessment Session,Record Qualifier,Perm,,15,N,Y,direct_map,"{""dataset"":""ae_raw"",""column"":""aession""}",
+Y,AE,AETRTEM,char,200,AE Reported Term Modified,Record Qualifier,Perm,,16,N,Y,direct_map,"{""dataset"":""ae_raw"",""column"":""aetrtem""}",
+Y,AE,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""AESTDTC"",""ref_var"":""RFSTDTC""}",AESTDTC
+Y,CM,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,CM,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""CM""}",
+Y,CM,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""cm_raw"",""column"":""usubjid""}",
+Y,CM,CMSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""CMSTDTC"",""CMDECOD""],""ties"":""dense""}",CMSTDTC;CMDECOD
+Y,CM,CMTRT,char,200,Reported Name of Drug or Therapy,Topic,Req,,5,N,N,direct_map,"{""dataset"":""cm_raw"",""column"":""cmtrt"",""transform"":""toupper""}",
+Y,CM,CMDECOD,char,200,Standardized Medication Name,Synonym Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""cm_raw"",""column"":""cmdecod"",""transform"":""toupper""}",
+Y,CM,CMROUTE,char,40,Route of Administration,Record Qualifier,Exp,ROUTE,7,N,N,ct_assign,"{""dataset"":""cm_raw"",""column"":""cmroute_raw"",""codelist_id"":""ROUTE""}",
+Y,CM,CMDOSE,num,8,Dose per Administration,Record Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""cm_raw"",""column"":""cmdose""}",
+Y,CM,CMDOSU,char,20,Dose Units,Variable Qualifier,Exp,UNIT,9,N,N,ct_assign,"{""dataset"":""cm_raw"",""column"":""cmdosu_raw"",""codelist_id"":""UNIT""}",
+Y,CM,CMDOSFRQ,char,20,Dosing Frequency per Interval,Record Qualifier,Exp,FREQ,10,N,N,ct_assign,"{""dataset"":""cm_raw"",""column"":""cmdosfrq_raw"",""codelist_id"":""FREQ""}",
+Y,CM,CMSTDTC,char,20,Start Date/Time of Medication,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""cm_raw"",""column"":""cmstdat""},""time_col"":null,""partial_allowed"":true}",
+Y,CM,CMENDTC,char,20,End Date/Time of Medication,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""cm_raw"",""column"":""cmendat""},""time_col"":null,""partial_allowed"":true}",
+Y,CM,CMSTDY,num,8,Study Day of Start of Medication,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""CMSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",CMSTDTC
+Y,CM,CMENDDY,num,8,Study Day of End of Medication,Timing,Exp,,14,N,N,dy,"{""dtc_var"":""CMENDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",CMENDTC
+Y,CM,EPOCH,char,20,Epoch,Timing,Perm,,15,N,N,epoch,"{""dtc_var"":""CMSTDTC"",""ref_var"":""RFSTDTC""}",CMSTDTC
+Y,MH,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,MH,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""MH""}",
+Y,MH,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""mh_raw"",""column"":""usubjid""}",
+Y,MH,MHSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""MHSTDTC"",""MHDECOD""],""ties"":""dense""}",MHSTDTC;MHDECOD
+Y,MH,MHTERM,char,200,Reported Term for the Medical History,Topic,Req,,5,N,N,direct_map,"{""dataset"":""mh_raw"",""column"":""mhterm"",""transform"":""toupper""}",
+Y,MH,MHDECOD,char,200,Dictionary-Derived Term,Synonym Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""mh_raw"",""column"":""mhdecod"",""transform"":""toupper""}",
+Y,MH,MHCAT,char,40,Category for Medical History,Grouping Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""mh_raw"",""column"":""mhcat"",""transform"":""toupper""}",
+Y,MH,MHSTDTC,char,20,Start Date/Time of Medical History Event,Timing,Exp,,8,N,N,iso_dtc,"{""date_col"":{""dataset"":""mh_raw"",""column"":""mhstdat""},""time_col"":null,""partial_allowed"":true}",
+Y,MH,MHENDTC,char,20,End Date/Time of Medical History Event,Timing,Perm,,9,N,N,iso_dtc,"{""date_col"":{""dataset"":""mh_raw"",""column"":""mhendat""},""time_col"":null,""partial_allowed"":true}",
+Y,PR,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,PR,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""PR""}",
+Y,PR,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""pr_raw"",""column"":""usubjid""}",
+Y,PR,PRSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""PRSTDTC"",""PRTRT""],""ties"":""dense""}",PRSTDTC;PRTRT
+Y,PR,PRTRT,char,200,Reported Name of Procedure,Topic,Req,,5,N,N,direct_map,"{""dataset"":""pr_raw"",""column"":""prtrt"",""transform"":""toupper""}",
+Y,PR,PRCAT,char,40,Category for Procedure,Grouping Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""pr_raw"",""column"":""prcat"",""transform"":""toupper""}",
+Y,PR,PRPRESP,char,2,Procedure Pre-Specified,Record Qualifier,Perm,YN,7,N,N,ct_assign,"{""dataset"":""pr_raw"",""column"":""prpresp_raw"",""codelist_id"":""YN""}",
+Y,PR,PRSTDTC,char,20,Start Date/Time of Procedure,Timing,Exp,,8,N,N,iso_dtc,"{""date_col"":{""dataset"":""pr_raw"",""column"":""prstdat""},""time_col"":{""dataset"":""pr_raw"",""column"":""prstim""},""partial_allowed"":true}",
+Y,PR,PRENDTC,char,20,End Date/Time of Procedure,Timing,Perm,,9,N,N,iso_dtc,"{""date_col"":{""dataset"":""pr_raw"",""column"":""prendat""},""time_col"":null,""partial_allowed"":true}",
+Y,PR,PRSTDY,num,8,Study Day of Start of Procedure,Timing,Exp,,10,N,N,dy,"{""dtc_var"":""PRSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",PRSTDTC
+Y,PR,EPOCH,char,20,Epoch,Timing,Perm,,11,N,N,epoch,"{""dtc_var"":""PRSTDTC"",""ref_var"":""RFSTDTC""}",PRSTDTC
+Y,DM,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,DM,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""DM""}",
+Y,DM,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""dm_raw"",""column"":""usubjid""}",
+Y,DM,SUBJID,char,20,Subject Identifier for the Study,Identifier,Req,,4,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""subjid""}",
+Y,DM,RFSTDTC,char,20,Subject Reference Start Date/Time,Timing,Req,,5,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""rfstdtc""}",
+Y,DM,RFENDTC,char,20,Subject Reference End Date/Time,Timing,Exp,,6,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""rfendtc""}",
+Y,DM,SITEID,char,20,Study Site Identifier,Record Qualifier,Req,,7,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""siteid""}",
+Y,DM,BRTHDTC,char,20,Date/Time of Birth,Record Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""brthdtc""}",
+Y,DM,AGE,num,8,Age,Record Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""age""}",
+Y,DM,AGEU,char,10,Age Units,Record Qualifier,Exp,AGEU,10,N,N,ct_assign,"{""dataset"":""dm_raw"",""column"":""ageu_raw"",""codelist_id"":""AGEU""}",
+Y,DM,SEX,char,2,Sex,Record Qualifier,Req,SEX,11,N,N,ct_assign,"{""dataset"":""dm_raw"",""column"":""sex"",""codelist_id"":""SEX""}",
+Y,DM,RACE,char,60,Race,Record Qualifier,Exp,RACE,12,N,N,ct_assign,"{""dataset"":""dm_raw"",""column"":""race"",""codelist_id"":""RACE""}",
+Y,DM,ARMCD,char,20,Planned Arm Code,Record Qualifier,Req,,13,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""armcd"",""transform"":""toupper""}",
+Y,DM,ARM,char,200,Description of Planned Arm,Record Qualifier,Req,,14,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""arm""}",
+Y,DM,ACTARMCD,char,20,Actual Arm Code,Record Qualifier,Req,,15,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""armcd"",""transform"":""toupper""}",
+Y,DM,ACTARM,char,200,Description of Actual Arm,Record Qualifier,Req,,16,N,N,direct_map,"{""dataset"":""dm_raw"",""column"":""arm""}",
+Y,EX,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,EX,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""EX""}",
+Y,EX,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""ex_raw"",""column"":""usubjid""}",
+Y,EX,EXSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""EXSTDTC"",""EXTRT""],""ties"":""dense""}",EXSTDTC;EXTRT
+Y,EX,EXTRT,char,200,Name of Treatment,Topic,Req,,5,N,N,direct_map,"{""dataset"":""ex_raw"",""column"":""extrt"",""transform"":""toupper""}",
+Y,EX,EXDOSE,num,8,Dose per Administration,Record Qualifier,Exp,,6,N,N,direct_map,"{""dataset"":""ex_raw"",""column"":""exdose""}",
+Y,EX,EXDOSU,char,20,Dose Units,Variable Qualifier,Exp,UNIT,7,N,N,ct_assign,"{""dataset"":""ex_raw"",""column"":""exdosu_raw"",""codelist_id"":""UNIT""}",
+Y,EX,EXDOSFRQ,char,20,Dosing Frequency per Interval,Record Qualifier,Exp,FREQ,8,N,N,ct_assign,"{""dataset"":""ex_raw"",""column"":""exdosfrq_raw"",""codelist_id"":""FREQ""}",
+Y,EX,EXROUTE,char,40,Route of Administration,Record Qualifier,Exp,ROUTE,9,N,N,ct_assign,"{""dataset"":""ex_raw"",""column"":""exroute_raw"",""codelist_id"":""ROUTE""}",
+Y,EX,EXSTDTC,char,20,Start Date/Time of Treatment,Timing,Exp,,10,N,N,iso_dtc,"{""date_col"":{""dataset"":""ex_raw"",""column"":""exstdat""},""time_col"":null,""partial_allowed"":true}",
+Y,EX,EXENDTC,char,20,End Date/Time of Treatment,Timing,Exp,,11,N,N,iso_dtc,"{""date_col"":{""dataset"":""ex_raw"",""column"":""exendat""},""time_col"":null,""partial_allowed"":true}",
+Y,EX,EXSTDY,num,8,Study Day of Start of Treatment,Timing,Exp,,12,N,N,dy,"{""dtc_var"":""EXSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",EXSTDTC
+Y,EX,EXENDDY,num,8,Study Day of End of Treatment,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""EXENDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",EXENDTC
+Y,EX,EPOCH,char,20,Epoch,Timing,Perm,,14,N,N,epoch,"{""dtc_var"":""EXSTDTC"",""ref_var"":""RFSTDTC""}",EXSTDTC
+Y,VS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,VS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""VS""}",
+Y,VS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""vs_raw"",""column"":""usubjid""}",
+Y,VS,VSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""VSDTC"",""VSTESTCD""],""ties"":""dense""}",VSDTC;VSTESTCD
+Y,VS,VSTESTCD,char,8,Vital Signs Test Short Name,Topic,Req,,5,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vstestcd"",""transform"":""toupper""}",
+Y,VS,VSTEST,char,40,Vital Signs Test Name,Synonym Qualifier,Req,,6,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vstest""}",
+Y,VS,VSORRES,char,40,Result or Finding in Original Units,Result Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorres""}",
+Y,VS,VSORRESU,char,20,Original Units,Variable Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorresu""}",
+Y,VS,VSSTRESC,char,40,Character Result in Std Format,Result Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorres""}",
+Y,VS,VSSTRESN,num,8,Numeric Result in Standard Units,Result Qualifier,Exp,,10,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorres""}",
+Y,VS,VSSTRESU,char,20,Standard Units,Variable Qualifier,Exp,,11,N,N,direct_map,"{""dataset"":""vs_raw"",""column"":""vsorresu""}",
+Y,VS,VSDTC,char,20,Date/Time of Measurements,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""vs_raw"",""column"":""vsdat""},""time_col"":{""dataset"":""vs_raw"",""column"":""vstim""},""partial_allowed"":true}",
+Y,VS,VSDY,num,8,Study Day of Vital Signs,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""VSDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",VSDTC
+Y,VS,VISIT,char,40,Visit Name,Timing,Exp,,14,N,N,visit,"{""dy_var"":""VSDY""}",VSDY
+Y,VS,VISITNUM,num,8,Visit Number,Timing,Exp,,15,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
+Y,VS,VSBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,16,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""VSTESTCD""]}",VISIT
+Y,VS,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""VSDTC"",""ref_var"":""RFSTDTC""}",VSDTC
+Y,LB,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,LB,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""LB""}",
+Y,LB,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""lb_raw"",""column"":""usubjid""}",
+Y,LB,LBSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""LBDTC"",""LBTESTCD""],""ties"":""dense""}",LBDTC;LBTESTCD
+Y,LB,LBTESTCD,char,8,Lab Test or Examination Short Name,Topic,Req,,5,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lbtestcd"",""transform"":""toupper""}",
+Y,LB,LBTEST,char,40,Lab Test or Examination Name,Synonym Qualifier,Req,,6,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lbtest""}",
+Y,LB,LBORRES,char,40,Result or Finding in Original Units,Result Qualifier,Exp,,7,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborres""}",
+Y,LB,LBORRESU,char,20,Original Units,Variable Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborresu""}",
+Y,LB,LBSTRESC,char,40,Character Result in Std Format,Result Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborres""}",
+Y,LB,LBSTRESN,num,8,Numeric Result in Standard Units,Result Qualifier,Exp,,10,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborres""}",
+Y,LB,LBSTRESU,char,20,Standard Units,Variable Qualifier,Exp,,11,N,N,direct_map,"{""dataset"":""lb_raw"",""column"":""lborresu""}",
+Y,LB,LBDTC,char,20,Date/Time of Specimen Collection,Timing,Exp,,12,N,N,iso_dtc,"{""date_col"":{""dataset"":""lb_raw"",""column"":""lbdat""},""time_col"":{""dataset"":""lb_raw"",""column"":""lbtim""},""partial_allowed"":true}",
+Y,LB,LBDY,num,8,Study Day of Specimen Collection,Timing,Exp,,13,N,N,dy,"{""dtc_var"":""LBDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",LBDTC
+Y,LB,VISIT,char,40,Visit Name,Timing,Exp,,14,N,N,visit,"{""dy_var"":""LBDY""}",LBDY
+Y,LB,VISITNUM,num,8,Visit Number,Timing,Exp,,15,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
+Y,LB,LBBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,16,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""LBTESTCD""]}",VISIT
+Y,LB,EPOCH,char,20,Epoch,Timing,Perm,,17,N,N,epoch,"{""dtc_var"":""LBDTC"",""ref_var"":""RFSTDTC""}",LBDTC
+Y,DS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,DS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""DS""}",
+Y,DS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""ds_raw"",""column"":""usubjid""}",
+Y,DS,DSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""DSSTDTC"",""DSDECOD""],""ties"":""dense""}",DSSTDTC;DSDECOD
+Y,DS,DSTERM,char,200,Reported Term for the Disposition Event,Topic,Req,,5,N,N,direct_map,"{""dataset"":""ds_raw"",""column"":""dsterm"",""transform"":""toupper""}",
+Y,DS,DSDECOD,char,200,Standardized Disposition Term,Synonym Qualifier,Req,,6,N,N,coalesce,"{""sources"":[""dsdecod_raw"",""dsterm""]}",
+Y,DS,DSCAT,char,40,Category for Disposition Event,Grouping Qualifier,Req,,7,N,N,case_when,"{""conditions"":{""grepl('CONSENT|RANDOMIZ', dsterm, ignore.case = TRUE)"":""PROTOCOL MILESTONE"",""TRUE"":""DISPOSITION EVENT""},""default"":""DISPOSITION EVENT""}",
+Y,DS,DSSCAT,char,40,Subcategory for Disposition Event,Grouping Qualifier,Perm,,8,N,N,if_else,"{""condition"":""DSCAT == 'DISPOSITION EVENT'"",""true_value"":""STUDY TREATMENT"",""false_value"":""INFORMED CONSENT"",""missing_value"":""NA""}",DSCAT
+Y,DS,DSREFID,char,40,Reference ID,Identifier,Perm,,9,N,N,concat,"{""sources"":[""STUDYID"",""dsid""],""sep"":""-""}",STUDYID
+Y,DS,DSSTDTC,char,20,Start Date/Time of Disposition Event,Timing,Exp,,10,N,N,iso_dtc,"{""date_col"":{""dataset"":""ds_raw"",""column"":""dsstdat""},""time_col"":null,""partial_allowed"":true}",
+Y,DS,DSSTDY,num,8,Study Day of Disposition Event,Timing,Exp,,11,N,N,dy,"{""dtc_var"":""DSSTDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",DSSTDTC
+Y,DS,EPOCH,char,20,Epoch,Timing,Perm,,12,N,N,epoch,"{""dtc_var"":""DSSTDTC"",""ref_var"":""RFSTDTC""}",DSSTDTC
+Y,QS,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
+Y,QS,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""QS""}",
+Y,QS,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""qs_raw"",""column"":""usubjid""}",
+Y,QS,QSSEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""QSDTC"",""QSTESTCD""],""ties"":""dense""}",QSDTC;QSTESTCD
+Y,QS,QSTESTCD,char,8,Questionnaire Test Short Name,Topic,Req,,5,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qstestcd"",""transform"":""toupper""}",
+Y,QS,QSTEST,char,40,Questionnaire Test Name,Synonym Qualifier,Req,QSTEST,6,N,N,ct_decode,"{""column"":""QSTESTCD"",""codelist_id"":""QSTEST""}",QSTESTCD
+Y,QS,QSCAT,char,40,Category for Questionnaire,Grouping Qualifier,Req,,7,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qscat"",""transform"":""toupper""}",
+Y,QS,QSORRES,char,40,Result or Finding in Original Units,Result Qualifier,Exp,,8,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
+Y,QS,QSORRESU,char,20,Original Units,Variable Qualifier,Exp,,9,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorresu""}",
+Y,QS,QSSTRESC,char,40,Character Result in Std Format,Result Qualifier,Exp,,10,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
+Y,QS,QSSTRESN,num,8,Numeric Result in Standard Units,Result Qualifier,Exp,,11,N,N,direct_map,"{""dataset"":""qs_raw"",""column"":""qsorres""}",
+Y,QS,QSSTAT,char,8,Completion Status,Record Qualifier,Perm,,12,N,N,occurrence,"{""source_var"":""qsorres"",""present_value"":""NA"",""absent_value"":""NOT DONE""}",
+Y,QS,QSDTC,char,20,Date/Time of Assessment,Timing,Exp,,13,N,N,iso_dtc,"{""date_col"":{""dataset"":""qs_raw"",""column"":""qsdat""},""time_col"":{""dataset"":""qs_raw"",""column"":""qstim""},""partial_allowed"":true}",
+Y,QS,QSDY,num,8,Study Day of Assessment,Timing,Exp,,14,N,N,dy,"{""dtc_var"":""QSDTC"",""ref_var"":""RFSTDTC"",""ref_dataset"":""dm_raw"",""ref_column"":""rfstdtc""}",QSDTC
+Y,QS,VISIT,char,40,Visit Name,Timing,Exp,,15,N,N,visit,"{""dy_var"":""QSDY""}",QSDY
+Y,QS,VISITNUM,num,8,Visit Number,Timing,Exp,,16,N,N,visitnum,"{""visit_var"":""VISIT""}",VISIT
+Y,QS,QSBLFL,char,2,Baseline Flag,Record Qualifier,Exp,YN,17,N,N,baseline_flag,"{""visit_var"":""VISIT"",""baseline_visit"":""BASELINE"",""by"":[""USUBJID"",""QSTESTCD""]}",VISIT
+Y,QS,EPOCH,char,20,Epoch,Timing,Perm,,18,N,N,epoch,"{""dtc_var"":""QSDTC"",""ref_var"":""RFSTDTC""}",QSDTC

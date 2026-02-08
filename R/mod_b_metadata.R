@@ -34,6 +34,12 @@ read_target_meta <- function(path, sheet = 1L, domain = NULL,
       if (!is.na(idx)) names(df)[idx] <- tolower(colmap[[nm]])
     }
   }
+  # SELECT column filtering: keep only rows marked as needed for this study
+  if ("select" %in% names(df)) {
+    df <- dplyr::filter(df, toupper(.data$select) == "Y")
+    df$select <- NULL
+    if (nrow(df) == 0L) abort("Target metadata has no rows with select = 'Y'.")
+  }
   required <- c("domain", "var", "type", "label")
   miss <- setdiff(required, names(df))
   if (length(miss)) abort(paste("Target metadata missing columns:", paste(miss, collapse = ", ")))
@@ -68,6 +74,12 @@ read_source_meta <- function(path, sheet = 1L, colmap = NULL, encoding = "UTF-8"
   )
   df <- tibble::as_tibble(df)
   names(df) <- tolower(names(df))
+  # SELECT column filtering: keep only rows marked as needed for this study
+  if ("select" %in% names(df)) {
+    df <- dplyr::filter(df, toupper(.data$select) == "Y")
+    df$select <- NULL
+    if (nrow(df) == 0L) abort("Source metadata has no rows with select = 'Y'.")
+  }
   required <- c("dataset", "column", "type")
   miss <- setdiff(required, names(df))
   if (length(miss)) abort(paste("Source metadata missing columns:", paste(miss, collapse = ", ")))
@@ -101,6 +113,12 @@ read_ct_library <- function(path, sheet = 1L, colmap = NULL,
   )
   df <- tibble::as_tibble(df)
   names(df) <- tolower(names(df))
+  # SELECT column filtering: keep only rows marked as needed for this study
+  if ("select" %in% names(df)) {
+    df <- dplyr::filter(df, toupper(.data$select) == "Y")
+    df$select <- NULL
+    if (nrow(df) == 0L) abort("CT library has no rows with select = 'Y'.")
+  }
   required <- c("codelist_id", "coded_value")
   miss <- setdiff(required, names(df))
   if (length(miss)) abort(paste("CT library missing columns:", paste(miss, collapse = ", ")))

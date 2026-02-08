@@ -72,50 +72,42 @@ cat("\n")
 
 
 # =============================================================================
-# STEP 3: Build all domains
+# STEP 3: Build all domains (automatic dependency ordering)
 # =============================================================================
-cat("STEP 3: Building SDTM domains...\n")
+cat("STEP 3: Building SDTM domains (DM first, then all others)...\n")
 cat(strrep("-", 60), "\n\n")
 
-# Ensure DM is built first (other domains need RFSTDTC)
-all_domains <- names(rule_set$rules)
-if ("DM" %in% all_domains) {
-  all_domains <- c("DM", setdiff(all_domains, "DM"))
-}
-built_data  <- list()
+# build_all_domains() auto-detects that DM must be built first and
+# passes dm_data downstream to every other domain.
+# Set create_supp = FALSE to keep all variables in the main domain
+# (useful when company guidelines do not require SUPP-- datasets).
+
+all_results <- build_all_domains(
+  target_meta = target_meta,
+  source_meta = source_meta,
+  raw_data    = raw_data,
+  config      = config,
+  rule_set    = rule_set,
+  verbose     = FALSE
+)
+
+all_domains <- names(all_results)
+built_data  <- all_results
 build_ok    <- character()
 build_fail  <- character()
-dm_built    <- NULL
 
 for (dom in all_domains) {
-  result <- tryCatch({
-    build_domain(
-      domain      = dom,
-      target_meta = target_meta,
-      source_meta = source_meta,
-      raw_data    = raw_data,
-      config      = config,
-      rule_set    = rule_set,
-      dm_data     = dm_built,
-      verbose     = FALSE
-    )
-  }, error = function(e) {
-    cat(sprintf("  [FAIL] %s: %s\n", dom, e$message))
-    return(NULL)
-  })
-
-  if (!is.null(result)) {
-    built_data[[dom]] <- result
-    if (dom == "DM") dm_built <- result$data
-    n_err  <- sum(result$report$findings$severity == "ERROR")
-    n_warn <- sum(result$report$findings$severity == "WARNING")
-    status <- if (n_err == 0) "PASS" else "WARN"
-    cat(sprintf("  [%s] %-4s %4d rows x %2d cols  |  Errors: %d  Warnings: %d\n",
-                status, dom, nrow(result$data), ncol(result$data), n_err, n_warn))
-    build_ok <- c(build_ok, dom)
-  } else {
+  result <- all_results[[dom]]
+  if (is.null(result)) {
     build_fail <- c(build_fail, dom)
+    next
   }
+  n_err  <- sum(result$report$findings$severity == "ERROR")
+  n_warn <- sum(result$report$findings$severity == "WARNING")
+  status <- if (n_err == 0) "PASS" else "WARN"
+  cat(sprintf("  [%s] %-4s %4d rows x %2d cols  |  Errors: %d  Warnings: %d\n",
+              status, dom, nrow(result$data), ncol(result$data), n_err, n_warn))
+  build_ok <- c(build_ok, dom)
 }
 
 cat(sprintf("\n  Built: %d/%d domains\n", length(build_ok), length(all_domains)))
