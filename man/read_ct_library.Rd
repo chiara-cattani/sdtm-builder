@@ -27,6 +27,11 @@ read_ct_library(
 A tibble with CT library rows.
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
+
+Use \code{\link[=read_study_ct_excel]{read_study_ct_excel()}} instead, which reads the multi-sheet
+\code{Study_CT.xlsx} workbook with Codelists and Codelists_terms sheets.
+
 Reads a CSV or Excel file containing codelist-level mappings. Required
 columns: \code{codelist_id}, \code{coded_value}.
 }

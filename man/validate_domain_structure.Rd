@@ -10,6 +10,7 @@ validate_domain_structure(
   domain,
   config,
   ct_lib = NULL,
+  value_level_meta = NULL,
   checks = "all"
 )
 }

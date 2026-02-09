@@ -1,10 +1,8 @@
 ---
-title: "Multi-Source EX — Join Patterns"
-author: "sdtmbuilder team"
-date: "`r Sys.Date()`"
+title: "Multi-Source Domain Building"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Multi-Source EX}
+  %\VignetteIndexEntry{Multi-Source Domain Building}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,171 +10,135 @@ vignette: >
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment  = "#>",
+  eval     = FALSE
 )
 ```
 
-## Introduction
+# Building a Domain from Multiple Source Datasets
 
-Clinical trials often record exposure data across multiple source systems—an
-IRT (Interactive Response Technology) system for dispensing and a CRF for
-dosing adjustments.
-This vignette shows how `sdtmbuilder` handles **multi-source** EX domain
-construction using `bind_sources()` and `safe_join()`.
+Some SDTM domains draw data from more than one source. For example, **CM**
+(Concomitant Medications) might pull from both a medication log and a prior
+medication history.
 
-## Single-Source EX (Default)
+## Scenario
 
-The starter-kit dummy study stores all exposure records in one raw dataset
-(`ex_raw`).  Building EX works exactly like any other domain:
+Raw data directory contains:
 
-```{r single-source}
+- `cm_raw.csv` — protocol medication log
+- `cm_prior.csv` — pre-study medication history
+
+Both should map into the CM domain.
+
+## Step-by-Step
+
+```{r}
 library(sdtmbuilder)
 
-study     <- make_dummy_study(seed = 123)
-config    <- study$config
-raw_data  <- study$raw_data
-rule_set  <- compile_rules(study$target_meta, study$source_meta, study$ct_lib)
+# ── 1. Metadata ──────────────────────────────────────
+meta <- read_study_metadata_excel("inst/extdata/Study_Metadata.xlsx")
+ct   <- read_study_ct_excel("inst/extdata/Study_CT.xlsx")
 
-ex_result <- build_domain(
-  domain      = "EX",
-  target_meta = study$target_meta,
-  source_meta = study$source_meta,
+target_meta <- meta$target_meta
+ct_lib      <- ct$ct_lib
+
+# ── 2. Configuration ────────────────────────────────
+config <- new_sdtm_config(study_id = "STUDY01")
+
+# ── 3. Load raw data ────────────────────────────────
+raw_data <- load_raw_data(config)
+# raw_data$cm_raw   — the main medication log
+# raw_data$cm_prior — the prior medication history
+
+# ── 4. Compile rules (auto-assigned from metadata) ──
+rule_set <- compile_rules(target_meta, ct_lib = ct_lib)
+```
+
+### Merging Sources with `bind_sources()`
+
+When two source datasets share the same column structure, use
+`bind_sources()` before building:
+
+```{r}
+# Stack both CM sources into one combined dataset
+raw_data$cm_raw <- bind_sources(
+  primary   = raw_data$cm_raw,
+  secondary = raw_data$cm_prior,
+  domain    = "CM",
+  add_provenance = TRUE
+)
+```
+
+`bind_sources()` will:
+- Align columns by name
+- Fill missing columns with NA
+- Add optional `SRC_DATASET` provenance column
+
+### Building the Domain
+
+```{r}
+result <- build_domain(
+  domain      = "CM",
+  target_meta = target_meta,
   raw_data    = raw_data,
   config      = config,
-  rule_set    = rule_set,
-  verbose     = FALSE
+  rule_set    = rule_set
 )
 
-cat("EX rows:", nrow(ex_result$data), "\n")
-head(ex_result$data[, c("USUBJID", "EXSEQ", "EXTRT", "EXDOSE", "EXSTDTC")])
+head(result$data)
 ```
 
-## Multi-Source Pattern: bind_sources()
+## Multiple Sources with Different Column Structures
 
-When exposure records come from two systems, you first stack them with
-`bind_sources()`:
+If the secondary source has different column names, map them in the rules via
+JSON in the METHOD column of `Study_Metadata.xlsx`:
 
-```{r bind-demo}
-# Simulate two source systems
-irt_data <- raw_data$ex_raw[1:20, ]
-crf_data <- raw_data$ex_raw[21:nrow(raw_data$ex_raw), ]
+```json
+{
+  "rule_type": "coalesce",
+  "params": {
+    "sources": [
+      {"dataset": "cm_raw",   "column": "med_name"},
+      {"dataset": "cm_prior", "column": "medication"}
+    ]
+  }
+}
+```
 
-# Stack with source tagging
-combined <- bind_sources(
-  irt_data, crf_data,
-  source_names = c("IRT", "CRF")
+Or override programmatically:
+
+```{r}
+rule_set$rules$CM$CMTRT <- list(
+  rule_type = "coalesce",
+  params    = list(
+    sources = list(
+      list(dataset = "cm_raw",   column = "med_name"),
+      list(dataset = "cm_prior", column = "medication")
+    )
+  ),
+  deps = character()
 )
-
-cat("Combined rows:", nrow(combined), "\n")
-table(combined$.__source__)
 ```
 
-`bind_sources()` uses `dplyr::bind_rows()` internally, so columns that
-exist in one source but not the other are filled with `NA`.
+## Using `build_domain_from_sources()`
 
-After binding, you pass the combined dataset back as the raw data element
-for the domain:
+For more control, `build_domain_from_sources()` lets you pass a named list
+of source data frames directly:
 
-```{r combined-build}
-# Replace ex_raw with the combined data
-raw_data_multi <- raw_data
-raw_data_multi$ex_raw <- combined
-
-ex_multi <- build_domain(
-  domain      = "EX",
-  target_meta = study$target_meta,
-  source_meta = study$source_meta,
-  raw_data    = raw_data_multi,
+```{r}
+result <- build_domain_from_sources(
+  domain      = "CM",
+  target_meta = target_meta,
+  sources     = list(
+    cm_raw   = raw_data$cm_raw,
+    cm_prior = raw_data$cm_prior
+  ),
   config      = config,
-  rule_set    = rule_set,
-  verbose     = FALSE
+  rule_set    = rule_set
 )
 
-cat("EX (multi-source) rows:", nrow(ex_multi$data), "\n")
-n_err <- sum(ex_multi$report$findings$severity == "ERROR")
-cat("Validation errors:", n_err, "\n")
+head(result$data)
 ```
 
-## Safe Join with Cardinality Checks
-
-`safe_join()` is used internally to merge reference datasets (e.g., DM for
-RFSTDTC).  It enforces cardinality to prevent silent row duplication:
-
-```{r safe-join-demo}
-# Many-to-one join: each EX row gets one DM reference date
-dm_ref <- ex_result$data[, "USUBJID", drop = FALSE]
-dm_ref <- unique(dm_ref)
-dm_ref$RFSTDTC <- "2025-01-15"  # example reference date
-
-joined <- safe_join(
-  x    = ex_result$data[, c("USUBJID", "EXSEQ", "EXSTDTC")],
-  y    = dm_ref,
-  by   = "USUBJID",
-  type = "left",
-  cardinality = "m:1"
-)
-cat("Rows preserved:", nrow(joined), "\n")
-```
-
-If the right-hand side has duplicate keys (violating m:1), `safe_join()`
-raises an informative error:
-
-```{r bad-join, error = TRUE}
-# Duplicate DM entry
-dm_dup <- dplyr::bind_rows(dm_ref, dm_ref[1, ])
-safe_join(
-  x    = ex_result$data[, c("USUBJID", "EXSEQ")],
-  y    = dm_dup,
-  by   = "USUBJID",
-  type = "left",
-  cardinality = "m:1"
-)
-```
-
-## Deduplication
-
-When combining sources, you may encounter overlapping records.
-`deduplicate_by_rule()` removes them using a specified strategy:
-
-```{r dedup}
-# Introduce a duplicate
-dup_data <- dplyr::bind_rows(combined[1:5, ], combined[1:3, ])
-cat("Before dedup:", nrow(dup_data), "\n")
-
-deduped <- deduplicate_by_rule(
-  dup_data,
-  keys = c("usubjid", "extrt", "exstdat"),
-  strategy = "first"
-)
-cat("After dedup:", nrow(deduped), "\n")
-```
-
-## Record Expansion
-
-Sometimes exposure is stored as one row per visit with multiple checkbox
-columns.  `split_records()` and `expand_checkbox()` transform these into
-one-row-per-observation format:
-
-```{r split}
-# Semicolon-delimited treatments in one column
-multi_trt <- tibble::tibble(
-  usubjid = c("SUBJ-001", "SUBJ-002"),
-  extrt   = c("DRUG A;DRUG B", "DRUG C")
-)
-
-expanded <- split_records(multi_trt, col = "extrt", sep = ";")
-expanded
-```
-
-## Summary
-
-| Function | Purpose | When to use |
-|----------|---------|-------------|
-| `bind_sources()` | Stack datasets from multiple systems | 2+ source files for same domain |
-| `safe_join()` | Merge with cardinality guard | Joining reference data (DM, SV) |
-| `deduplicate_by_rule()` | Remove overlapping records | After binding overlapping sources |
-| `split_records()` | Explode delimited values | Multi-valued CRF fields |
-| `expand_checkbox()` | Checkbox → records | Matrix-style CRF pages |
-
-The key principle: **prepare your raw data** (bind, dedup, expand) before
-calling `build_domain()`.  The metadata-driven pipeline handles the rest.
+This bypasses the default `{domain}_raw` dataset lookup convention and
+gives you full control over which datasets participate.

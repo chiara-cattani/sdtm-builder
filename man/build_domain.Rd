@@ -14,6 +14,8 @@ build_domain(
   dm_data = NULL,
   sv_data = NULL,
   create_supp = NULL,
+  domain_meta = NULL,
+  value_level_meta = NULL,
   return_provenance = TRUE,
   validate = TRUE,
   verbose = TRUE
@@ -30,8 +32,7 @@ build_domain(
 
 \item{rule_set}{\code{rule_set}.}
 
-\item{source_meta}{Tibble or \code{NULL}. Optional source metadata; if
-omitted it is auto-inferred from \code{raw_data}.}
+\item{source_meta}{Tibble or \code{NULL}. Optional; not used at runtime.}
 
 \item{dm_data}{Tibble or \code{NULL}. DM data for RFSTDTC; also accepts
 a full \code{build_result} list (auto-extracts \verb{$data}).}
@@ -42,6 +43,12 @@ a full \code{build_result} list (auto-extracts \verb{$data}).}
 value from \code{config$create_supp} is used (itself defaulting to \code{TRUE}).
 Set \code{FALSE} to keep all variables in the main domain instead of
 splitting to SUPP--.}
+
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata from
+\code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}. If provided, used for sorting and labeling.}
+
+\item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata for
+per-condition validation.}
 
 \item{return_provenance}{Logical. Default \code{TRUE}.}
 

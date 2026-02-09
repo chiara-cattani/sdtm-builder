@@ -7,7 +7,7 @@
 gen_project_scaffold(output_dir, config, domains)
 }
 \arguments{
-\item{output_dir}{Character.}
+\item{output_dir}{Character. Root directory for the new project.}
 
 \item{config}{\code{sdtm_config}.}
 
@@ -17,5 +17,7 @@ gen_project_scaffold(output_dir, config, domains)
 Invisible \code{NULL}.
 }
 \description{
-Generate project scaffold (directories and template files)
+Creates the standard directory structure for an SDTM study project and
+copies the \code{Study_Metadata.xlsx} and \code{Study_CT.xlsx} templates into
+the \verb{metadata/} directory.
 }

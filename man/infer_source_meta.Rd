@@ -15,5 +15,5 @@ A tibble with columns \code{dataset}, \code{column}, \code{type}, \code{label}.
 \description{
 Scans each dataset in \code{raw_data} and extracts column names, types, and
 (where available) labels. This replaces the need for a manually curated
-\code{source_meta.csv} in most workflows.
+source metadata file in most workflows.
 }

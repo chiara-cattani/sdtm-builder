@@ -11,6 +11,8 @@ build_all_domains(
   rule_set,
   source_meta = NULL,
   domains = NULL,
+  domain_meta = NULL,
+  value_level_meta = NULL,
   create_supp = NULL,
   validate = TRUE,
   verbose = TRUE
@@ -25,11 +27,14 @@ build_all_domains(
 
 \item{rule_set}{\code{rule_set}.}
 
-\item{source_meta}{Tibble or \code{NULL}. Optional source metadata; if
-omitted it is auto-inferred from \code{raw_data}.}
+\item{source_meta}{Tibble or \code{NULL}. Optional; not used at runtime.}
 
 \item{domains}{Character vector or \code{NULL}. If \code{NULL}, builds all domains
 in the rule\_set. Otherwise builds only the listed domains.}
+
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata from
+\code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}. Controls build order and provides
+keys/description/structure for finalization.}
 
 \item{create_supp}{Logical or \code{NULL}. Default \code{NULL} (inherits from
 \code{config$create_supp}, itself defaulting to \code{TRUE}). Set \code{FALSE} to
@@ -46,4 +51,9 @@ Named list of \code{build_result} objects, keyed by domain.
 Automatically determines domain build order from metadata dependencies
 (DM is always built first, then domains that need DM data, etc.) and
 builds each domain sequentially, passing upstream results downstream.
+}
+\details{
+When \code{domain_meta} is supplied (from \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}), the
+build order follows the CLASS_ORDER and DOMAIN_LEVEL_ORDER from the
+Domains sheet, and domains are logged by CLASS grouping.
 }

@@ -8,20 +8,24 @@ new_meta_bundle(
   target_meta,
   source_meta = NULL,
   ct_lib = NULL,
-  value_level_meta = NULL
+  value_level_meta = NULL,
+  domain_meta = NULL
 )
 }
 \arguments{
 \item{target_meta}{Tibble. Validated target variable metadata
-(output of \code{\link[=validate_target_meta]{validate_target_meta()}}).}
+(output of \code{\link[=validate_target_meta]{validate_target_meta()}} or \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}).}
 
 \item{source_meta}{Tibble or \code{NULL}. Validated source column metadata
-(output of \code{\link[=validate_source_meta]{validate_source_meta()}}). Optional.}
+(output of \code{\link[=infer_source_meta]{infer_source_meta()}} or manually curated).}
 
 \item{ct_lib}{Tibble or \code{NULL}. Controlled terminology library
-(output of \code{\link[=read_ct_library]{read_ct_library()}}).}
+(output of \code{\link[=read_study_ct_excel]{read_study_ct_excel()}}).}
 
 \item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata.}
+
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata with build
+order, keys, description, and structure (from \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}).}
 }
 \value{
 S3 object of class \code{meta_bundle}.

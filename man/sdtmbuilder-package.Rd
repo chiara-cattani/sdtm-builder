@@ -6,7 +6,7 @@
 \alias{sdtmbuilder}
 \title{sdtmbuilder: Metadata-Driven SDTM Domain Builder and Code Generator}
 \description{
-Auto-generates SDTM domain programs (R scripts / Quarto documents) from structured metadata. Given SDTM target metadata, source metadata, and study-level configuration, the package produces domain-building code for all SDTM domains with realistic derivations including merging multiple sources, controlled terminology assignment, ISO date/time handling, supplemental qualifier generation, and define.xml alignment. Supports SDTM IG 3.4+ with sponsor-specific overrides via configuration.
+Auto-generates SDTM domain programs (R scripts / Quarto documents) from structured metadata. Given SDTM target metadata (Study_Metadata.xlsx) and controlled terminology (Study_CT.xlsx), the package produces domain-building code for all SDTM domains with realistic derivations including merging multiple sources, controlled terminology assignment, ISO date/time handling, supplemental qualifier generation, and define.xml alignment. Source metadata is auto-inferred from raw data. Supports SDTM IG 3.4+ with sponsor-specific overrides via configuration.
 
 Auto-generates SDTM domain programs (R scripts / Quarto documents) from
 structured metadata. Given SDTM target metadata, source metadata, and

@@ -36,7 +36,7 @@ Supported formats:
 \item \strong{XPT}: \code{.xpt} (via \code{\link[haven:read_xpt]{haven::read_xpt()}})
 \item \strong{Excel}: \code{.xlsx}, \code{.xls} (via \code{\link[readxl:read_excel]{readxl::read_excel()}})
 \item \strong{CSV}: \code{.csv} (via \code{\link[readr:read_delim]{readr::read_csv()}})
-\item \strong{RDS}: \code{.rds} (via \code{\link[base:readRDS]{readRDS()}})
-\item \strong{RDA}: \code{.rda}, \code{.rdata} (via \code{\link[base:load]{load()}})
+\item \strong{RDS}: \code{.rds} (via \code{\link[=readRDS]{readRDS()}})
+\item \strong{RDA}: \code{.rda}, \code{.rdata} (via \code{\link[=load]{load()}})
 }
 }

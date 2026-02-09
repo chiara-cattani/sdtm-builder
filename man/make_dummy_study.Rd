@@ -37,10 +37,12 @@ Creates a named list containing:
 \itemize{
 \item \code{raw_data}: named list of tibbles (\code{dm_raw}, \code{ae_raw}, \code{cm_raw}, \code{mh_raw},
 \code{pr_raw}, \code{ex_raw}, \code{vs_raw}, \code{lb_raw}, \code{ds_raw}, \code{qs_raw})
-\item \code{target_meta}: tibble loaded from starter kit
-\item \code{source_meta}: tibble loaded from starter kit
-\item \code{ct_lib}: tibble loaded from starter kit
+\item \code{target_meta}: tibble from Study_Metadata.xlsx (Variables sheet)
+\item \code{ct_lib}: tibble from Study_CT.xlsx (Codelists + terms)
 \item \code{config}: \code{sdtm_config} object
+\item \code{domain_meta}: tibble from Study_Metadata.xlsx (Domains sheet)
+\item \code{value_level_meta}: tibble or NULL from Study_Metadata.xlsx (Value Level sheet)
+\item \code{source_meta}: tibble auto-inferred from raw_data (via \code{\link[=infer_source_meta]{infer_source_meta()}})
 }
 
 All randomness is controlled by \code{seed}.  Calling \code{make_dummy_study(seed=123)}

@@ -15,7 +15,7 @@ compile_rules(
 \arguments{
 \item{target_meta}{Tibble (validated, normalized).}
 
-\item{source_meta}{Tibble or \code{NULL}. Optional source metadata.}
+\item{source_meta}{Tibble or \code{NULL}. Optional; auto-inferred if needed.}
 
 \item{ct_lib}{Tibble or \code{NULL}.}
 

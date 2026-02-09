@@ -27,6 +27,11 @@ read_target_meta(
 A tibble with standard target metadata columns.
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
+
+Use \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}} instead, which reads the multi-sheet
+\code{Study_Metadata.xlsx} workbook.
+
 Reads a CSV or Excel file containing one row per SDTM variable per domain.
 Column names are lowercased automatically. Duplicate \verb{(domain, var)} pairs
 cause an error.

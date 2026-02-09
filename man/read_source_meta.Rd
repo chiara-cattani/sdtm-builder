@@ -19,5 +19,7 @@ read_source_meta(path, sheet = 1L, colmap = NULL, encoding = "UTF-8")
 A tibble with source metadata columns.
 }
 \description{
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
+
 Reads a CSV or Excel file describing raw-data columns: dataset, column, type.
 }

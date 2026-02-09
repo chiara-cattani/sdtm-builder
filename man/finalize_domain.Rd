@@ -11,7 +11,8 @@ finalize_domain(
   config,
   create_seq = TRUE,
   create_supp = TRUE,
-  strict_labels = TRUE
+  strict_labels = TRUE,
+  domain_meta = NULL
 )
 }
 \arguments{
@@ -28,6 +29,10 @@ finalize_domain(
 \item{create_supp}{Logical. Default \code{TRUE}.}
 
 \item{strict_labels}{Logical. Default \code{TRUE}.}
+
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata from
+\code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}. If provided, uses \code{keys} column
+to sort rows and \code{description} column to set the dataset label.}
 }
 \value{
 Named list.

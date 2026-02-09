@@ -1,396 +1,183 @@
 ---
-title: "Metadata Schema"
+title: "Metadata Schema Reference"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Metadata Schema}
+  %\VignetteIndexEntry{Metadata Schema Reference}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-# Metadata Schema for sdtmbuilder
-
-This document defines the required and optional fields for all metadata
-inputs consumed by the `sdtmbuilder` package.
-
----
-
-## 1. Target Variable Metadata (`target_var_meta`)
-
-One row per SDTM variable per domain.
-
-### Required Fields
-
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `domain` | chr | Domain abbreviation | `"AE"` |
-| `var` | chr | SDTM variable name | `"AESTDTC"` |
-| `type` | chr | `"char"` or `"num"` | `"char"` |
-| `length` | int | Maximum character length (char) or 8 (num) | `200` |
-| `label` | chr | Variable label (≤ 40 chars) | `"Start Date/Time of Adverse Event"` |
-| `role` | chr | IG role: `"Identifier"`, `"Topic"`, `"Timing"`, `"Qualifier"`, `"Rule"`, `"Record Qualifier"`, `"Variable Qualifier"`, `"Synonym Qualifier"` | `"Timing"` |
-| `core` | chr | IG core: `"Req"`, `"Exp"`, `"Perm"` | `"Req"` |
-| `codelist_id` | chr/NA | CT codelist ID (e.g., `"C66769"`) | `"C66769"` |
-| `origin` | chr | Origin: `"CRF"`, `"Derived"`, `"Assigned"`, `"Protocol"`, `"Predecessor"` | `"CRF"` |
-| `source_datasets` | chr/NA | Semicolon-delimited raw dataset names | `"ae_raw;dm_raw"` |
-| `source_columns` | chr/NA | Semicolon-delimited raw column names | `"aestdat;aesttim"` |
-| `rule` | chr/NA | Machine-readable derivation rule (JSON, YAML, or mini-DSL) | See below |
-| `comment` | chr/NA | Human-readable derivation description | `"ISO combine date+time"` |
-
-### Recommended Optional Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `order` | int | Display/column position order |
-| `value_level_id` | chr | Links to value-level metadata conditions |
-| `key_seq` | int | Key variable position (1, 2, ...) or NA |
-| `ig_ref` | chr | IG section reference (e.g., `"SDTMIG 3.4 §6.2.1"`) |
-| `sponsor_notes` | chr | Sponsor-specific annotations |
-| `examples` | chr | Example values |
-
----
-
-## 2. Source Column Metadata (`source_col_meta`)
-
-One row per column per source/raw dataset.
-
-### Required Fields
-
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `dataset` | chr | Logical dataset name | `"ae_raw"` |
-| `column` | chr | Column name in raw data | `"aestdat"` |
-| `type` | chr | R type: `"character"`, `"numeric"`, `"integer"`, `"Date"`, `"POSIXct"` | `"character"` |
-| `key_level` | chr | Key scope: `"subject"`, `"visit"`, `"record"`, `"none"` | `"record"` |
-
-### Recommended Optional Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `format` | chr | Display format or date format pattern |
-| `label` | chr | Column label/description |
-| `notes` | chr | Annotations |
-| `is_date` | lgl | Indicates date content |
-| `is_time` | lgl | Indicates time content |
-| `coded_values` | chr | Pipe-delimited list of raw coded values |
-| `visit_structure` | chr | Visit-related hints |
-
----
-
-## 3. Controlled Terminology Library (`ct_lib`)
-
-One row per coded value per codelist.
-
-| Field | Type | Required | Description | Example |
-|-------|------|----------|-------------|---------|
-| `codelist_id` | chr | **Yes** | NCI code or sponsor ID | `"C66769"` |
-| `codelist_name` | chr | No | Codelist label | `"Severity/Intensity Scale for Adverse Events"` |
-| `coded_value` | chr | **Yes** | The coded term | `"MILD"` |
-| `decode` | chr | No | Decode text | `"Mild"` |
-| `synonyms` | chr | No | Pipe-delimited synonyms | `"MILD SEVERITY\|GRADE 1"` |
-| `case_sensitive` | lgl | No | Default `FALSE` | `FALSE` |
-| `allowed_nulls_policy` | chr | No | `"allow"` or `"deny"` | `"allow"` |
-| `version` | chr | No | CT version identifier | `"2024-09-27"` |
-| `source` | chr | No | `"CDISC"` or `"SPONSOR"` | `"CDISC"` |
-
----
-
-## 4. Rule Representation
-
-Rules can be specified in the `rule` column of `target_var_meta` in three
-formats: JSON (recommended), YAML, or mini-DSL.
-
-### 4.1 JSON Format (Recommended)
-
-Each rule is a JSON object stored as a string in the `rule` column.
-
-#### Structure
-
-```json
-{
-  "type": "<rule_type>",
-  "depends_on": ["<var1>", "<var2>"],
-  "params": {
-    // type-specific parameters
-  }
-}
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>"
+)
 ```
 
-#### Supported rule types
+# Metadata Schema Reference
 
-| Type | Description |
-|------|-------------|
-| `direct_map` | Rename + optional transform |
-| `constant` | Fixed value |
-| `coalesce` | First non-missing from list |
-| `if_else` | Binary conditional |
-| `case_when` | Multi-branch conditional |
-| `ct_assign` | Controlled terminology assignment |
-| `ct_decode` | CT decode lookup |
-| `iso_format` | Date/time → ISO 8601 |
-| `study_day` | --DY computation |
-| `visit_map` | Visit assignment |
-| `seq` | Sequence number |
-| `join` | Merge from another source |
-| `split` | Split delimited → records |
-| `checkbox_expand` | Checkbox → records |
-| `regex_extract` | Regex extraction |
-| `concat` | String concatenation |
-| `numeric_round` | Rounding |
-| `unit_convert` | Unit standardization |
-| `baseline_flag` | --BLFL |
-| `epoch` | EPOCH |
-| `duration` | --DUR |
-| `supp_move` | Move to SUPP |
-| `relrec_link` | RELREC linkage |
-| `yes_no_map` | Y/N mapping |
-| `status` | --STAT / --REASND |
+This vignette documents the schema for the two Excel metadata files used by
+`sdtmbuilder`.
 
-### 4.2 Concrete Rule Examples
+## 1 Study_Metadata.xlsx
 
-#### Direct mapping
+This is the primary metadata workbook. It contains the following sheets:
 
-```json
-{
-  "type": "direct_map",
-  "params": {
-    "source": {"dataset": "ae_raw", "column": "term"},
-    "transform": "toupper"
-  }
-}
+### 1.1 Domains Sheet
+
+Defines which SDTM domains are in scope for the study.
+
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| DOMAIN | character | Yes | Two-letter SDTM domain code (e.g., "DM", "AE") |
+| DESCRIPTION | character | Yes | Human-readable domain description |
+| CLASS | character | No | SDTM class (Events, Findings, Interventions, …) |
+| STRUCTURE | character | No | Record structure ("One record per subject per event", …) |
+| REPEATING | character | No | "Yes" or "No" |
+
+### 1.2 Variables Sheet
+
+Defines every target variable and its derivation rule.
+
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| DOMAIN | character | Yes | Parent domain code |
+| VARIABLE | character | Yes | SDTM variable name (e.g., "AESTDTC") |
+| LABEL | character | Yes | Variable label (max 40 characters) |
+| DATA_TYPE | character | Yes | "text", "integer", "float", "datetime", "date" |
+| LENGTH | integer | No | Maximum character length (text) or display width |
+| SIGNIFICANT_DIGITS | integer | No | Number of significant digits (float variables) |
+| CORE | character | No | "Req", "Perm", "Exp", or "SUPP" |
+| CODELIST | character | No | Codelist code from Study_CT.xlsx (e.g., "SEV") |
+| ORIGIN | character | No | Variable origin: "CRF", "Derived", "Assigned", "Protocol" |
+| METHOD | character | No | Derivation rule — NA for auto-assign, or JSON string |
+| VALUE | character | No | Constant value (when METHOD implies constant) |
+| ORDER | integer | No | Display order within the domain |
+
+#### METHOD Auto-Assignment
+
+When `METHOD` is `NA`, `compile_rules()` applies these defaults:
+
+- **STUDYID** → `rule_type = "constant"` (from `config$study_id`)
+- **DOMAIN** → `rule_type = "constant"` (from the domain code)
+- **All others** → `rule_type = "direct_map"` with:
+  - `dataset = "{tolower(domain)}_raw"`
+  - `column = "{tolower(variable)}"`
+
+### 1.3 ValueLevel Sheet (Optional)
+
+Defines value-level metadata for variables that vary by test code or category.
+
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| DOMAIN | character | Yes | Domain code |
+| VARIABLE | character | Yes | Variable that triggers the split (e.g., "LBTESTCD") |
+| VALUE | character | Yes | Specific value of VARIABLE |
+| TARGET_VARIABLE | character | Yes | Variable being defined at value level |
+| LABEL | character | No | Value-level label |
+| DATA_TYPE | character | No | Override data type |
+| LENGTH | integer | No | Override length |
+| CODELIST | character | No | Override codelist |
+| ORIGIN | character | No | Override origin |
+| METHOD | character | No | Override derivation method |
+
+### 1.4 StudyInfo Sheet (Optional)
+
+Global study-level metadata.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| STUDYID | character | Study identifier |
+| STUDY_NAME | character | Full study name |
+| PROTOCOL | character | Protocol number |
+| SPONSOR | character | Sponsor name |
+| THERAPEUTIC_AREA | character | Therapeutic area |
+| PHASE | character | Study phase |
+
+### 1.5 TrialDesign Sheet (Optional)
+
+Defines trial arms, elements, and visits for TA/TV/TE domains.
+
+### 1.6 Overrides Sheet (Optional)
+
+Study-specific overrides applied via `apply_study_overrides()`.
+
+### 1.7 Imputation Sheet (Optional)
+
+Date imputation policies applied via `apply_imputation_policy()`.
+
+## 2 Study_CT.xlsx
+
+Controlled terminology workbook with two sheets:
+
+### 2.1 CT_Codelists Sheet
+
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| CODELIST_CODE | character | Yes | Short unique identifier (e.g., "SEV", "YN") |
+| CODELIST_NAME | character | Yes | Human-readable name |
+| EXTENSIBLE | character | No | "Yes" or "No" — whether non-listed terms are permitted |
+| NCI_CODELIST_CODE | character | No | NCI EVS C-code (e.g., "C66767") |
+
+### 2.2 CT_Terms Sheet
+
+| Column | Type | Required | Description |
+|--------|------|----------|-------------|
+| CODELIST_CODE | character | Yes | FK to CT_Codelists.CODELIST_CODE |
+| TERM_CODE | character | Yes | Submission value / coded value |
+| TERM_DECODE | character | No | Decoded (human-readable) value |
+| NCI_TERM_CODE | character | No | NCI EVS C-code for the term |
+| ORDER_NUMBER | integer | No | Display order within codelist |
+
+### Example
+
+```{r}
+library(sdtmbuilder)
+
+ct <- read_study_ct_excel(
+  system.file("extdata", "Study_CT.xlsx", package = "sdtmbuilder")
+)
+
+# Codelist definitions
+ct$ct_codelist
+#> # A tibble: 5 × 4
+#>   CODELIST_CODE CODELIST_NAME NCI_CODELIST_CODE EXTENSIBLE
+#>   <chr>         <chr>         <chr>             <chr>
+#> 1 YN            Yes / No      NA                No
+#> 2 LBTESTCD      Lab Test Code NA                Yes
+#> 3 LBTEST        Lab Test Name NA                Yes
+#> 4 UNIT          Units         NA                Yes
+#> 5 SEX           Sex           NA                No
+
+# CT terms
+ct$ct_lib
+#> # A tibble: 16 × 4
+#>   CODELIST_CODE TERM_CODE TERM_DECODE CODELIST_NAME
+#>   <chr>         <chr>     <chr>       <chr>
+#> 1 YN            Y         Yes         Yes / No
+#> 2 YN            N         No          Yes / No
+#> 3 LBTESTCD      ALB       Albumin     Lab Test Code
+#> …
 ```
 
-#### ISO date/time formatting
+## 3 Source Metadata (Auto-Inferred)
 
-```json
-{
-  "type": "iso_format",
-  "depends_on": ["AESTDAT_RAW", "AESTTIM_RAW"],
-  "params": {
-    "date_source": {"dataset": "ae_raw", "column": "aestdat"},
-    "time_source": {"dataset": "ae_raw", "column": "aesttim"},
-    "partial_allowed": true,
-    "timezone": "@config.timezone"
-  }
-}
+`sdtmbuilder` does **not** require a separate source metadata file. Source
+metadata is automatically inferred from the raw datasets at build time via
+`infer_source_meta()`:
+```{r eval=FALSE}
+raw_data    <- load_raw_data(config)
+source_meta <- infer_source_meta(raw_data)
 ```
 
-**Note:** `@config.*` references are resolved at compile time from the
-`sdtm_config` object.
+The inferred `source_meta` tibble contains:
 
-#### Controlled terminology
+| Column | Description |
+|--------|-------------|
+| DATASET | Source dataset name (from the names of `raw_data`) |
+| VARIABLE | Column name |
+| TYPE | R type class (character, numeric, integer, Date, …) |
+| LABEL | Column label (from `attr(x, "label")` if present) |
 
-```json
-{
-  "type": "ct_assign",
-  "depends_on": ["AESEV_RAW"],
-  "params": {
-    "source": {"dataset": "ae_raw", "column": "severity"},
-    "codelist_id": "C66769",
-    "unknown_policy": "warn_and_keep"
-  }
-}
-```
-
-#### Study day
-
-```json
-{
-  "type": "study_day",
-  "depends_on": ["AESTDTC"],
-  "params": {
-    "dtc_var": "AESTDTC",
-    "ref_var": "RFSTDTC"
-  }
-}
-```
-
-#### Conditional (if/else)
-
-```json
-{
-  "type": "if_else",
-  "params": {
-    "condition": "is.na(LBORRES) | LBORRES == ''",
-    "true_value": "NOT DONE",
-    "false_value": null,
-    "missing_value": null
-  }
-}
-```
-
-#### Case-when (multi-branch)
-
-```json
-{
-  "type": "case_when",
-  "params": {
-    "conditions": {
-      "AESTDTC >= RFSTDTC & AESTDTC < TRTENDTC": "TREATMENT",
-      "AESTDTC < RFSTDTC": "SCREENING",
-      "AESTDTC >= TRTENDTC": "FOLLOW-UP"
-    },
-    "default": null
-  }
-}
-```
-
-#### Sequence number
-
-```json
-{
-  "type": "seq",
-  "depends_on": ["AESTDTC", "AETERM", "AEDECOD"],
-  "params": {
-    "by": ["USUBJID"],
-    "order_by": ["AESTDTC", "AETERM", "AEDECOD"],
-    "ties": "dense"
-  }
-}
-```
-
-#### Checkbox expansion (record generation)
-
-```json
-{
-  "type": "checkbox_expand",
-  "scope": "record_generation",
-  "params": {
-    "dataset": "ml_raw",
-    "id_cols": ["STUDYID", "USUBJID", "VISITNUM", "MLSPID_RAW"],
-    "checkbox_cols": ["ml_item_1", "ml_item_2", "ml_item_3"],
-    "map": {
-      "ml_item_1": {"MLTRT": "DIETARY COUNSELING", "MLPRESPEC": "Y"},
-      "ml_item_2": {"MLTRT": "EXERCISE PLAN", "MLPRESPEC": "Y"},
-      "ml_item_3": {"MLTRT": "SMOKING CESSATION", "MLPRESPEC": "Y"}
-    },
-    "drop_unchecked": false,
-    "unchecked_flag": "MLSTAT"
-  }
-}
-```
-
-#### Join from another source
-
-```json
-{
-  "type": "join",
-  "params": {
-    "source": {"dataset": "dm_raw"},
-    "by": ["USUBJID"],
-    "columns": ["RFSTDTC", "RFENDTC"],
-    "cardinality": "m:1",
-    "type": "left"
-  }
-}
-```
-
-#### SUPP move
-
-```json
-{
-  "type": "supp_move",
-  "params": {
-    "qnam": "AESOSP",
-    "qlabel": "AE of Special Interest",
-    "qorig": "CRF",
-    "qeval": null,
-    "source": {"dataset": "ae_raw", "column": "ae_special_interest"}
-  }
-}
-```
-
-#### Unit conversion
-
-```json
-{
-  "type": "unit_convert",
-  "depends_on": ["LBORRES", "LBORRESU"],
-  "params": {
-    "result_var": "LBORRES",
-    "unit_var": "LBORRESU",
-    "target_result": "LBSTRESN",
-    "target_unit": "LBSTRESU",
-    "conversion_table": "@config.unit_conversion_path",
-    "fallback": "keep"
-  }
-}
-```
-
-### 4.3 Multi-Source Mapping
-
-When a variable draws from multiple source datasets, specify them in the
-`source_datasets` and `source_columns` fields as semicolon-delimited lists:
-
-```
-source_datasets: "ae_raw;dm_raw"
-source_columns:  "aestdat;rfstdtc"
-```
-
-In the JSON rule, use an array of source specs:
-
-```json
-{
-  "type": "coalesce",
-  "params": {
-    "sources": [
-      {"dataset": "ae_raw", "column": "aestdat_iso"},
-      {"dataset": "ae_raw", "column": "aestdat_partial"},
-      {"dataset": "dm_raw", "column": "rfstdtc"}
-    ]
-  }
-}
-```
-
-### 4.4 Conditional Logic with Multiple Sources
-
-```json
-{
-  "type": "case_when",
-  "params": {
-    "conditions": {
-      "!is.na(ae_raw.severity_coded)": {"source": "ae_raw.severity_coded"},
-      "!is.na(ae_raw.severity_text)": {
-        "type": "ct_assign",
-        "source": "ae_raw.severity_text",
-        "codelist_id": "C66769"
-      }
-    },
-    "default": null
-  }
-}
-```
-
----
-
-## 5. Value-Level Metadata (`value_level_meta`)
-
-For findings domains where derivation rules differ by test/parameter.
-
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `value_level_id` | chr | Links to target_meta | `"LB_VLM_001"` |
-| `domain` | chr | Domain | `"LB"` |
-| `var` | chr | Variable | `"LBSTRESN"` |
-| `condition_var` | chr | Conditioning variable | `"LBTESTCD"` |
-| `condition_value` | chr | Conditioning value | `"GLUC"` |
-| `rule` | chr | Rule JSON for this condition | (unit conversion rule) |
-| `origin` | chr | Origin for this condition | `"Derived"` |
-| `comment` | chr | Description | `"Convert mmol/L to mg/dL"` |
-
----
-
-## 6. Study Configuration (`sdtm_config`)
-
-Created by `new_sdtm_config()`. Key fields:
-
-| Field | Type | Required | Default |
-|-------|------|----------|---------|
-| `studyid` | chr | Yes | — |
-| `timezone` | chr | No | `"UTC"` |
-| `ref_start_rule` | list | Yes | — |
-| `visit_map` | df | No | `NULL` |
-| `ct_paths` | chr[] | No | `character()` |
-| `sponsor_overrides` | list | No | `list()` |
-| `imputation_policy` | list/fn | No | `list()` |
-| `log_level` | chr | No | `"INFO"` |
-| `legacy_quirks` | list | No | `list()` |
+This is used internally by the build pipeline and does not need to be supplied
+by the user.

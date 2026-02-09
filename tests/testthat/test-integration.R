@@ -1,6 +1,6 @@
 # tests/testthat/test-integration.R
 # ============================================================================
-# Integration tests: all 8 domains build end-to-end, SUPP, new validation
+# Integration tests: starter-kit domains build end-to-end, SUPP, validation
 # ============================================================================
 
 # ---------------------------------------------------------------------------

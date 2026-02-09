@@ -9,6 +9,7 @@ export_xpt(
   domain,
   output_dir,
   target_meta = NULL,
+  domain_meta = NULL,
   max_label_length = 40L,
   version = 5L
 )

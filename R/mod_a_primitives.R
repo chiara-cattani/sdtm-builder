@@ -131,10 +131,10 @@ print.sdtm_config <- function(x, ...) {
 #'
 #' @param target_meta Tibble. Validated target variable metadata
 #'   (output of [validate_target_meta()] or [read_study_metadata_excel()]).
-#' @param source_meta Tibble. Validated source column metadata
-#'   (output of [validate_source_meta()]).
+#' @param source_meta Tibble or `NULL`. Validated source column metadata
+#'   (output of [infer_source_meta()] or manually curated).
 #' @param ct_lib Tibble or `NULL`. Controlled terminology library
-#'   (output of [read_ct_library()] or [read_study_ct_excel()]).
+#'   (output of [read_study_ct_excel()]).
 #' @param value_level_meta Tibble or `NULL`. Value-level metadata.
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata with build
 #'   order, keys, description, and structure (from [read_study_metadata_excel()]).

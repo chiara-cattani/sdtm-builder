@@ -6,7 +6,7 @@
 #'
 #' Scans each dataset in `raw_data` and extracts column names, types, and
 #' (where available) labels. This replaces the need for a manually curated
-#' `source_meta.csv` in most workflows.
+#' source metadata file in most workflows.
 #'
 #' @param raw_data Named list of data frames / tibbles.
 #' @return A tibble with columns `dataset`, `column`, `type`, `label`.

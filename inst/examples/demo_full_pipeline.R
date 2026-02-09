@@ -4,7 +4,7 @@
 # This script demonstrates the complete sdtmbuilder pipeline:
 #   1. Generate dummy clinical data (or load your own)
 #   2. Compile derivation rules from metadata
-#   3. Build 10 SDTM domains end-to-end
+#   3. Build SDTM domains end-to-end
 #   4. Inspect and validate results
 #   5. Export to XPT format
 #
@@ -17,7 +17,7 @@ library(sdtmbuilder)
 cat("
 ================================================================================
   sdtmbuilder — Full Pipeline Demo
-  Building 10 SDTM domains from metadata-driven rules
+  Building SDTM domains from metadata-driven rules
 ================================================================================
 \n")
 

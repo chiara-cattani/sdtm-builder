@@ -2,7 +2,7 @@
 % Please edit documentation in R/mod_e_data_access.R
 \name{standardize_types}
 \alias{standardize_types}
-\title{Coerce column types to match metadata expectations}
+\title{Coerce column types}
 \usage{
 standardize_types(
   data,
@@ -24,5 +24,5 @@ standardize_types(
 Tibble with corrected types.
 }
 \description{
-Coerce column types to match metadata expectations
+Converts factors to character and strips haven labels.
 }
