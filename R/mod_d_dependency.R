@@ -144,10 +144,9 @@ resolve_late_binding <- function(graph, cycles, late_bind_vars) {
 #' @param domain Character.
 #' @param dep_graph Output of `build_dependency_graph`.
 #' @param rule_set `rule_set`.
-#' @param source_meta Tibble.
 #' @return Tibble with build steps.
 #' @export
-plan_build_steps <- function(domain, dep_graph, rule_set, source_meta) {
+plan_build_steps <- function(domain, dep_graph, rule_set) {
   var_order <- dep_graph$order
   steps <- tibble::tibble(
     step    = seq_along(var_order),

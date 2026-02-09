@@ -3,8 +3,8 @@
 test_that("export_xpt writes an XPT file", {
   skip_if_no_starter_kit()
 
-  rs <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
-  br <- build_domain("AE", dummy_meta, dummy_smeta, dummy_raw,
+  rs <- compile_rules(dummy_meta, ct_lib = dummy_ct)
+  br <- build_domain("AE", dummy_meta, dummy_raw,
                      dummy_cfg, rs, verbose = FALSE)
 
   out_dir <- file.path(tempdir(), "xpt_test")

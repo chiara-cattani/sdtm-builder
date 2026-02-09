@@ -7,10 +7,10 @@
 build_domain(
   domain,
   target_meta,
-  source_meta,
   raw_data,
   config,
   rule_set,
+  source_meta = NULL,
   dm_data = NULL,
   sv_data = NULL,
   create_supp = NULL,
@@ -24,13 +24,14 @@ build_domain(
 
 \item{target_meta}{Tibble.}
 
-\item{source_meta}{Tibble.}
-
 \item{raw_data}{Named list of tibbles.}
 
 \item{config}{\code{sdtm_config}.}
 
 \item{rule_set}{\code{rule_set}.}
+
+\item{source_meta}{Tibble or \code{NULL}. Optional source metadata; if
+omitted it is auto-inferred from \code{raw_data}.}
 
 \item{dm_data}{Tibble or \code{NULL}. DM data for RFSTDTC; also accepts
 a full \code{build_result} list (auto-extracts \verb{$data}).}

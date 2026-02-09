@@ -50,7 +50,6 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
 
   config      <- study$config
   target_meta <- study$target_meta
-  source_meta <- study$source_meta
   ct_lib      <- study$ct_lib
   raw_data    <- study$raw_data
   domain_meta <- study$domain_meta
@@ -84,7 +83,7 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
   # ------ Step 2: Compile rules ----------------------------------------------
   .log("Step 2: Compiling rules from metadata...")
   rule_set <- tryCatch(
-    compile_rules(target_meta, source_meta, ct_lib),
+    compile_rules(target_meta, ct_lib = ct_lib),
     error = function(e) {
       .log(paste("FATAL: Rule compilation failed:", e$message))
       return(NULL)
@@ -108,7 +107,6 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
   all_results <- tryCatch(
     build_all_domains(
       target_meta = target_meta,
-      source_meta = source_meta,
       raw_data    = raw_data,
       config      = config,
       rule_set    = rule_set,

@@ -4,14 +4,17 @@
 \alias{validate_rules}
 \title{Validate compiled rules}
 \usage{
-validate_rules(rule_set, source_meta, ct_lib = NULL)
+validate_rules(rule_set, source_meta = NULL, ct_lib = NULL, raw_data = NULL)
 }
 \arguments{
 \item{rule_set}{\code{rule_set} object.}
 
-\item{source_meta}{Tibble.}
+\item{source_meta}{Tibble or \code{NULL}. Optional source metadata.}
 
 \item{ct_lib}{Tibble or \code{NULL}.}
+
+\item{raw_data}{Named list of tibbles or \code{NULL}. Used to infer source
+dataset names when \code{source_meta} is not supplied.}
 }
 \value{
 Updated \code{rule_set}.

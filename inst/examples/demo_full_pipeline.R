@@ -31,15 +31,16 @@ study <- make_dummy_study(seed = 123)
 # study contains:
 #   $raw_data    — 10 raw source datasets (dm_raw, ae_raw, cm_raw, ds_raw, qs_raw, etc.)
 #   $target_meta — SDTM variable definitions + derivation rules
-#   $source_meta — raw dataset column descriptions
 #   $ct_lib      — controlled terminology codelists
 #   $config      — study configuration (sdtm_config object)
+#   $domain_meta — domain-level metadata (build order, keys, etc.)
+#   $value_level_meta — value-level conditions
 
 config      <- study$config
 target_meta <- study$target_meta
-source_meta <- study$source_meta
 ct_lib      <- study$ct_lib
 raw_data    <- study$raw_data
+domain_meta <- study$domain_meta
 
 cat("  Study ID:", config$studyid, "\n")
 cat("  Subjects:", nrow(raw_data$dm_raw), "\n")
@@ -60,7 +61,7 @@ cat("  Controlled terminology codelists:",
 # =============================================================================
 cat("STEP 2: Compiling derivation rules from metadata...\n\n")
 
-rule_set <- compile_rules(target_meta, source_meta, ct_lib)
+rule_set <- compile_rules(target_meta, ct_lib = ct_lib)
 
 for (dom in names(rule_set$rules)) {
   n <- length(rule_set$rules[[dom]])
@@ -84,10 +85,10 @@ cat(strrep("-", 60), "\n\n")
 
 all_results <- build_all_domains(
   target_meta = target_meta,
-  source_meta = source_meta,
   raw_data    = raw_data,
   config      = config,
   rule_set    = rule_set,
+  domain_meta = domain_meta,
   verbose     = FALSE
 )
 

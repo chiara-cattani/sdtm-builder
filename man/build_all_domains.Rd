@@ -6,10 +6,10 @@
 \usage{
 build_all_domains(
   target_meta,
-  source_meta,
   raw_data,
   config,
   rule_set,
+  source_meta = NULL,
   domains = NULL,
   create_supp = NULL,
   validate = TRUE,
@@ -19,13 +19,14 @@ build_all_domains(
 \arguments{
 \item{target_meta}{Tibble.}
 
-\item{source_meta}{Tibble.}
-
 \item{raw_data}{Named list of tibbles.}
 
 \item{config}{\code{sdtm_config}.}
 
 \item{rule_set}{\code{rule_set}.}
+
+\item{source_meta}{Tibble or \code{NULL}. Optional source metadata; if
+omitted it is auto-inferred from \code{raw_data}.}
 
 \item{domains}{Character vector or \code{NULL}. If \code{NULL}, builds all domains
 in the rule\_set. Otherwise builds only the listed domains.}

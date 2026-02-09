@@ -8,7 +8,6 @@ gen_domain_script(
   domain,
   rule_set,
   target_meta,
-  source_meta,
   config,
   style = "tidyverse",
   include_comments = TRUE,
@@ -21,8 +20,6 @@ gen_domain_script(
 \item{rule_set}{\code{rule_set}.}
 
 \item{target_meta}{Tibble.}
-
-\item{source_meta}{Tibble.}
 
 \item{config}{\code{sdtm_config}.}
 

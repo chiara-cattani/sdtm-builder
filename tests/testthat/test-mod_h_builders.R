@@ -3,8 +3,8 @@
 test_that("build_domain returns a build_result for AE", {
   skip_if_no_starter_kit()
 
-  rs   <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
-  result <- build_domain("AE", dummy_meta, dummy_smeta, dummy_raw,
+  rs   <- compile_rules(dummy_meta, ct_lib = dummy_ct)
+  result <- build_domain("AE", dummy_meta, dummy_raw,
                          dummy_cfg, rs, verbose = FALSE)
 
   expect_s3_class(result, "build_result")
@@ -16,8 +16,8 @@ test_that("build_domain returns a build_result for AE", {
 test_that("build_domain produces correct columns for AE", {
   skip_if_no_starter_kit()
 
-  rs   <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
-  result <- build_domain("AE", dummy_meta, dummy_smeta, dummy_raw,
+  rs   <- compile_rules(dummy_meta, ct_lib = dummy_ct)
+  result <- build_domain("AE", dummy_meta, dummy_raw,
                          dummy_cfg, rs, verbose = FALSE)
 
   ae_vars <- dplyr::filter(dummy_meta, domain == "AE")$var

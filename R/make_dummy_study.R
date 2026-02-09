@@ -13,11 +13,11 @@
 #' - `raw_data`: named list of tibbles (`dm_raw`, `ae_raw`, `cm_raw`, `mh_raw`,
 #'   `pr_raw`, `ex_raw`, `vs_raw`, `lb_raw`, `ds_raw`, `qs_raw`)
 #' - `target_meta`: tibble from Study_Metadata.xlsx (Variables sheet)
-#' - `source_meta`: tibble loaded from starter kit
 #' - `ct_lib`: tibble from Study_CT.xlsx (Codelists + terms)
 #' - `config`: `sdtm_config` object
 #' - `domain_meta`: tibble from Study_Metadata.xlsx (Domains sheet)
 #' - `value_level_meta`: tibble or NULL from Study_Metadata.xlsx (Value Level sheet)
+#' - `source_meta`: tibble auto-inferred from raw_data (via [infer_source_meta()])
 #'
 #' All randomness is controlled by `seed`.  Calling `make_dummy_study(seed=123)`
 #' always produces identical output.
@@ -83,13 +83,6 @@ make_dummy_study <- function(seed = 123,
   value_level_meta <- study_meta$value_level_meta
 
   ct_lib <- read_study_ct_excel(ct_xlsx)
-
-  # Source metadata (still CSV)
-  source_meta <- utils::read.csv(
-    file.path(starter_kit_dir, "source_meta.csv"),
-    stringsAsFactors = FALSE, na.strings = ""
-  )
-  source_meta <- tibble::as_tibble(source_meta)
 
   cfg_yaml <- yaml::read_yaml(file.path(starter_kit_dir, "config.yaml"))
 
@@ -662,7 +655,11 @@ make_dummy_study <- function(seed = 123,
       qs_raw = qs_raw
     ),
     target_meta      = target_meta,
-    source_meta      = source_meta,
+    source_meta      = infer_source_meta(list(
+      dm_raw = dm_raw, ae_raw = ae_raw, cm_raw = cm_raw,
+      mh_raw = mh_raw, pr_raw = pr_raw, ex_raw = ex_raw,
+      vs_raw = vs_raw, lb_raw = lb_raw, ds_raw = ds_raw, qs_raw = qs_raw
+    )),
     ct_lib           = ct_lib,
     config           = config,
     domain_meta      = domain_meta,

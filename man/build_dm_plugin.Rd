@@ -4,12 +4,10 @@
 \alias{build_dm_plugin}
 \title{DM domain plugin}
 \usage{
-build_dm_plugin(target_meta, source_meta, raw_data, config, rule_set)
+build_dm_plugin(target_meta, raw_data, config, rule_set)
 }
 \arguments{
 \item{target_meta}{Tibble.}
-
-\item{source_meta}{Tibble.}
 
 \item{raw_data}{Named list.}
 

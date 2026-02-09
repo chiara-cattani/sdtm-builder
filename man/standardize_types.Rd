@@ -6,7 +6,6 @@
 \usage{
 standardize_types(
   data,
-  source_meta,
   dataset_name = NA_character_,
   coerce_factors = TRUE,
   strip_labels = TRUE
@@ -14,8 +13,6 @@ standardize_types(
 }
 \arguments{
 \item{data}{Tibble.}
-
-\item{source_meta}{Tibble.}
 
 \item{dataset_name}{Character.}
 

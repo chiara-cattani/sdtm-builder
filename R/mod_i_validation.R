@@ -198,12 +198,15 @@ validate_lengths_types_labels <- function(data, target_meta, domain, report) {
     if ("length" %in% names(dom_meta) && is.character(data[[v]])) {
       max_len <- dom_meta$length[i]
       if (!is.na(max_len) && is.numeric(max_len)) {
-        max_actual <- max(nchar(data[[v]][!is.na(data[[v]])]), na.rm = TRUE)
-        if (is.finite(max_actual) && max_actual > max_len) {
-          report <- add_finding(report, rule_id = "length_check",
-                                severity = "WARNING",
-                                message = glue::glue("{v}: max length {max_actual} exceeds defined {max_len}"),
-                                variable = v, domain = domain)
+        non_na_chars <- data[[v]][!is.na(data[[v]])]
+        if (length(non_na_chars) > 0L) {
+          max_actual <- max(nchar(non_na_chars))
+          if (max_actual > max_len) {
+            report <- add_finding(report, rule_id = "length_check",
+                                  severity = "WARNING",
+                                  message = glue::glue("{v}: max length {max_actual} exceeds defined {max_len}"),
+                                  variable = v, domain = domain)
+          }
         }
       }
     }

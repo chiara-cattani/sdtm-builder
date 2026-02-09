@@ -152,12 +152,12 @@ print.sdtm_config <- function(x, ...) {
 #'
 #' @export
 new_meta_bundle <- function(target_meta,
-                            source_meta,
+                            source_meta = NULL,
                             ct_lib = NULL,
                             value_level_meta = NULL,
                             domain_meta = NULL) {
   checkmate::assert_tibble(target_meta, min.rows = 1L)
-  checkmate::assert_tibble(source_meta, min.rows = 1L)
+  if (!is.null(source_meta)) checkmate::assert_tibble(source_meta, min.rows = 1L)
 
   # Validate domain_meta if provided
   if (!is.null(domain_meta)) {
@@ -170,7 +170,7 @@ new_meta_bundle <- function(target_meta,
   }
 
   target_domains <- unique(target_meta$domain)
-  source_datasets <- unique(source_meta$dataset)
+  source_datasets <- if (!is.null(source_meta)) unique(source_meta$dataset) else character()
 
   obj <- list(
     target_meta      = target_meta,

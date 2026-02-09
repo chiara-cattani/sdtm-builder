@@ -6,7 +6,7 @@
 \usage{
 new_meta_bundle(
   target_meta,
-  source_meta,
+  source_meta = NULL,
   ct_lib = NULL,
   value_level_meta = NULL
 )
@@ -15,8 +15,8 @@ new_meta_bundle(
 \item{target_meta}{Tibble. Validated target variable metadata
 (output of \code{\link[=validate_target_meta]{validate_target_meta()}}).}
 
-\item{source_meta}{Tibble. Validated source column metadata
-(output of \code{\link[=validate_source_meta]{validate_source_meta()}}).}
+\item{source_meta}{Tibble or \code{NULL}. Validated source column metadata
+(output of \code{\link[=validate_source_meta]{validate_source_meta()}}). Optional.}
 
 \item{ct_lib}{Tibble or \code{NULL}. Controlled terminology library
 (output of \code{\link[=read_ct_library]{read_ct_library()}}).}

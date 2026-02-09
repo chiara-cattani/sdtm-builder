@@ -5,13 +5,13 @@
 #' Compile derivation rules from metadata
 #'
 #' @param target_meta Tibble (validated, normalized).
-#' @param source_meta Tibble (validated, normalized).
+#' @param source_meta Tibble or `NULL`. Optional; auto-inferred if needed.
 #' @param ct_lib Tibble or `NULL`.
 #' @param dsl Character. Default `"json"`.
 #' @param strict Logical. Default `TRUE`.
 #' @return `rule_set` object.
 #' @export
-compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
+compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
                           dsl = "json", strict = TRUE) {
   domains <- unique(target_meta$domain)
   all_rules  <- list()
@@ -32,8 +32,8 @@ compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
 
     # Identify variables with value-level metadata (multiple rows per var)
     # These have a non-NA "condition" column from VLM expansion
-    has_condition <- "condition" %in% names(dom_meta) &
-                     !all(is.na(dom_meta$condition %||% NA))
+    cond_col <- if ("condition" %in% names(dom_meta)) dom_meta[["condition"]] else rep(NA, nrow(dom_meta))
+    has_condition <- !all(is.na(cond_col))
     if (has_condition) {
       vlm_vars <- unique(dom_meta$var[!is.na(dom_meta$condition)])
     } else {
@@ -128,10 +128,18 @@ compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
       var_name  <- row$var
       rule_type <- row$rule_type
 
+      # --- Auto-assign rule_type when METHOD is NA/empty --------------------
       if (is.na(rule_type) || rule_type == "") {
+        # Convention-based defaults for common SDTM variables
+        if (var_name == "STUDYID") {
+          rule_type <- "constant"
+        } else if (var_name == "DOMAIN") {
+          rule_type <- "constant"
+        } else {
+          rule_type <- "direct_map"
+        }
         compile_log <- c(compile_log,
-                         glue::glue("{dom}.{var_name}: no rule_type, skipping"))
-        next
+                         glue::glue("{dom}.{var_name}: auto-assigned rule_type = '{rule_type}'"))
       }
 
       # Parse rule params
@@ -145,6 +153,19 @@ compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
             list()
           }
         )
+      }
+
+      # --- Auto-generate params when empty -----------------------------------
+      if (length(params) == 0L) {
+        if (rule_type == "constant" && var_name == "STUDYID") {
+          params <- list(value = "auto")
+        } else if (rule_type == "constant" && var_name == "DOMAIN") {
+          params <- list(value = dom)
+        } else if (rule_type == "direct_map") {
+          # Convention: source dataset = {domain_lower}_raw, column = varname_lower
+          params <- list(dataset = paste0(tolower(dom), "_raw"),
+                         column  = tolower(var_name))
+        }
       }
 
       # Parse depends_on
@@ -259,20 +280,31 @@ parse_rule_dsl <- function(rule_text, var = NA_character_) {
 
 #' Validate compiled rules
 #' @param rule_set `rule_set` object.
-#' @param source_meta Tibble.
+#' @param source_meta Tibble or `NULL`. If `NULL`, dataset checks are skipped.
 #' @param ct_lib Tibble or `NULL`.
+#' @param raw_data Named list or `NULL`. If provided and `source_meta` is
+#'   `NULL`, dataset references are checked against `names(raw_data)`.
 #' @return Updated `rule_set`.
 #' @export
-validate_rules <- function(rule_set, source_meta, ct_lib = NULL) {
+validate_rules <- function(rule_set, source_meta = NULL, ct_lib = NULL,
+                           raw_data = NULL) {
   log <- rule_set$compile_log
-  for (dom in names(rule_set$rules)) {
-    for (var_name in names(rule_set$rules[[dom]])) {
-      rule <- rule_set$rules[[dom]][[var_name]]
-      # Check source refs exist
-      if (!is.null(rule$params$dataset)) {
-        ds <- tolower(rule$params$dataset)
-        if (!ds %in% tolower(source_meta$dataset)) {
-          log <- c(log, glue::glue("WARN: {dom}.{var_name} references unknown dataset '{ds}'"))
+  # Build dataset lookup from source_meta or raw_data
+  known_ds <- character()
+  if (!is.null(source_meta)) {
+    known_ds <- tolower(source_meta$dataset)
+  } else if (!is.null(raw_data)) {
+    known_ds <- tolower(names(raw_data))
+  }
+  if (length(known_ds) > 0L) {
+    for (dom in names(rule_set$rules)) {
+      for (var_name in names(rule_set$rules[[dom]])) {
+        rule <- rule_set$rules[[dom]][[var_name]]
+        if (!is.null(rule$params$dataset)) {
+          ds <- tolower(rule$params$dataset)
+          if (!ds %in% known_ds) {
+            log <- c(log, glue::glue("WARN: {dom}.{var_name} references unknown dataset '{ds}'"))
+          }
         }
       }
     }

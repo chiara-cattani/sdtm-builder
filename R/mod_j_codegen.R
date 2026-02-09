@@ -10,14 +10,13 @@
 #' @param domain Character.
 #' @param rule_set `rule_set`.
 #' @param target_meta Tibble.
-#' @param source_meta Tibble.
 #' @param config `sdtm_config`.
 #' @param style Character. `"tidyverse"` or `"base"`.
 #' @param include_comments Logical. Default `TRUE`.
 #' @param output_path Character or `NULL`.
 #' @return Character string of the generated script (invisibly if written).
 #' @export
-gen_domain_script <- function(domain, rule_set, target_meta, source_meta,
+gen_domain_script <- function(domain, rule_set, target_meta,
                               config, style = "tidyverse",
                               include_comments = TRUE,
                               output_path = NULL) {
@@ -50,11 +49,10 @@ gen_domain_script <- function(domain, rule_set, target_meta, source_meta,
   .add("")
 
   .add("# --- Load metadata and config ---")
-  .add('config      <- yaml::read_yaml("inst/extdata/starter_kit/config.yaml")')
-  .add('study_meta  <- read_study_metadata_excel("inst/extdata/starter_kit/Study_Metadata.xlsx")')
-  .add('ct_lib      <- read_study_ct_excel("inst/extdata/starter_kit/Study_CT.xlsx")')
+  .add('config      <- yaml::read_yaml("config.yaml")')
+  .add('study_meta  <- read_study_metadata_excel("metadata/Study_Metadata.xlsx")')
+  .add('ct_lib      <- read_study_ct_excel("metadata/Study_CT.xlsx")')
   .add('target_meta <- study_meta$target_meta')
-  .add('source_meta <- study_meta$source_meta')
   .add('domain_meta <- study_meta$domain_meta')
   .add('value_level_meta <- study_meta$value_level_meta')
   .add('')
@@ -335,13 +333,6 @@ gen_project_scaffold <- function(output_dir, config, domains) {
     config_src <- file.path(template_dir, "config.yaml")
     if (file.exists(config_src)) {
       file.copy(config_src, file.path(output_dir, "config.yaml"),
-                overwrite = FALSE)
-    }
-
-    # Copy source_meta if present
-    src_meta <- file.path(template_dir, "source_meta.csv")
-    if (file.exists(src_meta)) {
-      file.copy(src_meta, file.path(meta_dst, "source_meta.csv"),
                 overwrite = FALSE)
     }
   }

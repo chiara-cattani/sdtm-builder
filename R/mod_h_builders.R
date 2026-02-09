@@ -10,7 +10,7 @@
 #'
 #' @param domain Character (required).
 #' @param target_meta Tibble.
-#' @param source_meta Tibble.
+#' @param source_meta Tibble or `NULL`. Optional; not used at runtime.
 #' @param raw_data Named list of tibbles.
 #' @param config `sdtm_config`.
 #' @param rule_set `rule_set`.
@@ -30,8 +30,10 @@
 #' @param verbose Logical. Default `TRUE`.
 #' @return Named list (build_result).
 #' @export
-build_domain <- function(domain, target_meta, source_meta, raw_data,
-                         config, rule_set, dm_data = NULL, sv_data = NULL,
+build_domain <- function(domain, target_meta, raw_data,
+                         config, rule_set,
+                         source_meta = NULL,
+                         dm_data = NULL, sv_data = NULL,
                          create_supp = NULL, domain_meta = NULL,
                          value_level_meta = NULL,
                          return_provenance = TRUE, validate = TRUE,
@@ -68,7 +70,13 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
   }
 
   if (is.null(primary_ds)) {
-    abort(glue::glue("Cannot determine primary source dataset for {domain}"))
+    # Fall back to convention: {domain_lower}_raw
+    convention_ds <- paste0(tolower(domain), "_raw")
+    if (convention_ds %in% names(raw_data)) {
+      primary_ds <- convention_ds
+    } else {
+      abort(glue::glue("Cannot determine primary source dataset for {domain}"))
+    }
   }
 
   if (!primary_ds %in% names(raw_data)) {
@@ -195,12 +203,10 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
 #' @param domain Character.
 #' @param rule_set `rule_set`.
 #' @param raw_data Named list of tibbles.
-#' @param source_meta Tibble.
 #' @param config `sdtm_config`.
 #' @return Tibble.
 #' @export
-build_domain_from_sources <- function(domain, rule_set, raw_data,
-                                      source_meta, config) {
+build_domain_from_sources <- function(domain, rule_set, raw_data, config) {
   dom_rules <- rule_set$rules[[domain]]
   sources_needed <- unique(unlist(lapply(dom_rules, function(r) r$params$dataset)))
   sources_needed <- sources_needed[!is.na(sources_needed)]
@@ -889,15 +895,13 @@ build_relrec <- function(relationship_specs, domain_data, config) {
 
 #' DM domain plugin
 #' @param target_meta Tibble.
-#' @param source_meta Tibble.
 #' @param raw_data Named list.
 #' @param config `sdtm_config`.
 #' @param rule_set `rule_set`.
 #' @return `build_result` for DM.
 #' @export
-build_dm_plugin <- function(target_meta, source_meta, raw_data,
-                            config, rule_set) {
-  build_domain("DM", target_meta, source_meta, raw_data, config, rule_set)
+build_dm_plugin <- function(target_meta, raw_data, config, rule_set) {
+  build_domain("DM", target_meta, raw_data, config, rule_set)
 }
 
 #' Trial design domain plugins
@@ -917,14 +921,12 @@ build_ta_tv_te_ts_plugins <- function(domains = c("TA","TV","TE","TS"),
 
 #' SV domain plugin
 #' @param target_meta Tibble.
-#' @param source_meta Tibble.
 #' @param raw_data Named list.
 #' @param config `sdtm_config`.
 #' @param rule_set `rule_set`.
 #' @return `build_result` for SV.
 #' @export
-build_sv_plugin <- function(target_meta, source_meta, raw_data,
-                            config, rule_set) {
+build_sv_plugin <- function(target_meta, raw_data, config, rule_set) {
   rlang::inform("SV domain plugin is not yet implemented.")
   list()
 }
@@ -941,10 +943,10 @@ build_sv_plugin <- function(target_meta, source_meta, raw_data,
 #' Domains sheet, and domains are logged by CLASS grouping.
 #'
 #' @param target_meta Tibble.
-#' @param source_meta Tibble.
 #' @param raw_data Named list of tibbles.
 #' @param config `sdtm_config`.
 #' @param rule_set `rule_set`.
+#' @param source_meta Tibble or `NULL`. Optional; not used at runtime.
 #' @param domains Character vector or `NULL`. If `NULL`, builds all domains
 #'   in the rule\_set. Otherwise builds only the listed domains.
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata from
@@ -957,8 +959,9 @@ build_sv_plugin <- function(target_meta, source_meta, raw_data,
 #' @param verbose Logical. Default `TRUE`.
 #' @return Named list of `build_result` objects, keyed by domain.
 #' @export
-build_all_domains <- function(target_meta, source_meta, raw_data,
+build_all_domains <- function(target_meta, raw_data,
                               config, rule_set,
+                              source_meta = NULL,
                               domains = NULL,
                               domain_meta = NULL,
                               value_level_meta = NULL,
@@ -1010,7 +1013,6 @@ build_all_domains <- function(target_meta, source_meta, raw_data,
       build_domain(
         domain      = dom,
         target_meta = target_meta,
-        source_meta = source_meta,
         raw_data    = raw_data,
         config      = config,
         rule_set    = rule_set,
