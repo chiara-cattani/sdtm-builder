@@ -45,7 +45,11 @@ visit_map:
 
 ct:
   files:
-    - "inst/extdata/starter_kit/ct_codelist.csv"
+    - "inst/extdata/starter_kit/Study_CT.xlsx"
+
+# Study metadata (target metadata, domains, variables, value-level, where clauses)
+metadata:
+  file: "inst/extdata/starter_kit/Study_Metadata.xlsx"
 
 # Epoch definitions — study-day windows relative to RFSTDTC
 # Use start_day: null for "no lower bound" and end_day: null for "no upper bound"

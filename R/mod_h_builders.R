@@ -21,6 +21,8 @@
 #'   value from `config$create_supp` is used (itself defaulting to `TRUE`).
 #'   Set `FALSE` to keep all variables in the main domain instead of
 #'   splitting to SUPP--.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata from
+#'   [read_study_metadata_excel()]. If provided, used for sorting and labeling.
 #' @param return_provenance Logical. Default `TRUE`.
 #' @param validate Logical. Default `TRUE`.
 #' @param verbose Logical. Default `TRUE`.
@@ -28,7 +30,7 @@
 #' @export
 build_domain <- function(domain, target_meta, source_meta, raw_data,
                          config, rule_set, dm_data = NULL, sv_data = NULL,
-                         create_supp = NULL,
+                         create_supp = NULL, domain_meta = NULL,
                          return_provenance = TRUE, validate = TRUE,
                          verbose = TRUE) {
   domain <- toupper(domain)
@@ -161,7 +163,8 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
   # Finalize (selects only non-SUPP target variables when create_supp=TRUE,
   # or keeps all target variables when create_supp=FALSE)
   final <- finalize_domain(data, domain, dom_meta, config,
-                           create_seq = FALSE, create_supp = create_supp)
+                           create_seq = FALSE, create_supp = create_supp,
+                           domain_meta = domain_meta)
   data <- final$data
 
   # Validate
@@ -511,11 +514,14 @@ derive_variable <- function(data, var, rule, context) {
 #' @param create_seq Logical. Default `TRUE`.
 #' @param create_supp Logical. Default `TRUE`.
 #' @param strict_labels Logical. Default `TRUE`.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata from
+#'   [read_study_metadata_excel()]. If provided, uses `keys` column
+#'   to sort rows and `description` column to set the dataset label.
 #' @return Named list.
 #' @export
 finalize_domain <- function(data, domain, target_meta, config,
                             create_seq = TRUE, create_supp = TRUE,
-                            strict_labels = TRUE) {
+                            strict_labels = TRUE, domain_meta = NULL) {
   dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
   target_vars <- dom_meta$var
 
@@ -556,6 +562,27 @@ finalize_domain <- function(data, domain, target_meta, config,
     }
     if (expected_type == "num" && !is.numeric(data[[v]])) {
       data[[v]] <- suppressWarnings(as.numeric(data[[v]]))
+    }
+  }
+
+  # Sort by domain keys from domain_meta (if available)
+  if (!is.null(domain_meta)) {
+    dom_info <- dplyr::filter(domain_meta, .data[["domain"]] == .env[["domain"]])
+    if (nrow(dom_info) > 0L && !is.na(dom_info$keys[1L])) {
+      key_vars <- trimws(strsplit(dom_info$keys[1L], ",\\s*")[[1L]])
+      valid_keys <- intersect(key_vars, names(data))
+      if (length(valid_keys) > 0L) {
+        data <- dplyr::arrange(data, dplyr::across(dplyr::all_of(valid_keys)))
+      }
+    }
+    # Set dataset label from domain description
+    if (nrow(dom_info) > 0L && !is.na(dom_info$description[1L])) {
+      attr(data, "label") <- dom_info$description[1L]
+    }
+    # Store structure as comment attribute
+    if (nrow(dom_info) > 0L && "structure" %in% names(dom_info) &&
+        !is.na(dom_info$structure[1L])) {
+      comment(data) <- dom_info$structure[1L]
     }
   }
 
@@ -698,6 +725,10 @@ build_sv_plugin <- function(target_meta, source_meta, raw_data,
 #' (DM is always built first, then domains that need DM data, etc.) and
 #' builds each domain sequentially, passing upstream results downstream.
 #'
+#' When `domain_meta` is supplied (from [read_study_metadata_excel()]), the
+#' build order follows the CLASS_ORDER and DOMAIN_LEVEL_ORDER from the
+#' Domains sheet, and domains are logged by CLASS grouping.
+#'
 #' @param target_meta Tibble.
 #' @param source_meta Tibble.
 #' @param raw_data Named list of tibbles.
@@ -705,6 +736,9 @@ build_sv_plugin <- function(target_meta, source_meta, raw_data,
 #' @param rule_set `rule_set`.
 #' @param domains Character vector or `NULL`. If `NULL`, builds all domains
 #'   in the rule\_set. Otherwise builds only the listed domains.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata from
+#'   [read_study_metadata_excel()]. Controls build order and provides
+#'   keys/description/structure for finalization.
 #' @param create_supp Logical or `NULL`. Default `NULL` (inherits from
 #'   `config$create_supp`, itself defaulting to `TRUE`). Set `FALSE` to
 #'   keep all variables in the main domain instead of splitting to SUPP--.
@@ -715,6 +749,7 @@ build_sv_plugin <- function(target_meta, source_meta, raw_data,
 build_all_domains <- function(target_meta, source_meta, raw_data,
                               config, rule_set,
                               domains = NULL,
+                              domain_meta = NULL,
                               create_supp = NULL,
                               validate = TRUE,
                               verbose = TRUE) {
@@ -726,25 +761,33 @@ build_all_domains <- function(target_meta, source_meta, raw_data,
     abort("No domains found to build.")
   }
 
-  # Determine build order: DM first, then others
- # Scan rules to identify which domains reference dm_data / RFSTDTC
-  needs_dm <- character()
-  for (dom in all_doms) {
-    if (dom == "DM") next
-    dom_rules <- rule_set$rules[[dom]]
-    for (r in dom_rules) {
-      if (r$type %in% c("dy", "epoch") ||
-          (!is.null(r$params$ref_var) && toupper(r$params$ref_var) == "RFSTDTC")) {
-        needs_dm <- c(needs_dm, dom)
-        break
+  # Determine build order:
+  # If domain_meta is provided, use its order (already sorted by
+  # class_order + domain_level_order from read_study_metadata_excel)
+  if (!is.null(domain_meta) && nrow(domain_meta) > 0L) {
+    meta_order <- domain_meta$domain
+    # Filter to domains that actually have rules
+    ordered <- intersect(meta_order, all_doms)
+    # Add any remaining domains not in domain_meta
+    ordered <- c(ordered, setdiff(all_doms, ordered))
+
+    if (verbose) {
+      # Log by CLASS groups
+      classes <- unique(domain_meta$class)
+      for (cls in classes) {
+        cls_doms <- dplyr::filter(domain_meta, .data$class == cls)$domain
+        cls_doms <- intersect(cls_doms, ordered)
+        if (length(cls_doms) > 0L) {
+          cli::cli_alert_info("  {cls}: {paste(cls_doms, collapse = ', ')}")
+        }
       }
     }
+  } else {
+    # Fallback: DM first, then everything else
+    ordered <- character()
+    if ("DM" %in% all_doms) ordered <- "DM"
+    ordered <- c(ordered, setdiff(all_doms, ordered))
   }
-
-  # Build order: DM first (if present), then everything else
-  ordered <- character()
-  if ("DM" %in% all_doms) ordered <- "DM"
-  ordered <- c(ordered, setdiff(all_doms, ordered))
 
   results <- list()
   dm_built <- NULL
@@ -761,6 +804,7 @@ build_all_domains <- function(target_meta, source_meta, raw_data,
         rule_set    = rule_set,
         dm_data     = dm_built,
         create_supp = create_supp,
+        domain_meta = domain_meta,
         validate    = validate,
         verbose     = verbose
       ),

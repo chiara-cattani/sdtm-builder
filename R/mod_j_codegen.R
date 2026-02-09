@@ -214,7 +214,12 @@ gen_qmd_domain <- function(domain, rule_set, target_meta,
 }
 
 #' Generate project scaffold (directories and template files)
-#' @param output_dir Character.
+#'
+#' Creates the standard directory structure for an SDTM study project and
+#' copies the `Study_Metadata.xlsx` and `Study_CT.xlsx` templates into
+#' the `metadata/` directory.
+#'
+#' @param output_dir Character. Root directory for the new project.
 #' @param config `sdtm_config`.
 #' @param domains Character vector.
 #' @return Invisible `NULL`.
@@ -224,6 +229,40 @@ gen_project_scaffold <- function(output_dir, config, domains) {
   for (d in dirs) {
     dir.create(file.path(output_dir, d), recursive = TRUE, showWarnings = FALSE)
   }
+
+  # Copy Study_Metadata.xlsx and Study_CT.xlsx templates to metadata/
+  template_dir <- system.file("extdata", "starter_kit", package = "sdtmbuilder")
+  if (nchar(template_dir) > 0L) {
+    meta_src <- file.path(template_dir, "Study_Metadata.xlsx")
+    ct_src   <- file.path(template_dir, "Study_CT.xlsx")
+    meta_dst <- file.path(output_dir, "metadata")
+
+    if (file.exists(meta_src)) {
+      file.copy(meta_src, file.path(meta_dst, "Study_Metadata.xlsx"),
+                overwrite = FALSE)
+      cli::cli_alert_info("Copied Study_Metadata.xlsx to metadata/")
+    }
+    if (file.exists(ct_src)) {
+      file.copy(ct_src, file.path(meta_dst, "Study_CT.xlsx"),
+                overwrite = FALSE)
+      cli::cli_alert_info("Copied Study_CT.xlsx to metadata/")
+    }
+
+    # Copy config.yaml
+    config_src <- file.path(template_dir, "config.yaml")
+    if (file.exists(config_src)) {
+      file.copy(config_src, file.path(output_dir, "config.yaml"),
+                overwrite = FALSE)
+    }
+
+    # Copy source_meta if present
+    src_meta <- file.path(template_dir, "source_meta.csv")
+    if (file.exists(src_meta)) {
+      file.copy(src_meta, file.path(meta_dst, "source_meta.csv"),
+                overwrite = FALSE)
+    }
+  }
+
   cli::cli_alert_success("Project scaffold created at {output_dir}")
   invisible(NULL)
 }

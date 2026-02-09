@@ -4,6 +4,12 @@
 
 #' Read target (SDTM) metadata
 #'
+#' @description
+#' `r lifecycle::badge("deprecated")`
+#'
+#' Use [read_study_metadata_excel()] instead, which reads the multi-sheet
+#' `Study_Metadata.xlsx` workbook.
+#'
 #' Reads a CSV or Excel file containing one row per SDTM variable per domain.
 #' Column names are lowercased automatically. Duplicate `(domain, var)` pairs
 #' cause an error.
@@ -17,6 +23,9 @@
 #' @export
 read_target_meta <- function(path, sheet = 1L, domain = NULL,
                              colmap = NULL, encoding = "UTF-8") {
+  .Deprecated("read_study_metadata_excel",
+              msg = paste("read_target_meta() is deprecated.",
+                          "Use read_study_metadata_excel() with Study_Metadata.xlsx instead."))
   checkmate::assert_string(path, min.chars = 1L)
   ext <- tolower(tools::file_ext(path))
   df <- switch(ext,
@@ -56,6 +65,9 @@ read_target_meta <- function(path, sheet = 1L, domain = NULL,
 
 #' Read source (raw) metadata
 #'
+#' @description
+#' `r lifecycle::badge("deprecated")`
+#'
 #' Reads a CSV or Excel file describing raw-data columns: dataset, column, type.
 #'
 #' @param path Character. Path to `.csv` or `.xlsx` file.
@@ -65,6 +77,10 @@ read_target_meta <- function(path, sheet = 1L, domain = NULL,
 #' @return A tibble with source metadata columns.
 #' @export
 read_source_meta <- function(path, sheet = 1L, colmap = NULL, encoding = "UTF-8") {
+  .Deprecated("read_source_meta",
+              msg = paste("read_source_meta() is deprecated.",
+                          "Source metadata is still supported via CSV/Excel but",
+                          "target metadata should use read_study_metadata_excel()."))
   checkmate::assert_string(path, min.chars = 1L)
   ext <- tolower(tools::file_ext(path))
   df <- switch(ext,
@@ -92,6 +108,12 @@ read_source_meta <- function(path, sheet = 1L, colmap = NULL, encoding = "UTF-8"
 
 #' Read controlled terminology library
 #'
+#' @description
+#' `r lifecycle::badge("deprecated")`
+#'
+#' Use [read_study_ct_excel()] instead, which reads the multi-sheet
+#' `Study_CT.xlsx` workbook with Codelists and Codelists_terms sheets.
+#'
 #' Reads a CSV or Excel file containing codelist-level mappings. Required
 #' columns: `codelist_id`, `coded_value`.
 #'
@@ -104,6 +126,9 @@ read_source_meta <- function(path, sheet = 1L, colmap = NULL, encoding = "UTF-8"
 #' @export
 read_ct_library <- function(path, sheet = 1L, colmap = NULL,
                             version = NULL, sponsor_extension = NULL) {
+  .Deprecated("read_study_ct_excel",
+              msg = paste("read_ct_library() is deprecated.",
+                          "Use read_study_ct_excel() with Study_CT.xlsx instead."))
   checkmate::assert_string(path, min.chars = 1L)
   ext <- tolower(tools::file_ext(path))
   df <- switch(ext,
@@ -244,10 +269,18 @@ normalize_source_meta <- function(source_meta, config = NULL) {
 #' Expand value-level metadata
 #'
 #' Joins value-level metadata rows into the target metadata when a
-#' `value_level_id` column is present.
+#' `value_level_id` column is present. Each VLM_ID + WHERE_CLAUSE_ID
+#' combination creates a separate condition branch (case_when style).
+#'
+#' When the value-level metadata contains `condition` and `wc_varname`
+#' columns (from [read_study_metadata_excel()]), these are parsed into
+#' R expressions suitable for `case_when` derivation rules.
 #'
 #' @param target_meta Tibble. Target metadata with optional `value_level_id`.
 #' @param value_level_meta Tibble or `NULL`. Value-level metadata to join.
+#'   May contain columns: `value_level_id`, `condition`, `wc_varname`,
+#'   `wc_comparator`, `wc_value`, `vlm_type`, `codelist_id`, `length`,
+#'   `significant_digits`.
 #' @return Expanded tibble.
 #' @export
 expand_value_level_meta <- function(target_meta, value_level_meta) {
@@ -256,8 +289,54 @@ expand_value_level_meta <- function(target_meta, value_level_meta) {
   vlm <- dplyr::filter(target_meta, !is.na(.data$value_level_id))
   non <- dplyr::filter(target_meta, is.na(.data$value_level_id))
   if (nrow(vlm) == 0L) return(target_meta)
-  expanded <- dplyr::left_join(vlm, value_level_meta, by = "value_level_id",
-                                relationship = "many-to-many")
+
+  # Select relevant VLM columns for joining (avoid column collisions)
+  vlm_join_cols <- c("value_level_id")
+  vlm_extra_cols <- intersect(
+    c("condition", "wc_varname", "wc_comparator", "wc_value",
+      "vlm_type", "where_clause_id"),
+    names(value_level_meta)
+  )
+
+  # Override type/length/codelist from VLM if present
+  vlm_override_cols <- intersect(
+    c("codelist_id", "length", "significant_digits"),
+    names(value_level_meta)
+  )
+
+  vlm_select <- unique(c(vlm_join_cols, vlm_extra_cols, vlm_override_cols))
+  vlm_data <- value_level_meta[, intersect(vlm_select, names(value_level_meta)), drop = FALSE]
+
+  # Deduplicate VLM data for joining
+  vlm_data <- dplyr::distinct(vlm_data)
+
+  expanded <- dplyr::left_join(vlm, vlm_data, by = "value_level_id",
+                                relationship = "many-to-many",
+                                suffix = c("", ".vlm"))
+
+  # Override target columns with VLM-specific values where available
+  if ("vlm_type" %in% names(expanded)) {
+    expanded$type <- dplyr::coalesce(expanded$vlm_type, expanded$type)
+    expanded$vlm_type <- NULL
+  }
+  # Handle codelist_id override from VLM
+  if ("codelist_id.vlm" %in% names(expanded)) {
+    expanded$codelist_id <- dplyr::coalesce(expanded$codelist_id.vlm, expanded$codelist_id)
+    expanded$codelist_id.vlm <- NULL
+  }
+  # Handle length override from VLM
+  if ("length.vlm" %in% names(expanded)) {
+    expanded$length <- dplyr::coalesce(expanded$length.vlm, expanded$length)
+    expanded$length.vlm <- NULL
+  }
+  # Handle significant_digits override from VLM
+  if ("significant_digits.vlm" %in% names(expanded)) {
+    expanded$significant_digits <- dplyr::coalesce(
+      expanded$significant_digits.vlm, expanded$significant_digits
+    )
+    expanded$significant_digits.vlm <- NULL
+  }
+
   dplyr::bind_rows(non, expanded)
 }
 

@@ -7,10 +7,10 @@
 > **A metadata-driven R package for building SDTM domains from raw clinical
 > data.**
 
-`sdtmbuilder` turns three metadata files (target\_meta, source\_meta,
-ct\_codelist) into validated SDTM datasets.  Every derivation rule is declared
-in the metadata — **no hand-coding per domain** — so a single engine
-(`build_domain()`) processes any CDISC domain.
+`sdtmbuilder` turns structured metadata files (Study\_Metadata.xlsx,
+source\_meta, Study\_CT.xlsx) into validated SDTM datasets.  Every derivation
+rule is declared in the metadata — **no hand-coding per domain** — so a single
+engine (`build_domain()`) processes any CDISC domain.
 
 ---
 
@@ -120,7 +120,7 @@ export_xpt(results$AE$data, "AE", "output/")
 ```
 +------------------------------------------------------------------+
 |                         Metadata Layer                            |
-|  target_meta.csv/xlsx   source_meta.csv/xlsx   ct_codelist.csv   |
+|  Study_Metadata.xlsx    source_meta.csv/xlsx   Study_CT.xlsx     |
 |  config.yaml                                                     |
 +----------------+--------------------------+----------------------+
                  |                          |
@@ -160,7 +160,11 @@ export_xpt(results$AE$data, "AE", "output/")
 | Module | File | Purpose |
 |--------|------|---------|
 | A | `mod_a_primitives.R` | S3 classes: `sdtm_config`, `meta_bundle`, `rule_set`, `build_context`, `validation_report`, `log_sink` |
-| B | `mod_b_metadata.R` | Read, validate, normalize metadata files (CSV & Excel) |
+| B | `mod_b_metadata.R` | Read, validate, normalize metadata files (CSV & Excel) — legacy readers deprecated |
+| — | `read_study_metadata_excel.R` | Read multi-sheet Study\_Metadata.xlsx (Meta, Domains, Variables, Value Level, Where Clauses) |
+| — | `read_study_ct_excel.R` | Read multi-sheet Study\_CT.xlsx (Codelists, Codelists\_terms) |
+| — | `method_mapping.R` | Map METHOD column to internal rule\_type values |
+| — | `validate_study_metadata.R` | Cross-sheet validation (domains, VLM, CT refs, extensibility) |
 | C | `mod_c_rules.R` | Parse JSON rule\_params into compiled rule\_set |
 | D | `mod_d_dependency.R` | Build dependency graph, topological sort |
 | E | `mod_e_data_access.R` | Load raw data, standardize names/types, apply missing conventions |
@@ -184,19 +188,32 @@ export_xpt(results$AE$data, "AE", "output/")
 ### Step 1 — Prepare Metadata
 
 The package ships with starter-kit metadata in `inst/extdata/starter_kit/`.
-You can use CSV **or** Excel (.xlsx) files — both are supported.
+The primary metadata format uses multi-sheet Excel workbooks:
+
+- **`Study_Metadata.xlsx`** — Contains sheets: Meta, Standards, Domains,
+  Variables, Value Level, Where Clauses, Method
+- **`Study_CT.xlsx`** — Contains sheets: Codelists, Codelists\_terms
+- **`source_meta.csv`** — Raw data column descriptions (CSV or Excel)
 
 ```r
-# Read from CSV
-target_meta <- read_target_meta("target_meta.csv")
-source_meta <- read_source_meta("source_meta.csv")
-ct_lib      <- read_ct_library("ct_codelist.csv")
+# Read study metadata from multi-sheet Excel workbook
+study_meta <- read_study_metadata_excel("metadata/Study_Metadata.xlsx")
+# Returns: list(study_name, target_meta, domain_meta, value_level_meta)
 
-# Or read from Excel (same functions, automatic detection by extension)
-target_meta <- read_target_meta("target_meta.xlsx")
-source_meta <- read_source_meta("source_meta.xlsx")
-ct_lib      <- read_ct_library("ct_codelist.xlsx")
+# Read controlled terminology from multi-sheet Excel workbook
+ct_lib <- read_study_ct_excel("metadata/Study_CT.xlsx")
+# Returns: flat tibble with codelist_id, coded_value, input_value, decode, ...
+
+# Read source metadata (unchanged — CSV or single-sheet Excel)
+source_meta <- read_source_meta("metadata/source_meta.csv")
+
+# Validate cross-references between sheets
+validate_study_metadata(study_meta, ct_lib)
 ```
+
+> **Legacy CSV readers** (`read_target_meta()`, `read_ct_library()`) are
+> deprecated. Use `read_study_metadata_excel()` and `read_study_ct_excel()`
+> instead.
 
 ### Step 2 — Create Configuration
 
@@ -305,38 +322,117 @@ gen_domain_script("AE", rule_set, target_meta, source_meta, config,
 > columns (see tables below). Any additional columns in your files are
 > silently preserved — no error, no data loss.
 
+### Study\_Metadata.xlsx — Multi-Sheet Target Metadata
+
+The primary metadata workbook contains all study-level, domain-level,
+and variable-level definitions across multiple sheets.
+
+#### Sheet: Meta
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Select` | **Yes** | `Y` for the active study row |
+| `STUDY_NAME` | **Yes** | Study identifier |
+
+#### Sheet: Domains
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Select` | **Yes** | `Y` to include this domain |
+| `CLASS_ORDER` | **Yes** | Numeric sort order by domain class |
+| `DOMAIN_LEVEL_ORDER` | **Yes** | Numeric sort order within class |
+| `CLASS` | **Yes** | Domain class (SPECIAL PURPOSE, EVENTS, FINDINGS, ...) |
+| `DOMAIN` | **Yes** | Domain abbreviation (DM, AE, LB, ...) |
+| `KEYS` | No | Comma-separated sort keys (e.g., `STUDYID, USUBJID, LBTESTCD`) |
+| `DESCRIPTION` | No | Dataset label (e.g., "Laboratory Test Results") |
+| `STRUCTURE` | No | Dataset structure (e.g., "One record per lab test per subject") |
+
+#### Sheet: Variables
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Select` | **Yes** | `Y` to include this variable |
+| `CLASS_ORDER` | No | Sort order (1st priority) |
+| `DOMAIN_LEVEL_ORDER` | No | Sort order (2nd priority) |
+| `ROLE_ORDER` | No | Sort order (3rd priority) |
+| `VAR_MODEL_ORDER` | No | Sort order (4th priority) |
+| `SEQORDER` | No | Sort order (5th priority) |
+| `DOMAIN` | **Yes** | Domain abbreviation |
+| `VAR_MODEL` | No | Variable model name without domain prefix |
+| `VARNAME` | **Yes** | Full variable name (e.g., `LBTESTCD`) |
+| `VARLABEL` | **Yes** | Variable label |
+| `DATA_TYPE` | **Yes** | `text`, `integer`, `float`, `datetime`, `durationDatetime` |
+| `LENGTH` | No | Maximum length |
+| `SIGNIFICANT_DIGITS` | No | Decimal precision for numerics |
+| `CODELIST_ID` | No | Codelist identifier |
+| `ROLE` | No | CDISC role (Identifier, Topic, etc.) |
+| `CORE` | No | `Req`, `Exp`, or `Perm` |
+| `VLM_ID` | No | Value-level metadata identifier |
+| `METHOD` | No | Derivation method (SEQ, STRESN, USUBJID, DY, etc.) |
+
+#### Sheet: Value Level
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Select` | **Yes** | `Y` to include |
+| `DOMAIN` | **Yes** | Domain abbreviation |
+| `VARNAME` | **Yes** | Variable the VLM applies to |
+| `VLM_ID` | **Yes** | Matches VLM\_ID in Variables sheet |
+| `WHERE_CLAUSE_ID` | **Yes** | Links to Where Clauses sheet |
+| `DATA_TYPE` | No | Override data type for this condition |
+| `LENGTH` | No | Override length |
+| `SIGNIFICANT_DIGITS` | No | Override precision |
+| `CODELIST_ID` | No | Override codelist |
+
+#### Sheet: Where Clauses
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Select` | **Yes** | `Y` to include |
+| `WHERE_CLAUSE_ID` | **Yes** | Unique identifier (e.g., `LB.LBTESTCD.GLUC`) |
+| `DOMAIN` | **Yes** | Domain abbreviation |
+| `VARNAME` | **Yes** | Variable to filter on |
+| `COMPARATOR` | **Yes** | `EQ`, `IN`, `NE`, `NOTIN` |
+| `VALUE` | **Yes** | Value(s) — pipe-separated for IN (e.g., `GLUC\|WBC\|HGB`) |
+
+#### Sheet: Method (informational)
+
+| Column | Description |
+|--------|-------------|
+| `Select` | `Y` to include |
+| `METHOD` | Method identifier (SEQ, STRESN, etc.) |
+| `DESCRIPTION` | Human-readable derivation description |
+
+### Study\_CT.xlsx — Multi-Sheet Controlled Terminology
+
+#### Sheet: Codelists
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Select` | **Yes** | `Y` to include |
+| `CODELIST_NAME` | No | Human-readable name |
+| `CODELIST_CODE` | No | CDISC code (e.g., C66731) |
+| `CODELIST_ID` | **Yes** | Primary identifier (e.g., `YN`, `SEX`, `LBTESTCD`) |
+| `IS_EXTENSIBLE` | No | `Yes` or `No` |
+
+#### Sheet: Codelists\_terms
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Select` | **Yes** | `Y` to include |
+| `CODELIST_NAME` | No | Codelist name |
+| `CODELIST_ID` | **Yes** | Matches Codelists sheet |
+| `TERM_CODE` | No | CDISC term code (e.g., C49488) |
+| `SUBMISSION_VALUE` | **Yes** | The SDTM standard term |
+| `DECODE` | No | Collected value (if different from submission value) |
+
 ### SELECT Column — Study-Specific Filtering
 
-All three metadata files support an optional `select` column. When present,
-only rows with `select = "Y"` (case-insensitive) are loaded; all other rows
+All metadata sheets support a `Select` column. When present,
+only rows with `Select = "Y"` (case-insensitive) are loaded; all other rows
 are silently excluded. This allows you to maintain a **global metadata set**
-covering all studies and select the study-specific subset via the `select`
+covering all studies and select the study-specific subset via the `Select`
 column.
-
-If the `select` column is absent, **all rows are loaded** (backward
-compatible).
-
-### target\_meta.csv / target\_meta.xlsx
-
-Each row defines one SDTM variable for one domain.
-
-| Column | Type | Required | Description |
-|--------|------|----------|-------------|
-| `select` | char | No | `Y` to include this row for the study |
-| `domain` | char | **Yes** | SDTM domain abbreviation (DM, AE, VS, ...) |
-| `var` | char | **Yes** | SDTM variable name (STUDYID, AETERM, ...) |
-| `type` | char | **Yes** | `char` or `num` |
-| `length` | num | No | Max character length or numeric width |
-| `label` | char | **Yes** | Variable label (max 40 chars) |
-| `role` | char | No | CDISC role (Identifier, Topic, ...) |
-| `core` | char | No | `Req`, `Exp`, or `Perm` |
-| `codelist_id` | char | No | CT codelist ID (e.g. C66769, YN, ROUTE) |
-| `order` | num | Display order within the domain |
-| `is_key` | char | `Y` if part of the natural key |
-| `to_supp` | char | `Y` to move this variable to SUPP-- |
-| `rule_type` | char | Derivation rule type (see Rule Types below) |
-| `rule_params` | char | JSON string with rule parameters |
-| `depends_on` | char | Semicolon-separated list of variables this derivation depends on |
 
 ### source\_meta.csv / source\_meta.xlsx
 
@@ -350,21 +446,6 @@ Each row describes one column in a raw dataset.
 | `type` | char | **Yes** | `character` or `numeric` |
 | `label` | char | No | Description |
 | `is_key` | char | No | `Y` if key column |
-| `notes` | char | No | Free-text notes |
-
-### ct\_codelist.csv / ct\_codelist.xlsx
-
-Controlled terminology mappings.
-
-| Column | Type | Required | Description |
-|--------|------|----------|-------------|
-| `select` | char | No | `Y` to include this row for the study |
-| `codelist_id` | char | **Yes** | Codelist identifier (C66769, YN, ROUTE, ...) |
-| `codelist_name` | char | No | Codelist description |
-| `input_value` | char | No | Value found in raw data |
-| `coded_value` | char | **Yes** | CDISC-coded value |
-| `decode` | char | No | Human-readable decode |
-| `case_sensitive` | char | No | `Y` or `N` |
 | `notes` | char | No | Free-text notes |
 
 ### config.yaml
