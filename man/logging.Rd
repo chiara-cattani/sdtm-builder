@@ -40,12 +40,12 @@ log_error(
 
 \item{domain}{Character. Domain context. Default \code{NA}.}
 
-\item{.sink}{\code{log_sink} or \code{NULL}. Target sink.}
+\item{.sink}{Object created by \code{\link[=new_log_sink]{new_log_sink()}} or \code{NULL}. Target sink.}
 }
 \value{
 Invisibly returns \code{NULL}.
 }
 \description{
 Emit structured log messages with timestamp, module, severity, and context.
-Routes to the active \link{log_sink} or console.
+Routes to the active \code{\link[=new_log_sink]{new_log_sink()}} or console.
 }

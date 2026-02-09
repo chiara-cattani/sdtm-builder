@@ -13,7 +13,8 @@ new_sdtm_config(
   sponsor_overrides = list(),
   imputation_policy = list(),
   log_level = "INFO",
-  legacy_quirks = list()
+  legacy_quirks = list(),
+  create_supp = TRUE
 )
 }
 \arguments{
@@ -42,6 +43,11 @@ Default \code{"INFO"}.}
 
 \item{legacy_quirks}{Named list. Backward-compat flags, e.g.
 \code{list(seq_zero_based = FALSE, blank_as_na = TRUE)}.}
+
+\item{create_supp}{Logical. Default \code{TRUE}. When \code{FALSE}, supplemental
+qualifier variables are kept in the main domain instead of being
+split into a SUPP-- dataset. \code{build_domain()} uses this value
+unless explicitly overridden.}
 }
 \value{
 An S3 object of class \code{sdtm_config} (a named list).

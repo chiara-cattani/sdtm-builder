@@ -10,13 +10,13 @@
 #'
 #' @description
 #' Emit structured log messages with timestamp, module, severity, and context.
-#' Routes to the active [log_sink] or console.
+#' Routes to the active [new_log_sink()] or console.
 #'
 #' @param message Character. Log message (supports `{glue}` syntax).
 #' @param ... Named values for glue interpolation.
 #' @param module Character. Originating module. Default `NA`.
 #' @param domain Character. Domain context. Default `NA`.
-#' @param .sink `log_sink` or `NULL`. Target sink.
+#' @param .sink Object created by [new_log_sink()] or `NULL`. Target sink.
 #'
 #' @return Invisibly returns `NULL`.
 #'

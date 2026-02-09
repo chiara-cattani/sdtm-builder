@@ -13,6 +13,7 @@ build_domain(
   rule_set,
   dm_data = NULL,
   sv_data = NULL,
+  create_supp = NULL,
   return_provenance = TRUE,
   validate = TRUE,
   verbose = TRUE
@@ -31,9 +32,15 @@ build_domain(
 
 \item{rule_set}{\code{rule_set}.}
 
-\item{dm_data}{Tibble or \code{NULL}.}
+\item{dm_data}{Tibble or \code{NULL}. DM data for RFSTDTC; also accepts
+a full \code{build_result} list (auto-extracts \verb{$data}).}
 
 \item{sv_data}{Tibble or \code{NULL}.}
+
+\item{create_supp}{Logical or \code{NULL}. Default \code{NULL}, which means the
+value from \code{config$create_supp} is used (itself defaulting to \code{TRUE}).
+Set \code{FALSE} to keep all variables in the main domain instead of
+splitting to SUPP--.}
 
 \item{return_provenance}{Logical. Default \code{TRUE}.}
 

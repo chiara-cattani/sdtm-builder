@@ -40,7 +40,7 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Chiara Cattani \email{chiara.cattani@example.com}
+\strong{Maintainer}: Chiara Cattani \email{chiara.cattani.it@gmail.com}
 
 }
 \keyword{internal}
