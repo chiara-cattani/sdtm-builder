@@ -12,10 +12,12 @@
 #' Creates a named list containing:
 #' - `raw_data`: named list of tibbles (`dm_raw`, `ae_raw`, `cm_raw`, `mh_raw`,
 #'   `pr_raw`, `ex_raw`, `vs_raw`, `lb_raw`, `ds_raw`, `qs_raw`)
-#' - `target_meta`: tibble loaded from starter kit
+#' - `target_meta`: tibble from Study_Metadata.xlsx (Variables sheet)
 #' - `source_meta`: tibble loaded from starter kit
-#' - `ct_lib`: tibble loaded from starter kit
+#' - `ct_lib`: tibble from Study_CT.xlsx (Codelists + terms)
 #' - `config`: `sdtm_config` object
+#' - `domain_meta`: tibble from Study_Metadata.xlsx (Domains sheet)
+#' - `value_level_meta`: tibble or NULL from Study_Metadata.xlsx (Value Level sheet)
 #'
 #' All randomness is controlled by `seed`.  Calling `make_dummy_study(seed=123)`
 #' always produces identical output.
@@ -62,27 +64,34 @@ make_dummy_study <- function(seed = 123,
   }
 
   # ---------------------------------------------------------------------------
-  # Load metadata
+
+  # Load metadata from the new Excel-based system
   # ---------------------------------------------------------------------------
-  target_meta <- utils::read.csv(
-    file.path(starter_kit_dir, "target_meta.csv"),
-    stringsAsFactors = FALSE, na.strings = ""
-  )
+  meta_xlsx <- file.path(starter_kit_dir, "Study_Metadata.xlsx")
+  ct_xlsx   <- file.path(starter_kit_dir, "Study_CT.xlsx")
+
+  if (!file.exists(meta_xlsx)) {
+    abort(glue::glue("Study_Metadata.xlsx not found in starter kit: {meta_xlsx}"))
+  }
+  if (!file.exists(ct_xlsx)) {
+    abort(glue::glue("Study_CT.xlsx not found in starter kit: {ct_xlsx}"))
+  }
+
+  study_meta  <- read_study_metadata_excel(meta_xlsx)
+  target_meta <- study_meta$target_meta
+  domain_meta <- study_meta$domain_meta
+  value_level_meta <- study_meta$value_level_meta
+
+  ct_lib <- read_study_ct_excel(ct_xlsx)
+
+  # Source metadata (still CSV)
   source_meta <- utils::read.csv(
     file.path(starter_kit_dir, "source_meta.csv"),
     stringsAsFactors = FALSE, na.strings = ""
   )
-
-  ct_lib <- utils::read.csv(
-    file.path(starter_kit_dir, "ct_codelist.csv"),
-    stringsAsFactors = FALSE, na.strings = ""
-  )
-  cfg_yaml <- yaml::read_yaml(file.path(starter_kit_dir, "config.yaml"))
-
-  # Convert to tibbles
-  target_meta <- tibble::as_tibble(target_meta)
   source_meta <- tibble::as_tibble(source_meta)
-  ct_lib      <- tibble::as_tibble(ct_lib)
+
+  cfg_yaml <- yaml::read_yaml(file.path(starter_kit_dir, "config.yaml"))
 
   # ---------------------------------------------------------------------------
   # Build config object
@@ -652,9 +661,11 @@ make_dummy_study <- function(seed = 123,
       ds_raw = ds_raw,
       qs_raw = qs_raw
     ),
-    target_meta = target_meta,
-    source_meta = source_meta,
-    ct_lib      = ct_lib,
-    config      = config
+    target_meta      = target_meta,
+    source_meta      = source_meta,
+    ct_lib           = ct_lib,
+    config           = config,
+    domain_meta      = domain_meta,
+    value_level_meta = value_level_meta
   )
 }

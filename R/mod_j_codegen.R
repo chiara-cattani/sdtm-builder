@@ -50,9 +50,18 @@ gen_domain_script <- function(domain, rule_set, target_meta, source_meta,
   .add("")
 
   .add("# --- Load metadata and config ---")
-  .add('config     <- yaml::read_yaml("inst/extdata/starter_kit/config.yaml")')
-  .add('target_meta <- read.csv("inst/extdata/starter_kit/target_meta.csv")')
-  .add('ct_lib      <- read.csv("inst/extdata/starter_kit/ct_codelist.csv")')
+  .add('config      <- yaml::read_yaml("inst/extdata/starter_kit/config.yaml")')
+  .add('study_meta  <- read_study_metadata_excel("inst/extdata/starter_kit/Study_Metadata.xlsx")')
+  .add('ct_lib      <- read_study_ct_excel("inst/extdata/starter_kit/Study_CT.xlsx")')
+  .add('target_meta <- study_meta$target_meta')
+  .add('source_meta <- study_meta$source_meta')
+  .add('domain_meta <- study_meta$domain_meta')
+  .add('value_level_meta <- study_meta$value_level_meta')
+  .add('')
+  .add("# Expand value-level metadata into target_meta")
+  .add("if (nrow(value_level_meta) > 0L) {")
+  .add("  target_meta <- expand_value_level_meta(target_meta, value_level_meta)")
+  .add("}")
   .add("")
 
   # Build dependency order
@@ -78,13 +87,39 @@ gen_domain_script <- function(domain, rule_set, target_meta, source_meta,
     .add("")
   }
 
-  .add("# --- Finalize ---")
+  .add("# --- Finalize: apply significant digits, length, variable order ---")
   target_vars <- paste0('"', dom_meta$var, '"', collapse = ", ")
   .add(glue::glue("target_vars <- c({target_vars})"))
   .add("data <- data[, intersect(target_vars, names(data)), drop = FALSE]")
   .add("")
+
+  # Add sig digits and length enforcement comments
+  sig_rows <- dplyr::filter(dom_meta, !is.na(.data$significant_digits))
+  if (nrow(sig_rows) > 0L) {
+    .add("# Apply significant digits rounding")
+    for (i in seq_len(nrow(sig_rows))) {
+      v <- sig_rows$var[i]
+      d <- sig_rows$significant_digits[i]
+      .add(glue::glue('if ("{v}" %in% names(data)) data[["{v}"]] <- signif(data[["{v}"]], {d})'))
+    }
+    .add("")
+  }
+
+  len_rows <- dplyr::filter(dom_meta, !is.na(.data$length))
+  char_len <- dplyr::filter(len_rows, .data$type %in% c("Char", "char", "character", "text"))
+  if (nrow(char_len) > 0L) {
+    .add("# Enforce character variable lengths")
+    for (i in seq_len(nrow(char_len))) {
+      v <- char_len$var[i]
+      l <- char_len$length[i]
+      .add(glue::glue('if ("{v}" %in% names(data)) data[["{v}"]] <- substr(data[["{v}"]], 1, {l})'))
+    }
+    .add("")
+  }
+
   .add(glue::glue("# --- Export ---"))
-  .add(glue::glue('haven::write_xpt(data, "output/{tolower(domain)}.xpt")'))
+  .add(glue::glue('export_xpt(data, domain = "{domain}", dir = "output",'))
+  .add(glue::glue('           domain_meta = dplyr::filter(domain_meta, domain == "{domain}"))'))
 
   script <- paste(lines, collapse = "\n")
 
@@ -132,6 +167,54 @@ render_rule_code <- function(var, rule, style = "tidyverse") {
     },
     epoch = {
       glue::glue('data <- derive_epoch(data, "{var}", "{p$dtc_var}", config$epoch_map, "{p$ref_var %||% "RFSTDTC"}")')
+    },
+    visitnum = {
+      glue::glue('data <- derive_visitnum(data, "{var}", "{p$visit_var %||% "VISIT"}")')
+    },
+    visitdy = {
+      glue::glue('data <- derive_visitdy(data, "{var}", "{p$dtc_var}", "{p$ref_var %||% "RFSTDTC"}")')
+    },
+    tpt = {
+      glue::glue('data <- derive_tpt(data, "{var}",',
+                  ' tpt_col = "{p$tpt_col %||% ""}", tptnum_col = "{p$tptnum_col %||% ""}")')
+    },
+    numeric_round = {
+      digits <- rule$significant_digits %||% p$significant_digits %||% 3L
+      glue::glue('data${var} <- signif(as.numeric(data${p$column}), {digits})')
+    },
+    duration = {
+      glue::glue('data <- derive_duration(data, "{var}", "{p$start_dtc}", "{p$end_dtc}")')
+    },
+    usubjid = ,
+    unusbjid = {
+      glue::glue('data <- derive_usubjid(data, studyid = "{p$studyid %||% "STUDYID"}")')
+    },
+    baseline_flag = {
+      glue::glue('data <- derive_baseline_flag(data, "{var}")')
+    },
+    lastobs_flag = {
+      glue::glue('data <- derive_lastobs_flag(data, "{var}")')
+    },
+    case_when = {
+      glue::glue('# [case_when] Derive {var} (see rule params for branch logic)')
+    },
+    coalesce = {
+      cols <- paste0('"', unlist(p$columns), '"', collapse = ", ")
+      glue::glue('data <- derive_coalesce(data, "{var}", c({cols}))')
+    },
+    concat = {
+      cols <- paste0('"', unlist(p$columns), '"', collapse = ", ")
+      sep <- p$separator %||% " "
+      glue::glue('data <- derive_concat(data, "{var}", c({cols}), sep = "{sep}")')
+    },
+    if_else = {
+      glue::glue('# [if_else] Derive {var} (see rule params for condition)')
+    },
+    regex_extract = {
+      glue::glue('data <- derive_regex_extract(data, "{var}", "{p$column}", "{p$pattern}")')
+    },
+    regex_replace = {
+      glue::glue('data <- derive_regex_replace(data, "{var}", "{p$column}", "{p$pattern}", "{p$replacement}")')
     },
     glue::glue('# [MANUAL] Derive {var} (rule_type: {rule$type})')
   )

@@ -19,13 +19,112 @@ compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
   type_accum <- character()
   compile_log <- character()
 
+  # Build extensibility lookup from ct_lib (codelist_id → is_extensible)
+  ext_lookup <- list()
+  if (!is.null(ct_lib) && "is_extensible" %in% names(ct_lib)) {
+    ext_df <- dplyr::distinct(ct_lib[, c("codelist_id", "is_extensible"), drop = FALSE])
+    ext_lookup <- stats::setNames(ext_df$is_extensible, ext_df$codelist_id)
+  }
 
   for (dom in domains) {
     dom_meta <- dplyr::filter(target_meta, .data$domain == dom)
     dom_rules <- list()
 
-    for (i in seq_len(nrow(dom_meta))) {
-      row <- dom_meta[i, ]
+    # Identify variables with value-level metadata (multiple rows per var)
+    # These have a non-NA "condition" column from VLM expansion
+    has_condition <- "condition" %in% names(dom_meta) &
+                     !all(is.na(dom_meta$condition %||% NA))
+    if (has_condition) {
+      vlm_vars <- unique(dom_meta$var[!is.na(dom_meta$condition)])
+    } else {
+      vlm_vars <- character()
+    }
+
+    # Process VLM variables first: merge multiple rows into case_when rules
+    for (vlm_var in vlm_vars) {
+      vlm_rows <- dplyr::filter(dom_meta, .data$var == vlm_var,
+                                 !is.na(.data$condition))
+      if (nrow(vlm_rows) == 0L) next
+
+      # Build case_when conditions from VLM branches
+      conditions <- list()
+      for (j in seq_len(nrow(vlm_rows))) {
+        row <- vlm_rows[j, ]
+        cond_expr <- row$condition
+        # For CT-mapped variables, the value is the codelist mapping;
+        # for direct values, use the source column.
+        # The condition determines WHICH branch applies, not the value itself.
+        # We store the full VLM branch info for derive_variable to interpret.
+        conditions[[j]] <- list(
+          condition       = cond_expr,
+          codelist_id     = if (!is.na(row$codelist_id)) row$codelist_id else NULL,
+          significant_digits = if ("significant_digits" %in% names(row) && !is.na(row$significant_digits)) row$significant_digits else NULL,
+          length          = if ("length" %in% names(row) && !is.na(row$length)) row$length else NULL,
+          type            = row$type
+        )
+      }
+
+      # Also get the non-VLM row for this var (the base row without condition)
+      base_rows <- dplyr::filter(dom_meta, .data$var == vlm_var,
+                                  is.na(.data$condition))
+      base_row <- if (nrow(base_rows) > 0L) base_rows[1L, ] else vlm_rows[1L, ]
+
+      rule_type <- base_row$rule_type
+      if (is.na(rule_type) || rule_type == "") rule_type <- "direct_map"
+
+      # Parse base rule params
+      params <- list()
+      if (!is.na(base_row$rule_params) && nchar(base_row$rule_params) > 0) {
+        params <- tryCatch(
+          jsonlite::fromJSON(base_row$rule_params, simplifyVector = FALSE),
+          error = function(e) list()
+        )
+      }
+      params$vlm_branches <- conditions
+
+      deps <- character()
+      if (!is.na(base_row$depends_on) && nchar(base_row$depends_on) > 0) {
+        deps <- trimws(strsplit(base_row$depends_on, ";")[[1]])
+      }
+
+      # Resolve extensibility for the base codelist
+      cl_id <- if (!is.na(base_row$codelist_id)) base_row$codelist_id else NULL
+      is_ext <- if (!is.null(cl_id) && cl_id %in% names(ext_lookup)) {
+        ext_lookup[[cl_id]]
+      } else NULL
+
+      rule_obj <- list(
+        domain     = dom,
+        var        = vlm_var,
+        type       = rule_type,
+        params     = params,
+        depends_on = deps,
+        codelist_id = cl_id,
+        label      = base_row$label,
+        target_type = base_row$type,
+        core       = base_row$core,
+        order      = base_row$order,
+        significant_digits = if ("significant_digits" %in% names(base_row)) base_row$significant_digits else NA,
+        length     = if ("length" %in% names(base_row)) base_row$length else NA,
+        is_extensible = is_ext,
+        has_vlm    = TRUE
+      )
+
+      dom_rules[[vlm_var]] <- rule_obj
+      type_accum <- c(type_accum, rule_type)
+      compile_log <- c(compile_log,
+                       glue::glue("{dom}.{vlm_var}: VLM rule with {length(conditions)} condition branch(es)"))
+    }
+
+    # Process non-VLM rows (regular single-row variables)
+    non_vlm <- if (has_condition) {
+      dplyr::filter(dom_meta, is.na(.data$condition) & !(.data$var %in% vlm_vars))
+    } else {
+      dom_meta
+    }
+
+    for (i in seq_len(nrow(non_vlm))) {
+      row <- non_vlm[i, ]
       var_name  <- row$var
       rule_type <- row$rule_type
 
@@ -54,6 +153,12 @@ compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
         deps <- trimws(strsplit(row$depends_on, ";")[[1]])
       }
 
+      # Resolve extensibility for this codelist
+      cl_id <- if (!is.na(row$codelist_id)) row$codelist_id else NULL
+      is_ext <- if (!is.null(cl_id) && cl_id %in% names(ext_lookup)) {
+        ext_lookup[[cl_id]]
+      } else NULL
+
       rule_obj <- list(
         domain     = dom,
         var        = var_name,
@@ -64,7 +169,11 @@ compile_rules <- function(target_meta, source_meta, ct_lib = NULL,
         label      = row$label,
         target_type = row$type,
         core       = row$core,
-        order      = row$order
+        order      = row$order,
+        significant_digits = if ("significant_digits" %in% names(row)) row$significant_digits else NA,
+        length     = if ("length" %in% names(row)) row$length else NA,
+        is_extensible = is_ext,
+        has_vlm    = FALSE
       )
 
       dom_rules[[var_name]] <- rule_obj

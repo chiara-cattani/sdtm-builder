@@ -53,10 +53,32 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
   source_meta <- study$source_meta
   ct_lib      <- study$ct_lib
   raw_data    <- study$raw_data
+  domain_meta <- study$domain_meta
+  value_level_meta <- study$value_level_meta
 
   .log(glue::glue("  Loaded {length(raw_data)} source datasets"))
   for (nm in names(raw_data)) {
     .log(glue::glue("    {nm}: {nrow(raw_data[[nm]])} rows x {ncol(raw_data[[nm]])} cols"))
+  }
+
+  # ------ Step 1b: Expand value-level metadata into target_meta ---------------
+  if (!is.null(value_level_meta) && nrow(value_level_meta) > 0L) {
+    .log(glue::glue("  Expanding {nrow(value_level_meta)} value-level rows into target_meta..."))
+    target_meta <- expand_value_level_meta(target_meta, value_level_meta)
+    .log(glue::glue("  target_meta now has {nrow(target_meta)} rows after VLM expansion"))
+  }
+
+  # ------ Step 1c: Validate cross-sheet consistency ---------------------------
+  validation_result <- validate_study_metadata(
+    study_meta = list(
+      target_meta      = target_meta,
+      domain_meta      = domain_meta,
+      value_level_meta = value_level_meta
+    ),
+    ct_lib = ct_lib
+  )
+  if (!validation_result$passed) {
+    .log("  WARNING: Study metadata cross-sheet validation found issues")
   }
 
   # ------ Step 2: Compile rules ----------------------------------------------
@@ -91,6 +113,8 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
       config      = config,
       rule_set    = rule_set,
       domains     = mvp_domains,
+      domain_meta = domain_meta,
+      value_level_meta = value_level_meta,
       verbose     = verbose
     ),
     error = function(e) {

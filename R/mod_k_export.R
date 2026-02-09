@@ -15,7 +15,8 @@
 #' @return Invisible file path.
 #' @export
 export_xpt <- function(data, domain, output_dir,
-                       target_meta = NULL, max_label_length = 40L,
+                       target_meta = NULL, domain_meta = NULL,
+                       max_label_length = 40L,
                        version = 5L) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -23,21 +24,49 @@ export_xpt <- function(data, domain, output_dir,
   fname  <- paste0(tolower(domain), ".xpt")
   fpath  <- file.path(output_dir, fname)
 
-  # Apply labels from target_meta if provided
-
+  # Apply labels, type enforcement, and width from target_meta if provided
   if (!is.null(target_meta)) {
     dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
     for (i in seq_len(nrow(dom_meta))) {
       v <- dom_meta$var[i]
-      if (v %in% names(data) && !is.na(dom_meta$label[i])) {
+      if (!v %in% names(data)) next
+
+      # Apply label
+      if (!is.na(dom_meta$label[i])) {
         lbl <- substr(dom_meta$label[i], 1, max_label_length)
         attr(data[[v]], "label") <- lbl
+      }
+
+      # Set width attribute for character variables (used by haven for xpt)
+      if ("length" %in% names(dom_meta) && is.character(data[[v]])) {
+        max_len <- dom_meta$length[i]
+        if (!is.na(max_len) && is.numeric(max_len)) {
+          attr(data[[v]], "width") <- as.integer(max_len)
+        }
+      }
+
+      # Apply significant_digits rounding for numeric variables
+      if ("significant_digits" %in% names(dom_meta) && is.numeric(data[[v]])) {
+        sig_d <- dom_meta$significant_digits[i]
+        if (!is.na(sig_d) && is.numeric(sig_d)) {
+          data[[v]] <- round(data[[v]], digits = as.integer(sig_d))
+        }
       }
     }
   }
 
-  # Set dataset label
-  attr(data, "label") <- domain
+  # Set dataset label from domain_meta (if available) or fallback to domain code
+  if (!is.null(domain_meta)) {
+    dom_info <- dplyr::filter(domain_meta, .data[["domain"]] == .env[["domain"]])
+    if (nrow(dom_info) > 0L && "description" %in% names(dom_info) &&
+        !is.na(dom_info$description[1L])) {
+      attr(data, "label") <- substr(dom_info$description[1L], 1, max_label_length)
+    } else {
+      attr(data, "label") <- domain
+    }
+  } else {
+    attr(data, "label") <- domain
+  }
 
   haven::write_xpt(data, fpath, version = version)
   cli::cli_alert_success("Exported {domain} -> {fpath} ({nrow(data)} rows)")
@@ -97,6 +126,8 @@ write_define_support <- function(domains, target_meta, config, output_path) {
         Variable  = v,
         Label     = dom_meta$label[i],
         Type      = dom_meta$type[i],
+        Length    = if ("length" %in% names(dom_meta)) dom_meta$length[i] else NA_integer_,
+        SignificantDigits = if ("significant_digits" %in% names(dom_meta)) dom_meta$significant_digits[i] else NA_integer_,
         Core      = dom_meta$core[i],
         Origin    = dom_meta$origin[i] %||% NA_character_,
         Codelist  = if ("codelist_id" %in% names(dom_meta)) dom_meta$codelist_id[i] else NA_character_,

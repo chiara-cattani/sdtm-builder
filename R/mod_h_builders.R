@@ -23,6 +23,8 @@
 #'   splitting to SUPP--.
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata from
 #'   [read_study_metadata_excel()]. If provided, used for sorting and labeling.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata for
+#'   per-condition validation.
 #' @param return_provenance Logical. Default `TRUE`.
 #' @param validate Logical. Default `TRUE`.
 #' @param verbose Logical. Default `TRUE`.
@@ -31,6 +33,7 @@
 build_domain <- function(domain, target_meta, source_meta, raw_data,
                          config, rule_set, dm_data = NULL, sv_data = NULL,
                          create_supp = NULL, domain_meta = NULL,
+                         value_level_meta = NULL,
                          return_provenance = TRUE, validate = TRUE,
                          verbose = TRUE) {
   domain <- toupper(domain)
@@ -172,7 +175,8 @@ build_domain <- function(domain, target_meta, source_meta, raw_data,
   if (validate) {
     ct_lib <- rule_set$ct_lib
     report <- validate_domain_structure(data, dom_meta, domain, config,
-                                        ct_lib = ct_lib)
+                                        ct_lib = ct_lib,
+                                        value_level_meta = value_level_meta)
   }
 
   result <- list(
@@ -239,6 +243,13 @@ derive_variable <- function(data, var, rule, context) {
   type   <- rule$type
   params <- rule$params
 
+  # If this rule has VLM branches, handle them specially
+  if (isTRUE(rule$has_vlm) && !is.null(params$vlm_branches) &&
+      length(params$vlm_branches) > 0L) {
+    data <- .derive_with_vlm(data, var, rule, context)
+    return(data)
+  }
+
   switch(type,
     constant = {
       data <- derive_constant(data, var, value = params$value)
@@ -272,7 +283,16 @@ derive_variable <- function(data, var, rule, context) {
     ct_assign = {
       src_col     <- params$column
       codelist_id <- params$codelist_id %||% rule$codelist_id
-      unknown_pol <- params$unknown_policy %||% "warn_and_keep"
+      # Determine unknown_policy from extensibility metadata
+      unknown_pol <- params$unknown_policy %||% NULL
+      if (is.null(unknown_pol)) {
+        is_ext <- rule$is_extensible
+        if (!is.null(is_ext) && toupper(is_ext) == "YES") {
+          unknown_pol <- "keep"  # extensible codelist: accept non-standard values
+        } else {
+          unknown_pol <- "warn_and_keep"
+        }
+      }
 
       # Build ct_lib from params$ct_map if available, else use context
       if (!is.null(params$ct_map)) {
@@ -496,6 +516,67 @@ derive_variable <- function(data, var, rule, context) {
       units     <- params$units %||% "days"
       data <- derive_duration(data, var, start_dtc, end_dtc, units = units)
     },
+    numeric_round = {
+      src_var <- params$source_var %||% params$column
+      # Prefer significant_digits from rule metadata, then params, then default 0
+      digits <- rule$significant_digits
+      if (is.null(digits) || is.na(digits)) digits <- params$digits %||% 0L
+      digits <- as.integer(digits)
+
+      if (!is.null(src_var) && !src_var %in% names(data) &&
+          tolower(src_var) %in% names(data)) {
+        src_var <- tolower(src_var)
+      }
+      if (!is.null(src_var) && src_var %in% names(data)) {
+        data <- derive_numeric_round(data, var, src_var, digits = digits)
+      } else {
+        # Numeric round without source = apply to the var itself if it exists
+        if (var %in% names(data)) {
+          data[[var]] <- round(as.numeric(data[[var]]), digits = digits)
+        } else {
+          data[[var]] <- NA_real_
+        }
+      }
+    },
+    unusbjid = , usubjid = {
+      subjid_col <- params$subjid_col %||% "subjid"
+      sep        <- params$sep %||% "-"
+      if (!subjid_col %in% names(data) && tolower(subjid_col) %in% names(data)) {
+        subjid_col <- tolower(subjid_col)
+      }
+      data <- derive_usubjid(data, studyid = context$config$studyid,
+                             subjid_col = subjid_col, sep = sep)
+    },
+    visitdy = {
+      visit_var <- params$visit_var %||% "VISIT"
+      dy_var    <- params$dy_var %||% NULL
+      if (!visit_var %in% names(data) && tolower(visit_var) %in% names(data)) {
+        visit_var <- tolower(visit_var)
+      }
+      data <- derive_visitdy(data, var, visit_var = visit_var, dy_var = dy_var)
+    },
+    tpt = {
+      src_var <- params$source_var %||% NULL
+      tpt_map <- params$tpt_map %||% NULL
+      data <- derive_tpt(data, var, source_var = src_var, tpt_map = tpt_map)
+    },
+    lastobs_flag = {
+      by_vars   <- unlist(params$by %||% list("USUBJID"))
+      order_var <- params$order_var %||% NULL
+      actual_by <- character()
+      for (b in by_vars) {
+        if (b %in% names(data)) actual_by <- c(actual_by, b)
+        else if (tolower(b) %in% names(data)) actual_by <- c(actual_by, tolower(b))
+      }
+      if (length(actual_by) == 0L) actual_by <- "USUBJID"
+      if (!is.null(order_var)) {
+        if (!order_var %in% names(data) && tolower(order_var) %in% names(data)) {
+          order_var <- tolower(order_var)
+        }
+      }
+      data <- derive_lastobs_flag(data, var, by = actual_by,
+                                   order_var = order_var %||% actual_by[1])
+    },
     {
       # Unknown rule type — set NA with warning
       warn(glue::glue("Unknown rule type '{type}' for variable {var}"))
@@ -505,6 +586,108 @@ derive_variable <- function(data, var, rule, context) {
 
   data
 }
+
+# Internal: Derive a variable using value-level metadata branches
+# Each VLM branch has a condition (R expression) and may override
+# codelist, significant_digits, length, or type.
+# The function evaluates each condition and applies the appropriate
+# derivation per branch, then assembles results using case_when logic.
+.derive_with_vlm <- function(data, var, rule, context) {
+  branches <- rule$params$vlm_branches
+  base_type <- rule$type
+  params    <- rule$params
+  ct_lib    <- context$ct_lib
+
+  n <- nrow(data)
+  # Initialize result column
+  result <- rep(NA, n)
+
+  for (branch in branches) {
+    cond_expr <- branch$condition
+    if (is.na(cond_expr) || is.null(cond_expr)) next
+
+    # Evaluate the WHERE condition mask
+    mask <- tryCatch(
+      rlang::eval_tidy(rlang::parse_expr(cond_expr), data = data),
+      error = function(e) {
+        warn(glue::glue("VLM condition eval error for {var}: {e$message}"))
+        rep(FALSE, n)
+      }
+    )
+    mask[is.na(mask)] <- FALSE
+
+    if (!any(mask)) next
+
+    # For rows matching this condition, apply derivation branch
+    branch_cl_id <- branch$codelist_id %||% rule$codelist_id
+
+    if (base_type == "ct_assign" && !is.null(branch_cl_id) && !is.null(ct_lib)) {
+      # CT assignment with per-branch codelist
+      src_col <- params$column
+      if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+        src_col <- tolower(src_col)
+      }
+      cl <- dplyr::filter(ct_lib, .data$codelist_id == !!branch_cl_id)
+      if (nrow(cl) > 0L && "input_value" %in% names(cl)) {
+        lookup <- stats::setNames(cl$coded_value, tolower(cl$input_value))
+      } else if (nrow(cl) > 0L) {
+        lookup <- stats::setNames(cl$coded_value, tolower(cl$coded_value))
+      } else {
+        lookup <- character()
+      }
+      raw_vals <- data[[src_col]]
+      mapped_vals <- unname(lookup[tolower(raw_vals)])
+      # Keep raw value for unmatched (extensible codelist behavior)
+      unmapped <- !is.na(raw_vals) & is.na(mapped_vals)
+      mapped_vals[unmapped] <- raw_vals[unmapped]
+      result[mask] <- mapped_vals[mask]
+
+    } else if (base_type == "direct_map") {
+      src_col <- params$column
+      if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+        src_col <- tolower(src_col)
+      }
+      result[mask] <- as.character(data[[src_col]])[mask]
+
+    } else {
+      # Generic: use whatever the base rule type produces
+      # For now, attempt direct mapping from the base rule source
+      if (!is.null(params$column)) {
+        src_col <- params$column
+        if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+          src_col <- tolower(src_col)
+        }
+        result[mask] <- as.character(data[[src_col]])[mask]
+      }
+    }
+
+    # Apply per-branch significant_digits rounding
+    if (!is.null(branch$significant_digits) && !is.na(branch$significant_digits)) {
+      numeric_vals <- suppressWarnings(as.numeric(result[mask]))
+      rounded_vals <- round(numeric_vals, digits = as.integer(branch$significant_digits))
+      result[mask] <- ifelse(is.na(rounded_vals),
+                              result[mask],
+                              as.character(rounded_vals))
+    }
+  }
+
+  # Also handle non-VLM base derivation for rows not matched by any branch
+  # Apply the default (base params) rule for unmatched rows
+  unmatched <- is.na(result)
+  if (any(unmatched) && !is.null(params$column)) {
+    src_col <- params$column
+    if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+      src_col <- tolower(src_col)
+    }
+    if (src_col %in% names(data)) {
+      result[unmatched] <- as.character(data[[src_col]])[unmatched]
+    }
+  }
+
+  data[[var]] <- result
+  data
+}
+
 
 #' Finalize a domain dataset for export
 #' @param data Tibble.
@@ -562,6 +745,34 @@ finalize_domain <- function(data, domain, target_meta, config,
     }
     if (expected_type == "num" && !is.numeric(data[[v]])) {
       data[[v]] <- suppressWarnings(as.numeric(data[[v]]))
+    }
+  }
+
+  # Apply significant_digits rounding for numeric variables
+  if ("significant_digits" %in% names(dom_meta)) {
+    for (i in seq_len(nrow(dom_meta))) {
+      v <- dom_meta$var[i]
+      if (!v %in% names(data)) next
+      sig_d <- dom_meta$significant_digits[i]
+      if (!is.na(sig_d) && is.numeric(data[[v]])) {
+        data[[v]] <- round(data[[v]], digits = as.integer(sig_d))
+      }
+    }
+  }
+
+  # Apply length enforcement for character variables (truncate to max length)
+  if ("length" %in% names(dom_meta)) {
+    for (i in seq_len(nrow(dom_meta))) {
+      v <- dom_meta$var[i]
+      if (!v %in% names(data)) next
+      max_len <- dom_meta$length[i]
+      if (!is.na(max_len) && is.numeric(max_len) && is.character(data[[v]])) {
+        max_len <- as.integer(max_len)
+        too_long <- !is.na(data[[v]]) & nchar(data[[v]]) > max_len
+        if (any(too_long)) {
+          data[[v]][too_long] <- substr(data[[v]][too_long], 1L, max_len)
+        }
+      }
     }
   }
 
@@ -750,6 +961,7 @@ build_all_domains <- function(target_meta, source_meta, raw_data,
                               config, rule_set,
                               domains = NULL,
                               domain_meta = NULL,
+                              value_level_meta = NULL,
                               create_supp = NULL,
                               validate = TRUE,
                               verbose = TRUE) {
@@ -805,6 +1017,7 @@ build_all_domains <- function(target_meta, source_meta, raw_data,
         dm_data     = dm_built,
         create_supp = create_supp,
         domain_meta = domain_meta,
+        value_level_meta = value_level_meta,
         validate    = validate,
         verbose     = verbose
       ),
