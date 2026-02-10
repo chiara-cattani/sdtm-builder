@@ -429,7 +429,7 @@ for (dom in names(results)) {
           |            build_domain()                   |
           |  +----------------------------------------+ |
           |  | derive_variable() dispatcher           | |
-          |  |  -> 19 rule types                      | |
+          |  |  -> 26 rule types                      | |
           |  |  -> topological order                  | |
           |  +----------------------------------------+ |
           |  +----------+ +--------+ +-----------+      |
@@ -456,9 +456,8 @@ for (dom in names(results)) {
 |--------|------|---------|
 | — | `run_study.R` | **High-level orchestrator**: `run_study()`, `get_template_config()` |
 | A | `mod_a_primitives.R` | S3 classes: `sdtm_config`, `meta_bundle`, `rule_set`, `validation_report` |
-| B | `mod_b_metadata.R` | Validate, normalize metadata |
-| — | `read_study_metadata_excel.R` | Read multi-sheet Study\_Metadata.xlsx |
-| — | `read_study_ct_excel.R` | Read multi-sheet Study\_CT.xlsx |
+| B | `mod_b_metadata.R` | Read Study\_Metadata.xlsx & Study\_CT.xlsx, validate, normalize |
+| — | `method_mapping.R` | Function registry & METHOD column parsing |
 | C | `mod_c_rules.R` | Parse rules, auto-assign rule\_type, compile rule\_set |
 | D | `mod_d_dependency.R` | Build dependency graph, topological sort |
 | E | `mod_e_data_access.R` | Load raw data, `load_raw_datasets()`, `infer_source_meta()` |
@@ -656,7 +655,7 @@ run_study("config.yaml", export_formats = c("xpt", "rda", "csv"))
 
 ```r
 devtools::test()
-# Expected: FAIL 0 | WARN 0 | SKIP 0 | PASS 244
+# Expected: FAIL 0 | WARN 0 | SKIP 0 | PASS 263
 ```
 
 ---
@@ -679,4 +678,4 @@ devtools::test()
 
 ## License
 
-MIT License. Copyright (c) 2025 Chiara Cattani.
+MIT License. Copyright (c) 2026 Chiara Cattani.

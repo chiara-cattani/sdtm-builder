@@ -135,8 +135,8 @@ Add new codelists by editing the **CT_Terms** sheet in Study_CT.xlsx.
 ## 7 Full Domain Build with Custom Rules
 
 ```{r}
-config   <- new_sdtm_config(study_id = "STUDY01")
-raw_data <- load_raw_data(config)
+config   <- new_sdtm_config(studyid = "STUDY01")
+raw_data <- load_raw_datasets("raw")
 
 # Apply customizations
 rule_set$rules$AE$AESEV$params$column <- "ae_severity"

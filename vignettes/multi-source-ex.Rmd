@@ -43,10 +43,10 @@ target_meta <- meta$target_meta
 ct_lib      <- ct$ct_lib
 
 # ── 2. Configuration ────────────────────────────────
-config <- new_sdtm_config(study_id = "STUDY01")
+config <- new_sdtm_config(studyid = "STUDY01")
 
 # ── 3. Load raw data ────────────────────────────────
-raw_data <- load_raw_data(config)
+raw_data <- load_raw_datasets("raw")
 # raw_data$cm_raw   — the main medication log
 # raw_data$cm_prior — the prior medication history
 

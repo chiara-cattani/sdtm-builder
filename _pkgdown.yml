@@ -45,6 +45,8 @@ reference:
       - new_build_context
       - read_study_metadata_excel
       - read_study_ct_excel
+      - validate_study_metadata
+      - validate_prebuild
       - infer_source_meta
       - load_raw_datasets
       - validate_target_meta
@@ -59,6 +61,10 @@ reference:
     contents:
       - parse_rule_json
       - parse_rule_dsl
+      - parse_method_call
+      - map_method_to_rule_type
+      - reconstruct_method_string
+      - enrich_params_from_metadata
       - validate_rules
       - enrich_rules_with_ct
       - canonicalize_rules
@@ -166,6 +172,7 @@ reference:
       - validate_no_allna_reqexp
       - validate_seq_integrity
       - validate_no_duplicate_rows
+      - check_extensibility
       - summarize_validation_report
       - add_finding
 

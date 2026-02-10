@@ -57,8 +57,8 @@ ct   <- read_study_ct_excel("inst/extdata/Study_CT.xlsx")
 target_meta <- meta$target_meta
 ct_lib      <- ct$ct_lib
 
-config   <- new_sdtm_config(study_id = "STUDY01")
-raw_data <- load_raw_data(config)
+config   <- new_sdtm_config(studyid = "STUDY01")
+raw_data <- load_raw_datasets("raw")
 rule_set <- compile_rules(target_meta, ct_lib = ct_lib)
 
 result <- build_domain(

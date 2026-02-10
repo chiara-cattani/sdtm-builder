@@ -58,7 +58,7 @@ Defines every target variable and its derivation rule.
 
 When `METHOD` is `NA`, `compile_rules()` applies these defaults:
 
-- **STUDYID** → `rule_type = "constant"` (from `config$study_id`)
+- **STUDYID** → `rule_type = "constant"` (from `config$studyid`)
 - **DOMAIN** → `rule_type = "constant"` (from the domain code)
 - **All others** → `rule_type = "direct_map"` with:
   - `dataset = "{tolower(domain)}_raw"`
@@ -166,7 +166,7 @@ ct$ct_lib
 metadata is automatically inferred from the raw datasets at build time via
 `infer_source_meta()`:
 ```{r eval=FALSE}
-raw_data    <- load_raw_data(config)
+raw_data    <- load_raw_datasets("raw")
 source_meta <- infer_source_meta(raw_data)
 ```
 
