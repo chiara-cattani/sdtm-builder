@@ -80,6 +80,32 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
     .log("  WARNING: Study metadata cross-sheet validation found issues")
   }
 
+  # ------ Step 1d: Pre-build validation (METHOD, params, columns) -------------
+  prebuild_issues <- tryCatch(
+    validate_prebuild(
+      study_meta = list(target_meta = target_meta,
+                        domain_meta = domain_meta,
+                        value_level_meta = value_level_meta),
+      ct_lib   = ct_lib,
+      raw_data = raw_data
+    ),
+    error = function(e) {
+      .log(paste("  WARN: Pre-build validation failed:", e$message))
+      tibble::tibble()
+    }
+  )
+  if (nrow(prebuild_issues) > 0L) {
+    errs <- sum(prebuild_issues$severity == "ERROR")
+    warns <- sum(prebuild_issues$severity == "WARN")
+    notes <- sum(prebuild_issues$severity == "NOTE")
+    .log(glue::glue("  Pre-build issues: {errs} error(s), {warns} warning(s), {notes} note(s)"))
+    for (i in seq_len(nrow(prebuild_issues))) {
+      .log(glue::glue("    [{prebuild_issues$severity[i]}] {prebuild_issues$domain[i]}.{prebuild_issues$variable[i]}: {prebuild_issues$message[i]}"))
+    }
+  } else {
+    .log("  Pre-build validation: all checks passed")
+  }
+
   # ------ Step 2: Compile rules ----------------------------------------------
   .log("Step 2: Compiling rules from metadata...")
   rule_set <- tryCatch(

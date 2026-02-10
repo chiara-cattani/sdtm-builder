@@ -409,7 +409,7 @@ derive_variable <- function(data, var, rule, context) {
       }
     },
     coalesce = {
-      sources <- unlist(params$sources)
+      sources <- unlist(params$columns %||% params$sources)
       # Resolve column names
       actual <- character()
       for (s in sources) {
@@ -432,6 +432,14 @@ derive_variable <- function(data, var, rule, context) {
     case_when = {
       conds   <- params$conditions
       default <- params$default %||% NA
+      # If conditions is a string (from METHOD column), evaluate it as R expression
+      if (is.character(conds) && length(conds) == 1L &&
+          grepl("^list\\(", conds)) {
+        conds <- tryCatch(eval(parse(text = conds)), error = function(e) {
+          warn(glue::glue("case_when: cannot parse conditions for {var}: {e$message}"))
+          list()
+        })
+      }
       data <- derive_case_when(data, var, conds, default)
     },
     ct_decode = {
@@ -448,8 +456,8 @@ derive_variable <- function(data, var, rule, context) {
       }
     },
     concat = {
-      sources <- unlist(params$sources)
-      sep     <- params$sep %||% ""
+      sources <- unlist(params$columns %||% params$sources)
+      sep     <- params$separator %||% params$sep %||% ""
       actual  <- character()
       for (s in sources) {
         if (s %in% names(data)) actual <- c(actual, s)
@@ -559,12 +567,45 @@ derive_variable <- function(data, var, rule, context) {
       if (!visit_var %in% names(data) && tolower(visit_var) %in% names(data)) {
         visit_var <- tolower(visit_var)
       }
-      data <- derive_visitdy(data, var, visit_var = visit_var, dy_var = dy_var)
+      vm <- if (!is.null(context$config$visit_map)) context$config$visit_map else NULL
+      data <- derive_visitdy(data, var, visit_var = visit_var,
+                              dy_var = dy_var, visit_map = vm)
     },
     tpt = {
       src_var <- params$source_var %||% NULL
       tpt_map <- params$tpt_map %||% NULL
       data <- derive_tpt(data, var, source_var = src_var, tpt_map = tpt_map)
+    },
+    regex_extract = {
+      src_col <- params$column
+      pattern <- params$pattern
+      grp     <- as.integer(params$group %||% 1L)
+      if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+        src_col <- tolower(src_col)
+      }
+      data <- derive_regex_extract(data, var, src_col, pattern, group = grp)
+    },
+    regex_replace = {
+      src_col     <- params$column
+      pattern     <- params$pattern
+      replacement <- params$replacement
+      all_flag    <- as.logical(params$all %||% TRUE)
+      if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+        src_col <- tolower(src_col)
+      }
+      data <- derive_regex_replace(data, var, src_col, pattern, replacement,
+                                    all = all_flag)
+    },
+    trim_pad = {
+      src_col <- params$column
+      side    <- params$side %||% "both"
+      width   <- if (!is.null(params$width)) as.integer(params$width) else NULL
+      pad_chr <- params$pad %||% " "
+      if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
+        src_col <- tolower(src_col)
+      }
+      data <- derive_trim_pad(data, var, src_col, width = width,
+                               side = side, pad = pad_chr)
     },
     lastobs_flag = {
       by_vars   <- unlist(params$by %||% list("USUBJID"))
@@ -636,6 +677,10 @@ derive_variable <- function(data, var, rule, context) {
       cl <- dplyr::filter(ct_lib, .data$codelist_id == !!branch_cl_id)
       if (nrow(cl) > 0L && "input_value" %in% names(cl)) {
         lookup <- stats::setNames(cl$coded_value, tolower(cl$input_value))
+        # Identity pass-through for coded_value
+        id_lookup <- stats::setNames(cl$coded_value, tolower(cl$coded_value))
+        lookup <- c(lookup, id_lookup)
+        lookup <- lookup[!duplicated(names(lookup))]
       } else if (nrow(cl) > 0L) {
         lookup <- stats::setNames(cl$coded_value, tolower(cl$coded_value))
       } else {

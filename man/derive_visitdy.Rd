@@ -8,7 +8,8 @@ derive_visitdy(
   data,
   target_var = "VISITDY",
   visit_var = "VISIT",
-  dy_var = NULL
+  dy_var = NULL,
+  visit_map = NULL
 )
 }
 \arguments{

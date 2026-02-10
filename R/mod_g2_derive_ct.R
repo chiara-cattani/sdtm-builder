@@ -35,6 +35,12 @@ assign_ct <- function(data, target_var, source_var, codelist_id, ct_lib,
     lookup_vals <- cl$coded_value
   }
 
+  # Also add identity mappings (coded_value -> coded_value) so that raw data
+
+  # already containing CDISC submission values passes through correctly.
+  lookup_keys <- c(lookup_keys, cl$coded_value)
+  lookup_vals <- c(lookup_vals, cl$coded_value)
+
   if (!case_sensitive) {
     lookup <- stats::setNames(lookup_vals, tolower(lookup_keys))
   } else {
