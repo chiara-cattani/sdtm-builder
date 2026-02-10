@@ -75,7 +75,12 @@ gen_domain_script <- function(domain, rule_set, target_meta,
     if (is.null(rule)) next
 
     if (include_comments) {
-      .add(glue::glue("# {var_name}: {rule$type}"))
+      # Show the METHOD call from Excel (if available)
+      method_str <- rule$method_string
+      if (is.null(method_str) || is.na(method_str)) {
+        method_str <- reconstruct_method_string(rule$type, rule$params)
+      }
+      .add(glue::glue("# {var_name}: {method_str}"))
       if (!is.null(rule$params$dataset)) {
         .add(glue::glue("#   source: {rule$params$dataset}.{rule$params$column %||% ''}"))
       }

@@ -72,19 +72,51 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
       rule_type <- base_row$rule_type
       if (is.na(rule_type) || rule_type == "") rule_type <- "direct_map"
 
-      # Parse base rule params
+      # Parse base rule params — first from method column, then JSON fallback
       params <- list()
-      if (!is.na(base_row$rule_params) && nchar(base_row$rule_params) > 0) {
+      method_str <- if ("method" %in% names(base_row)) base_row$method else NA
+      if (!is.na(method_str) && nchar(trimws(method_str)) > 0) {
+        meta_row <- as.list(base_row)
+        parsed <- parse_method_call(method_str, dom, vlm_var, meta_row)
+        if (!is.null(parsed)) {
+          params <- parsed$params
+          rule_type <- parsed$rule_type
+        }
+      }
+      # Fallback: JSON rule_params
+      if (length(params) == 0 && !is.na(base_row$rule_params) &&
+          nchar(base_row$rule_params) > 0) {
         params <- tryCatch(
           jsonlite::fromJSON(base_row$rule_params, simplifyVector = FALSE),
           error = function(e) list()
         )
+      }
+      # Auto-set column for direct_map if still missing
+      if (rule_type == "direct_map" && is.null(params$column)) {
+        params$column <- tolower(vlm_var)
+        params$dataset <- paste0(tolower(dom), "_raw")
       }
       params$vlm_branches <- conditions
 
       deps <- character()
       if (!is.na(base_row$depends_on) && nchar(base_row$depends_on) > 0) {
         deps <- trimws(strsplit(base_row$depends_on, ";")[[1]])
+      }
+
+      # Auto-extract dependencies from VLM conditions (e.g., LBTESTCD from
+      # 'LBTESTCD == "GLUC"'). Any uppercase bare words that match other
+      # variables in this domain are added as implicit dependencies.
+      dom_vars <- unique(dom_meta$var)
+      for (cond in conditions) {
+        cond_text <- cond$condition
+        if (is.null(cond_text) || is.na(cond_text)) next
+        # Extract candidate variable names (uppercase word tokens)
+        tokens <- regmatches(cond_text, gregexpr("[A-Z][A-Z0-9_]+", cond_text))[[1]]
+        for (tok in tokens) {
+          if (tok %in% dom_vars && tok != vlm_var && !tok %in% deps) {
+            deps <- c(deps, tok)
+          }
+        }
       }
 
       # Resolve extensibility for the base codelist
@@ -126,26 +158,45 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
     for (i in seq_len(nrow(non_vlm))) {
       row <- non_vlm[i, ]
       var_name  <- row$var
-      rule_type <- row$rule_type
+      dom_lower <- tolower(dom)
 
-      # --- Auto-assign rule_type when METHOD is NA/empty --------------------
-      if (is.na(rule_type) || rule_type == "") {
-        # Convention-based defaults for common SDTM variables
+      # =====================================================================
+      # Parse METHOD column: explicit call syntax, legacy keyword, or empty
+      # =====================================================================
+      method_str <- if ("method" %in% names(row)) row$method else NA_character_
+      parsed <- suppressWarnings(
+        parse_method_call(method_str, domain = dom, var = var_name, meta_row = row)
+      )
+
+      if (!is.null(parsed)) {
+        # Enrich params with metadata columns (codelist_id, sig_digits, etc.)
+        parsed <- enrich_params_from_metadata(parsed, row)
+        rule_type <- parsed$rule_type
+        params    <- parsed$params
+        fn_name   <- parsed$fn
+        compile_log <- c(compile_log,
+                         glue::glue("{dom}.{var_name}: METHOD = {fn_name}({.format_params(params)})"))
+      } else {
+        # --- Auto-assign when METHOD is empty ---
+        fn_name <- NULL
         if (var_name == "STUDYID") {
           rule_type <- "constant"
+          params    <- list(value = "auto")
         } else if (var_name == "DOMAIN") {
           rule_type <- "constant"
+          params    <- list(value = dom)
         } else {
           rule_type <- "direct_map"
+          params    <- list(dataset = paste0(dom_lower, "_raw"),
+                            column  = tolower(var_name))
         }
         compile_log <- c(compile_log,
                          glue::glue("{dom}.{var_name}: auto-assigned rule_type = '{rule_type}'"))
       }
 
-      # Parse rule params
-      params <- list()
+      # --- Also use rule_params JSON if present (fallback/override) ---
       if (!is.na(row$rule_params) && nchar(row$rule_params) > 0) {
-        params <- tryCatch(
+        json_params <- tryCatch(
           jsonlite::fromJSON(row$rule_params, simplifyVector = FALSE),
           error = function(e) {
             compile_log <<- c(compile_log,
@@ -153,19 +204,19 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
             list()
           }
         )
+        # Merge: JSON params fill in gaps (don't overwrite explicit METHOD params)
+        for (k in names(json_params)) {
+          if (is.null(params[[k]])) params[[k]] <- json_params[[k]]
+        }
       }
 
-      # --- Auto-generate params when empty -----------------------------------
-      if (length(params) == 0L) {
-        if (rule_type == "constant" && var_name == "STUDYID") {
-          params <- list(value = "auto")
-        } else if (rule_type == "constant" && var_name == "DOMAIN") {
-          params <- list(value = dom)
-        } else if (rule_type == "direct_map") {
-          # Convention: source dataset = {domain_lower}_raw, column = varname_lower
-          params <- list(dataset = paste0(tolower(dom), "_raw"),
-                         column  = tolower(var_name))
-        }
+      # --- Auto-generate missing params for direct_map ---
+      if (rule_type == "direct_map" && is.null(params$column)) {
+        params$column  <- tolower(var_name)
+        params$dataset <- paste0(dom_lower, "_raw")
+      }
+      if (rule_type == "direct_map" && is.null(params$dataset)) {
+        params$dataset <- paste0(dom_lower, "_raw")
       }
 
       # Parse depends_on
@@ -184,6 +235,7 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         domain     = dom,
         var        = var_name,
         type       = rule_type,
+        fn         = fn_name,
         params     = params,
         depends_on = deps,
         codelist_id = if (!is.na(row$codelist_id)) row$codelist_id else NULL,
@@ -194,7 +246,8 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         significant_digits = if ("significant_digits" %in% names(row)) row$significant_digits else NA,
         length     = if ("length" %in% names(row)) row$length else NA,
         is_extensible = is_ext,
-        has_vlm    = FALSE
+        has_vlm    = FALSE,
+        method_string = if (!is.na(method_str) && nchar(trimws(method_str)) > 0L) method_str else NA_character_
       )
 
       dom_rules[[var_name]] <- rule_obj

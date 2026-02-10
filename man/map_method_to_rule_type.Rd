@@ -19,10 +19,9 @@ the corresponding \code{rule_type} values used by \code{\link[=compile_rules]{co
 \code{\link[=derive_variable]{derive_variable()}}.
 }
 \details{
-Unknown/unmapped METHOD values produce a warning and return \code{NA}.
+Supports both explicit function-call syntax (new) and legacy keywords.
 }
 \examples{
-map_method_to_rule_type(c("SEQ", "STRESN", NA, "CUSTOM"))
-# Returns: c("seq", "numeric_round", NA, NA) with warning about "CUSTOM"
+map_method_to_rule_type(c("SEQ", NA, 'derive_dy(dtc_var = "AEDTC")'))
 
 }
