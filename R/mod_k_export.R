@@ -78,7 +78,7 @@ export_xpt <- function(data, domain, output_dir,
 #' @param data Tibble. Domain dataset.
 #' @param domain Character.
 #' @param output_dir Character.
-#' @param formats Character vector. Subset of `c("rds","csv")`.
+#' @param formats Character vector. Subset of `c("rds","csv","rda")`.
 #' @return Invisible named list of paths.
 #' @export
 export_rds_csv <- function(data, domain, output_dir,
@@ -97,8 +97,16 @@ export_rds_csv <- function(data, domain, output_dir,
     readr::write_csv(data, p)
     paths$csv <- p
   }
+  if ("rda" %in% formats) {
+    p <- file.path(output_dir, paste0(tolower(domain), ".rda"))
+    # Save with the domain name as the variable name (e.g., AE, DM)
+    assign(domain, data)
+    save(list = domain, file = p)
+    paths$rda <- p
+  }
 
-  cli::cli_alert_success("Exported {domain}: {paste(formats, collapse=', ')}")
+  fmts_done <- intersect(formats, names(paths))
+  cli::cli_alert_success("Exported {domain}: {paste(fmts_done, collapse=', ')}")
   invisible(paths)
 }
 

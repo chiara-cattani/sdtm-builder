@@ -1,0 +1,92 @@
+# ==============================================================================
+# sdtmbuilder — Template config.yaml
+# ==============================================================================
+# Copy this file to your study folder and fill in your study-specific values.
+# All fields with "FILL_IN" must be updated before running the pipeline.
+# Fields marked (optional) can be removed if not applicable.
+# ==============================================================================
+
+# --- Required: Study identifier -----------------------------------------------
+studyid: "FILL_IN"            # e.g., "STUDY-001", "AB-1234-0001"
+
+# --- Timezone for date/time conversions ---------------------------------------
+timezone: "UTC"                # e.g., "UTC", "US/Eastern", "Europe/Berlin"
+
+# --- Paths to your study files ------------------------------------------------
+paths:
+  metadata: "metadata/Study_Metadata.xlsx"
+  ct:       "metadata/Study_CT.xlsx"
+  raw_data: "raw"                           # directory with sas7bdat / csv / xpt files
+  output:   "sdtm/datasets"                 # where XPT + RDA files are written
+  programs: "sdtm/programs"                 # where generated R programs are written
+
+# --- Reference start date rule ------------------------------------------------
+# How to find RFSTDTC (first dose date / reference start date).
+# This is used for study day (DY) and epoch calculations.
+ref_start_rule:
+  method: "dm_var"             # "dm_var" = look up a column in DM source data
+  dataset: "dm_raw"            # name of the DM raw dataset (without extension)
+  column: "rfstdtc"            # column in that dataset containing RFSTDTC
+
+# --- Visit map (optional) ----------------------------------------------------
+# Maps study day windows to visits. Remove this section if your study
+# does not use windowed visit assignment.
+visit_map:
+  - visitnum: 1
+    visit: "SCREENING"
+    start_day: -14
+    end_day: -1
+  - visitnum: 2
+    visit: "BASELINE"
+    start_day: 1
+    end_day: 1
+#  - visitnum: 3
+#    visit: "WEEK 1"
+#    start_day: 2
+#    end_day: 8
+
+# --- Epoch definitions (optional) --------------------------------------------
+# Study-day windows for epoch assignment. Use null for open-ended bounds.
+epoch_map:
+  - epoch: "SCREENING"
+    start_day: null
+    end_day: -1
+  - epoch: "TREATMENT"
+    start_day: 1
+    end_day: null
+#  - epoch: "FOLLOW-UP"
+#    start_day: 93
+#    end_day: null
+
+# --- Policies -----------------------------------------------------------------
+policies:
+  unknown_ct: "WARN_AND_KEEP"    # "WARN_AND_KEEP", "WARN_AND_DROP", "ERROR"
+  date_partial_allowed: true     # allow partial ISO dates (e.g., "2025-01")
+  imputation:
+    day: "first"                 # "first", "last", "mid", or null
+    month: null
+    year: null
+  join_cardinality_default: "m:1"
+  blank_is_na: true
+  na_strings:
+    - "."
+    - "UNK"
+    - "NA"
+
+# --- Study day convention -----------------------------------------------------
+study_day:
+  convention: "no_day_zero"      # "no_day_zero" (CDISC standard)
+
+# --- Export options ------------------------------------------------------------
+export:
+  formats:
+    - "xpt"                      # SAS transport v5
+    - "rda"                      # R binary format
+  generate_programs: true        # write R scripts to sdtm/programs/
+
+# --- Logging ------------------------------------------------------------------
+log_level: "INFO"                # "DEBUG", "INFO", "WARN", "ERROR"
+
+# --- Sponsor-specific overrides (optional) ------------------------------------
+# Key-value pairs that override default behavior for specific derivations.
+sponsor_overrides: {}

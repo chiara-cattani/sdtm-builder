@@ -13,7 +13,7 @@ export_rds_csv(data, domain, output_dir, formats = c("rds", "csv"))
 
 \item{output_dir}{Character.}
 
-\item{formats}{Character vector. Subset of \code{c("rds","csv")}.}
+\item{formats}{Character vector. Subset of \code{c("rds","csv","rda")}.}
 }
 \value{
 Invisible named list of paths.

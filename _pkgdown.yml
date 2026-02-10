@@ -19,6 +19,14 @@ navbar:
       href: https://github.com/chiara-cattani/sdtm-builder
 
 reference:
+  - title: "High-Level Entry Points"
+    desc: "One-call orchestrator and helpers."
+    contents:
+      - run_study
+      - get_template_config
+      - check_end_to_end
+      - make_dummy_study
+
   - title: "Core Pipeline"
     desc: "The main entry points for building SDTM domains."
     contents:
@@ -26,8 +34,6 @@ reference:
       - build_all_domains
       - build_domain_from_sources
       - compile_rules
-      - make_dummy_study
-      - check_end_to_end
 
   - title: "Configuration & Metadata"
     desc: "Read, validate and bundle study metadata."
