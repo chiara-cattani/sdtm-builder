@@ -9,15 +9,16 @@
 Auto-generates SDTM domain programs (R scripts / Quarto documents) from structured metadata. Given SDTM target metadata (Study_Metadata.xlsx) and controlled terminology (Study_CT.xlsx), the package produces domain-building code for all SDTM domains with realistic derivations including merging multiple sources, controlled terminology assignment, ISO date/time handling, supplemental qualifier generation, and define.xml alignment. Source metadata is auto-inferred from raw data. Supports SDTM IG 3.4+ with sponsor-specific overrides via configuration.
 
 Auto-generates SDTM domain programs (R scripts / Quarto documents) from
-structured metadata. Given SDTM target metadata, source metadata, and
-study-level configuration, produces domain-building code for all SDTM
-domains with realistic derivations.
+structured metadata. Given SDTM target metadata (Study_Metadata.xlsx),
+controlled terminology (Study_CT.xlsx), and study-level configuration,
+produces domain-building code for all SDTM domains with realistic
+derivations.
 }
 \section{Package modules}{
 
 \describe{
 \item{A. Primitives}{S3 classes: config, meta bundle, rule set, build context, validation report}
-\item{B. Metadata Ingestion}{Read, validate, normalize target/source metadata and CT}
+\item{B. Metadata Ingestion}{Read, validate, normalize target metadata and CT}
 \item{C. Rule Compilation}{Convert derivation descriptions to machine-readable rules}
 \item{D. Dependency System}{DAG construction, topological sort, cycle detection}
 \item{E. Data Access}{Load raw data, standardize names/types, derive core keys}

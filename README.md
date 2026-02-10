@@ -532,11 +532,6 @@ Get the template:
 get_template_config(copy_to = "my_study/config.yaml")
 ```
 
-### Source Metadata
-
-**Not required.**  Source metadata is automatically inferred from your raw data
-at build time. You do **not** need a separate source metadata file.
-
 ---
 
 ## Rule Types Reference

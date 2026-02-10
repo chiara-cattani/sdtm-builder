@@ -33,13 +33,12 @@
 #'   across everything n row_number case_when if_else coalesce pull distinct
 #'   slice_head slice_tail transmute relocate
 #' @importFrom tidyr pivot_longer pivot_wider separate unite unnest
-#' @importFrom purrr map map_chr map_lgl map_dfr walk imap reduce keep discard
+#' @importFrom purrr map map_chr map_lgl walk imap reduce keep discard
 #' @importFrom magrittr %>%
 #' @importFrom stringr str_detect str_extract str_replace str_replace_all
 #'   str_to_upper str_to_lower str_trim str_pad str_sub str_c str_split
 #' @importFrom tibble tibble as_tibble tribble
 #' @importFrom glue glue
 #' @importFrom cli cli_alert_info cli_alert_warning cli_alert_danger
-#'   cli_alert_success cli_progress_bar cli_progress_update
-#'   cli_progress_done
+#'   cli_alert_success
 NULL
