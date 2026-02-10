@@ -1,160 +1,9 @@
 # ==============================================================================
 # Module B: Metadata Ingestion & Normalization
 # ==============================================================================
-
-#' Read target (SDTM) metadata
-#'
-#' @description
-#' `r lifecycle::badge("deprecated")`
-#'
-#' Use [read_study_metadata_excel()] instead, which reads the multi-sheet
-#' `Study_Metadata.xlsx` workbook.
-#'
-#' Reads a CSV or Excel file containing one row per SDTM variable per domain.
-#' Column names are lowercased automatically. Duplicate `(domain, var)` pairs
-#' cause an error.
-#'
-#' @param path Character. Path to `.csv` or `.xlsx` file.
-#' @param sheet Integer. Sheet index for Excel files. Default `1`.
-#' @param domain Character or `NULL`. If supplied, filter to this domain.
-#' @param colmap Named list or `NULL`. Column rename mapping.
-#' @param encoding Character. File encoding. Default `"UTF-8"`.
-#' @return A tibble with standard target metadata columns.
-#' @export
-read_target_meta <- function(path, sheet = 1L, domain = NULL,
-                             colmap = NULL, encoding = "UTF-8") {
-  .Deprecated("read_study_metadata_excel",
-              msg = paste("read_target_meta() is deprecated.",
-                          "Use read_study_metadata_excel() with Study_Metadata.xlsx instead."))
-  checkmate::assert_string(path, min.chars = 1L)
-  ext <- tolower(tools::file_ext(path))
-  df <- switch(ext,
-    csv  = utils::read.csv(path, stringsAsFactors = FALSE,
-                           fileEncoding = encoding, na.strings = ""),
-    xlsx = , xls = readxl::read_excel(path, sheet = sheet),
-    abort(glue::glue("Unsupported file extension: .{ext}"))
-  )
-  df <- tibble::as_tibble(df)
-  if (nrow(df) == 0L) abort("Target metadata file is empty.")
-  names(df) <- tolower(names(df))
-  if (!is.null(colmap)) {
-    for (nm in names(colmap)) {
-      idx <- match(tolower(nm), names(df))
-      if (!is.na(idx)) names(df)[idx] <- tolower(colmap[[nm]])
-    }
-  }
-  # SELECT column filtering: keep only rows marked as needed for this study
-  if ("select" %in% names(df)) {
-    df <- dplyr::filter(df, toupper(.data$select) == "Y")
-    df$select <- NULL
-    if (nrow(df) == 0L) abort("Target metadata has no rows with select = 'Y'.")
-  }
-  required <- c("domain", "var", "type", "label")
-  miss <- setdiff(required, names(df))
-  if (length(miss)) abort(paste("Target metadata missing columns:", paste(miss, collapse = ", ")))
-  dupes <- df %>% dplyr::count(.data$domain, .data$var) %>% dplyr::filter(.data$n > 1L)
-  if (nrow(dupes) > 0L) {
-    abort(paste("Duplicate (domain, var):", paste0(dupes$domain, ".", dupes$var, collapse = ", ")))
-  }
-  if (!is.null(domain)) df <- dplyr::filter(df, .data$domain == !!domain)
-  standard <- c("domain","var","type","length","label","role","core",
-                "codelist_id","order","is_key","to_supp","rule_type","rule_params","depends_on")
-  for (col in standard) if (!col %in% names(df)) df[[col]] <- NA
-  df
-}
-
-#' Read source (raw) metadata
-#'
-#' @description
-#' `r lifecycle::badge("deprecated")`
-#'
-#' Reads a CSV or Excel file describing raw-data columns: dataset, column, type.
-#'
-#' @param path Character. Path to `.csv` or `.xlsx` file.
-#' @param sheet Integer. Sheet index for Excel files. Default `1`.
-#' @param colmap Named list or `NULL`. Column rename mapping.
-#' @param encoding Character. File encoding. Default `"UTF-8"`.
-#' @return A tibble with source metadata columns.
-#' @export
-read_source_meta <- function(path, sheet = 1L, colmap = NULL, encoding = "UTF-8") {
-  .Deprecated("read_source_meta",
-              msg = paste("read_source_meta() is deprecated.",
-                          "Source metadata is still supported via CSV/Excel but",
-                          "target metadata should use read_study_metadata_excel()."))
-  checkmate::assert_string(path, min.chars = 1L)
-  ext <- tolower(tools::file_ext(path))
-  df <- switch(ext,
-    csv  = utils::read.csv(path, stringsAsFactors = FALSE, fileEncoding = encoding, na.strings = ""),
-    xlsx = , xls = readxl::read_excel(path, sheet = sheet),
-    abort(glue::glue("Unsupported file extension: .{ext}"))
-  )
-  df <- tibble::as_tibble(df)
-  names(df) <- tolower(names(df))
-  # SELECT column filtering: keep only rows marked as needed for this study
-  if ("select" %in% names(df)) {
-    df <- dplyr::filter(df, toupper(.data$select) == "Y")
-    df$select <- NULL
-    if (nrow(df) == 0L) abort("Source metadata has no rows with select = 'Y'.")
-  }
-  required <- c("dataset", "column", "type")
-  miss <- setdiff(required, names(df))
-  if (length(miss)) abort(paste("Source metadata missing columns:", paste(miss, collapse = ", ")))
-  dupes <- df %>% dplyr::count(.data$dataset, .data$column) %>% dplyr::filter(.data$n > 1L)
-  if (nrow(dupes) > 0L) {
-    abort(paste("Duplicate (dataset, column):", paste0(dupes$dataset, ".", dupes$column, collapse = ", ")))
-  }
-  df
-}
-
-#' Read controlled terminology library
-#'
-#' @description
-#' `r lifecycle::badge("deprecated")`
-#'
-#' Use [read_study_ct_excel()] instead, which reads the multi-sheet
-#' `Study_CT.xlsx` workbook with Codelists and Codelists_terms sheets.
-#'
-#' Reads a CSV or Excel file containing codelist-level mappings. Required
-#' columns: `codelist_id`, `coded_value`.
-#'
-#' @param path Character. Path to `.csv` or `.xlsx` file.
-#' @param sheet Integer. Sheet index for Excel files. Default `1`.
-#' @param colmap Named list or `NULL`. Column rename mapping.
-#' @param version Character or `NULL`. CT version tag to attach.
-#' @param sponsor_extension Data frame or `NULL`. Extra sponsor terms to append.
-#' @return A tibble with CT library rows.
-#' @export
-read_ct_library <- function(path, sheet = 1L, colmap = NULL,
-                            version = NULL, sponsor_extension = NULL) {
-  .Deprecated("read_study_ct_excel",
-              msg = paste("read_ct_library() is deprecated.",
-                          "Use read_study_ct_excel() with Study_CT.xlsx instead."))
-  checkmate::assert_string(path, min.chars = 1L)
-  ext <- tolower(tools::file_ext(path))
-  df <- switch(ext,
-    csv  = utils::read.csv(path, stringsAsFactors = FALSE, na.strings = ""),
-    xlsx = , xls = readxl::read_excel(path, sheet = sheet),
-    abort(glue::glue("Unsupported file extension: .{ext}"))
-  )
-  df <- tibble::as_tibble(df)
-  names(df) <- tolower(names(df))
-  # SELECT column filtering: keep only rows marked as needed for this study
-  if ("select" %in% names(df)) {
-    df <- dplyr::filter(df, toupper(.data$select) == "Y")
-    df$select <- NULL
-    if (nrow(df) == 0L) abort("CT library has no rows with select = 'Y'.")
-  }
-  required <- c("codelist_id", "coded_value")
-  miss <- setdiff(required, names(df))
-  if (length(miss)) abort(paste("CT library missing columns:", paste(miss, collapse = ", ")))
-  if (!is.null(version)) df$version <- version
-  if (!is.null(sponsor_extension)) {
-    sp <- tibble::as_tibble(sponsor_extension)
-    names(sp) <- tolower(names(sp))
-    df <- dplyr::bind_rows(df, sp)
-  }
-  df
-}
+# Primary readers are now read_study_metadata_excel() and read_study_ct_excel().
+# This module retains validation, normalization, and expansion helpers.
+# ==============================================================================
 
 #' Validate target metadata
 #'
@@ -173,22 +22,6 @@ validate_target_meta <- function(target_meta, strict = FALSE) {
   dupes <- target_meta %>% dplyr::count(.data$domain, .data$var) %>% dplyr::filter(.data$n > 1L)
   if (nrow(dupes) > 0L) abort(paste("Duplicate (domain,var):", paste0(dupes$domain,".",dupes$var, collapse=", ")))
   invisible(target_meta)
-}
-
-#' Validate source metadata
-#'
-#' Checks that required columns (`dataset`, `column`, `type`) exist.
-#'
-#' @param source_meta Tibble. Source metadata to validate.
-#' @param strict Logical. Reserved for future stricter checks. Default `FALSE`.
-#' @return Invisible `source_meta` (for piping).
-#' @export
-validate_source_meta <- function(source_meta, strict = FALSE) {
-  checkmate::assert_tibble(source_meta, min.rows = 1L)
-  required <- c("dataset", "column", "type")
-  miss <- setdiff(required, names(source_meta))
-  if (length(miss)) abort(paste("Missing required columns:", paste(miss, collapse = ", ")))
-  invisible(source_meta)
 }
 
 #' Validate controlled terminology library
@@ -237,32 +70,6 @@ normalize_target_meta <- function(target_meta, config = NULL) {
   if ("to_supp" %in% names(df)) df$to_supp <- toupper(as.character(df$to_supp)) %in% c("Y","YES","TRUE","1")
   if ("order" %in% names(df)) df$order <- as.integer(df$order)
   if ("domain" %in% names(df)) df$domain <- toupper(df$domain)
-  df
-}
-
-#' Normalize source metadata
-#'
-#' Trims whitespace, lowercases dataset/column names, and standardizes
-#' type strings.
-#'
-#' @param source_meta Tibble. Source metadata to normalize.
-#' @param config `sdtm_config` or `NULL`. Currently unused.
-#' @return Normalized tibble.
-#' @export
-normalize_source_meta <- function(source_meta, config = NULL) {
-  df <- source_meta
-  chr_cols <- names(df)[vapply(df, is.character, logical(1))]
-  for (col in chr_cols) df[[col]] <- trimws(df[[col]])
-  if ("dataset" %in% names(df)) df$dataset <- tolower(df$dataset)
-  if ("column" %in% names(df))  df$column  <- tolower(df$column)
-  if ("type" %in% names(df)) {
-    df$type <- dplyr::case_when(
-      tolower(df$type) %in% c("char","character","text","string") ~ "character",
-      tolower(df$type) %in% c("num","numeric","float","double") ~ "numeric",
-      tolower(df$type) %in% c("int","integer") ~ "integer",
-      TRUE ~ tolower(df$type)
-    )
-  }
   df
 }
 

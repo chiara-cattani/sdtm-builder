@@ -1,12 +1,5 @@
 # tests/testthat/test-mod_b_metadata.R
 
-test_that("read_target_meta reads CSV file", {
-  skip_if_no_starter_kit()
-  # read_target_meta is deprecated; we test backwards-compat here
-  # The Excel-based reader is the primary path now
-  expect_true(TRUE)  # placeholder — read_target_meta needs a CSV which we no longer ship
-})
-
 test_that("validate_target_meta passes with starter kit", {
   skip_if_no_starter_kit()
   expect_silent(validate_target_meta(dummy_meta))

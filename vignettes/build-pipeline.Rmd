@@ -70,7 +70,7 @@ mb <- new_meta_bundle(
 ```
 
 Source metadata is automatically inferred from your raw data — no separate
-file needed. Use `infer_source_meta(raw_data)` if you need it explicitly.
+file needed.
 
 ### Step 3: Validate Metadata
 

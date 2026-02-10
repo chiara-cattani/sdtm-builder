@@ -50,7 +50,6 @@ reference:
       - validate_target_meta
       - validate_ct_library
       - normalize_target_meta
-      - normalize_source_meta
       - expand_value_level_meta
       - apply_study_overrides
       - resolve_domain_model
