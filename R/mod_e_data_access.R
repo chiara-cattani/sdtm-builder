@@ -1,6 +1,10 @@
 # ==============================================================================
 # Module E: Raw Data Access & Standardization
 # ==============================================================================
+# Functions: infer_source_meta, load_raw_datasets, standardize_names,
+#            standardize_types, apply_missing_conventions, convert_blanks_to_na,
+#            derive_core_keys, get_subject_level
+# ==============================================================================
 
 #' Infer source metadata from raw data
 #'
@@ -114,35 +118,6 @@ load_raw_datasets <- function(dir, pattern = "\\.(sas7bdat|xlsx|xls|csv|rds|rda|
   result
 }
 
-#' Load raw datasets from files
-#' @param paths Named character vector.
-#' @param formats Named character vector or `NULL`.
-#' @param encoding Character. Default `"UTF-8"`.
-#' @param db_con DBI connection or `NULL`.
-#' @param db_tables Named character vector.
-#' @return Named list of tibbles.
-#' @export
-load_raw_data <- function(paths, formats = NULL, encoding = "UTF-8",
-                          db_con = NULL, db_tables = NULL) {
-  result <- list()
-  for (nm in names(paths)) {
-    p <- paths[[nm]]
-    if (!file.exists(p)) abort(glue::glue("File not found for dataset '{nm}': {p}"))
-    ext <- if (!is.null(formats) && nm %in% names(formats)) formats[[nm]]
-           else tolower(tools::file_ext(p))
-    df <- switch(ext,
-      csv      = readr::read_csv(p, show_col_types = FALSE),
-      xpt      = haven::read_xpt(p),
-      rds      = readRDS(p),
-      sas7bdat = haven::read_sas(p),
-      xlsx = , xls = readxl::read_excel(p),
-      abort(glue::glue("Unsupported format '{ext}' for dataset '{nm}'"))
-    )
-    result[[nm]] <- tibble::as_tibble(df)
-  }
-  result
-}
-
 #' Standardize column names
 #' @param data Tibble.
 #' @param dataset_name Character.
@@ -217,6 +192,44 @@ apply_missing_conventions <- function(data, config = NULL, blank_to_na = TRUE,
   }
   data
 }
+
+
+#' Convert blanks to NA in a data frame
+#'
+#' Turns empty strings (`""`) into proper R `NA` values. Preserves
+#' all attributes (labels, etc.). This replicates the SAS concept of
+#' "missing" for character variables.
+#'
+#' @param x Any R object (method dispatch).
+#' @return Object of the same class with blanks converted to `NA`.
+#'
+#' @examples
+#' convert_blanks_to_na(c("hello", "", "world"))
+#' # [1] "hello" NA      "world"
+#'
+#' @export
+convert_blanks_to_na <- function(x) {
+  UseMethod("convert_blanks_to_na")
+}
+
+#' @export
+#' @rdname convert_blanks_to_na
+convert_blanks_to_na.default <- function(x) x
+
+#' @export
+#' @rdname convert_blanks_to_na
+convert_blanks_to_na.character <- function(x) {
+  x[!is.na(x) & x == ""] <- NA_character_
+  x
+}
+
+#' @export
+#' @rdname convert_blanks_to_na
+convert_blanks_to_na.data.frame <- function(x) {
+  x[] <- lapply(x, convert_blanks_to_na)
+  x
+}
+
 
 #' Derive core identification keys (STUDYID, USUBJID)
 #' @param data Tibble.

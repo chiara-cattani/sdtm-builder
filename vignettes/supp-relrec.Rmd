@@ -125,7 +125,7 @@ relrec <- build_relrec(
 
 ```{r}
 # Export all three datasets
-export_xpt(result$data,   file.path("output", "ae.xpt"))
-export_xpt(result$supp,   file.path("output", "suppae.xpt"))
-export_xpt(result$relrec, file.path("output", "relrec.xpt"))
+export_domain(result$data,   "AE",     "output", formats = "xpt")
+export_domain(result$supp,   "SUPPAE", "output", formats = "xpt")
+export_domain(result$relrec, "RELREC", "output", formats = "xpt")
 ```

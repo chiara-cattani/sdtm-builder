@@ -67,8 +67,16 @@ make_dummy_study <- function(seed = 123,
 
   # Load metadata from the new Excel-based system
   # ---------------------------------------------------------------------------
-  meta_xlsx <- file.path(starter_kit_dir, "Study_Metadata.xlsx")
-  ct_xlsx   <- file.path(starter_kit_dir, "Study_CT.xlsx")
+  meta_xlsx <- file.path(starter_kit_dir, "metadata", "Study_Metadata.xlsx")
+  ct_xlsx   <- file.path(starter_kit_dir, "metadata", "Study_CT.xlsx")
+
+  if (!file.exists(meta_xlsx)) {
+    # Fallback to old flat layout
+    meta_xlsx <- file.path(starter_kit_dir, "Study_Metadata.xlsx")
+  }
+  if (!file.exists(ct_xlsx)) {
+    ct_xlsx <- file.path(starter_kit_dir, "Study_CT.xlsx")
+  }
 
   if (!file.exists(meta_xlsx)) {
     abort(glue::glue("Study_Metadata.xlsx not found in starter kit: {meta_xlsx}"))
@@ -84,7 +92,11 @@ make_dummy_study <- function(seed = 123,
 
   ct_lib <- read_study_ct_excel(ct_xlsx)
 
-  cfg_yaml <- yaml::read_yaml(file.path(starter_kit_dir, "config.yaml"))
+  cfg_path <- file.path(starter_kit_dir, "metadata", "config.yaml")
+  if (!file.exists(cfg_path)) {
+    cfg_path <- file.path(starter_kit_dir, "config.yaml")  # fallback
+  }
+  cfg_yaml <- yaml::read_yaml(cfg_path)
 
   # ---------------------------------------------------------------------------
   # Build config object

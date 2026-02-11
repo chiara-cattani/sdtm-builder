@@ -114,7 +114,27 @@ derive_case_when <- function(data, target_var, conditions, default = NA) {
     mask <- rlang::eval_tidy(rlang::parse_expr(cond_expr), data = data)
     mask[is.na(mask)] <- FALSE
     to_set <- mask & !matched
-    result[to_set] <- conditions[[cond_expr]]
+
+    val_expr <- conditions[[cond_expr]]
+    # If the value looks like an R expression (references a column or function),
+    # evaluate it against the data; else treat as literal string.
+    val <- tryCatch({
+      parsed <- rlang::parse_expr(val_expr)
+      evaluated <- rlang::eval_tidy(parsed, data = data)
+      # length-n vector  = row-wise expression result
+      # length-1 scalar  = constant expression (broadcast)
+      # other length     = mismatch, fall back to literal
+      if (length(evaluated) == n) {
+        as.character(evaluated)
+      } else if (length(evaluated) == 1L) {
+        rep(as.character(evaluated), n)
+      } else {
+        rep(as.character(val_expr), n)
+      }
+    }, error = function(e) {
+      rep(as.character(val_expr), n)
+    })
+    result[to_set] <- val[to_set]
     matched <- matched | mask
   }
   data[[target_var]] <- result

@@ -37,6 +37,7 @@ build_domain <- function(domain, target_meta, raw_data,
                          create_supp = NULL, domain_meta = NULL,
                          value_level_meta = NULL,
                          return_provenance = TRUE, validate = TRUE,
+                         skip_existing = FALSE,
                          verbose = TRUE) {
   domain <- toupper(domain)
   # Resolve create_supp: explicit param > config > TRUE
@@ -138,6 +139,19 @@ build_domain <- function(domain, target_meta, raw_data,
     rule <- dom_rules[[var_name]]
     if (is.null(rule)) next
 
+    # Skip if column already exists with non-NA values (user pre-derived)
+    if (skip_existing && var_name %in% names(data)) {
+      non_na <- sum(!is.na(data[[var_name]]))
+      if (non_na > 0L) {
+        .log(glue::glue("Skipping {var_name}: already derived ({non_na} non-NA values)"))
+        provenance <- dplyr::bind_rows(provenance, tibble::tibble(
+          var = var_name, rule_type = "pre-derived",
+          source = "user"
+        ))
+        next
+      }
+    }
+
     tryCatch({
       data <- derive_variable(data, var_name, rule,
                                context = list(config = config,
@@ -158,7 +172,7 @@ build_domain <- function(domain, target_meta, raw_data,
   supp_vars <- character()
   if (create_supp && "to_supp" %in% names(dom_meta)) {
     supp_flags <- dom_meta$to_supp
-    supp_vars <- dom_meta$var[!is.na(supp_flags) & toupper(supp_flags) == "Y"]
+    supp_vars <- dom_meta$var[!is.na(supp_flags) & toupper(trimws(supp_flags)) %in% c("Y", "YES", "TRUE", "1")]
   }
 
   # Build SUPP dataset before finalize removes extra columns
@@ -258,7 +272,23 @@ derive_variable <- function(data, var, rule, context) {
 
   switch(type,
     constant = {
-      data <- derive_constant(data, var, value = params$value)
+      val <- params$value
+      # Resolve config$ references (e.g. "config$studyid" -> actual value)
+      if (is.character(val) && grepl("^config\\$", val)) {
+        config_key <- sub("^config\\$", "", val)
+        if (!is.null(context$config[[config_key]])) {
+          val <- context$config[[config_key]]
+        }
+      }
+      # Resolve "auto" for well-known constants
+      if (identical(val, "auto")) {
+        if (var == "STUDYID" && !is.null(context$config$studyid)) {
+          val <- toupper(context$config$studyid)
+        } else if (var == "DOMAIN" && !is.null(context$domain)) {
+          val <- context$domain
+        }
+      }
+      data <- derive_constant(data, var, value = val)
     },
     direct_map = {
       src_col <- params$column
@@ -269,6 +299,8 @@ derive_variable <- function(data, var, rule, context) {
         # Try lowercase
         if (tolower(src_col) %in% names(data)) {
           src_col <- tolower(src_col)
+        } else if (toupper(src_col) %in% names(data)) {
+          src_col <- toupper(src_col)
         } else {
           abort(glue::glue("derive_variable({var}): source column '{src_col}' not found"))
         }
@@ -624,6 +656,45 @@ derive_variable <- function(data, var, rule, context) {
       data <- derive_lastobs_flag(data, var, by = actual_by,
                                    order_var = order_var %||% actual_by[1])
     },
+    seriousness = {
+      flag_vars     <- unlist(params$flag_vars %||% list())
+      present_val   <- params$present_value %||% "Y"
+      absent_val    <- params$absent_value %||% "N"
+      actual_flags <- character()
+      for (f in flag_vars) {
+        if (f %in% names(data)) actual_flags <- c(actual_flags, f)
+        else if (tolower(f) %in% names(data)) actual_flags <- c(actual_flags, tolower(f))
+      }
+      if (length(actual_flags) > 0L) {
+        data <- derive_seriousness(data, var, actual_flags,
+                                    present_value = present_val,
+                                    absent_value = absent_val)
+      } else {
+        data[[var]] <- absent_val
+      }
+    },
+    ref_time_point = {
+      rtpt_var   <- var
+      tpt_var    <- params$tpt_var %||% NULL
+      source_var <- params$source_var %||% NULL
+      tpt_label  <- params$tpt_label %||% ""
+      mode       <- params$mode %||% "pattern"
+      mapping    <- params$mapping %||% list("BEFORE" = "before", "AFTER" = "after")
+
+      if (!is.null(source_var)) {
+        if (!source_var %in% names(data) && tolower(source_var) %in% names(data)) {
+          source_var <- tolower(source_var)
+        }
+        if (source_var %in% names(data)) {
+          data <- derive_ref_time_point(data, rtpt_var,
+                                         tpt_var %||% rtpt_var,
+                                         source_var, tpt_label,
+                                         mode = mode, mapping = mapping)
+        }
+      } else {
+        data[[var]] <- NA_character_
+      }
+    },
     {
       # Unknown rule type — set NA with warning
       warn(glue::glue("Unknown rule type '{type}' for variable {var}"))
@@ -762,7 +833,7 @@ finalize_domain <- function(data, domain, target_meta, config,
   # Exclude SUPP variables from the main dataset (only when create_supp=TRUE)
   if (isTRUE(create_supp) && "to_supp" %in% names(dom_meta)) {
     supp_flags <- dom_meta$to_supp
-    non_supp <- is.na(supp_flags) | toupper(supp_flags) != "Y"
+    non_supp <- is.na(supp_flags) | !(toupper(trimws(supp_flags)) %in% c("Y", "YES", "TRUE", "1"))
     target_vars <- dom_meta$var[non_supp]
   }
 

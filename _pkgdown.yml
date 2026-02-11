@@ -85,7 +85,7 @@ reference:
   - title: "Data Access & Joins"
     desc: "Load, standardize and join raw data."
     contents:
-      - load_raw_data
+      - load_raw_datasets
       - standardize_names
       - standardize_types
       - apply_missing_conventions
@@ -183,8 +183,7 @@ reference:
       - gen_qmd_domain
       - gen_project_scaffold
       - gen_shared_utils_script
-      - export_xpt
-      - export_rds_csv
+      - export_domain
       - snapshot_dataset
       - write_define_support
       - write_codelist_support

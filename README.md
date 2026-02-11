@@ -94,7 +94,7 @@ head(results$AE$data)       # the SDTM AE dataset
 results$AE$report           # validation report
 
 # 5. Export
-export_xpt(results$AE$data, "AE", "output/")
+export_domain(results$AE$data, "AE", "output/")
 
 # Or use the built-in end-to-end check
 result <- check_end_to_end(verbose = TRUE)
@@ -397,9 +397,9 @@ results <- build_all_domains(
 
 # ── 6. Export each domain ─────────────────────────────────────────────────
 for (dom in names(results)) {
-  export_xpt(results[[dom]]$data, dom, "sdtm/datasets",
-             target_meta = target_meta, domain_meta = domain_meta)
-  export_rds_csv(results[[dom]]$data, dom, "sdtm/datasets", formats = "rda")
+  export_domain(results[[dom]]$data, dom, "sdtm/datasets",
+                formats = c("xpt", "rda"),
+                target_meta = target_meta, domain_meta = domain_meta)
 }
 
 # ── 7. Generate R programs (optional) ─────────────────────────────────────
@@ -445,7 +445,7 @@ for (dom in names(results)) {
                +------------+------------+
                             |
                 +-----------v-----------+
-                |  export_xpt() + .rda  |
+                |  export_domain()      |
                 |  gen_domain_script()  |
                 +-----------------------+
 ```
@@ -590,8 +590,7 @@ get_template_config(copy_to = "my_study/config.yaml")
 
 | Function | Description |
 |----------|-------------|
-| `export_xpt(data, domain, output_dir, ...)` | Export to SAS XPT v5 |
-| `export_rds_csv(data, domain, output_dir, formats)` | Export to RDS, CSV, or **RDA** |
+| `export_domain(data, domain, output_dir, formats, ...)` | Export to XPT v8 (default), RDS, CSV, or RDA |
 | `gen_domain_script(domain, rule_set, target_meta, config, ...)` | Generate R script |
 | `gen_qmd_domain(...)` | Generate Quarto document |
 
@@ -633,10 +632,10 @@ Each domain can be exported in multiple formats:
 
 | Format | Function | Extension | Description |
 |--------|----------|-----------|-------------|
-| XPT | `export_xpt()` | `.xpt` | SAS transport v5 (for regulatory submission) |
-| RDA | `export_rds_csv(..., formats = "rda")` | `.rda` | R binary (preserves attributes, labels) |
-| RDS | `export_rds_csv(..., formats = "rds")` | `.rds` | R single-object binary |
-| CSV | `export_rds_csv(..., formats = "csv")` | `.csv` | Plain text |
+| XPT | `export_domain(..., formats = "xpt")` | `.xpt` | SAS transport v8 (default, for regulatory submission) |
+| RDA | `export_domain(..., formats = "rda")` | `.rda` | R binary (preserves attributes, labels) |
+| RDS | `export_domain(..., formats = "rds")` | `.rds` | R single-object binary |
+| CSV | `export_domain(..., formats = "csv")` | `.csv` | Plain text |
 
 `run_study()` exports **XPT + RDA** by default. Change with `export_formats`:
 

@@ -188,7 +188,8 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
     .log(glue::glue("Step 4: Exporting to {output_dir}..."))
     for (dom in names(built)) {
       tryCatch({
-        export_xpt(built[[dom]], dom, output_dir, target_meta)
+        export_domain(built[[dom]], dom, output_dir,
+                      formats = "xpt", target_meta = target_meta)
         .log(glue::glue("  Exported {dom}.xpt"))
       }, error = function(e) {
         .log(glue::glue("  Export error for {dom}: {e$message}"))

@@ -15,6 +15,10 @@ parse_partial_date <- function(x,
                                partial = c("Y","YM","YMD"),
                                unknown_tokens = c("UNK","UN","UNKN","XX","99"),
                                day_first = FALSE) {
+  # Handle Date / POSIXt objects
+  if (inherits(x, c("Date", "POSIXt"))) {
+    x <- as.character(x)
+  }
   n <- length(x)
   result <- tibble::tibble(
     year      = rep(NA_integer_, n),
@@ -116,6 +120,10 @@ combine_date_time <- function(date, time, seconds = TRUE, tz = "UTC") {
 #' @export
 format_iso_dtc <- function(parsed, time = NULL, keep_partial = TRUE,
                            impute = NULL) {
+  # If parsed is a Date/POSIXt object, convert to character first
+  if (inherits(parsed, c("Date", "POSIXt"))) {
+    parsed <- as.character(parsed)
+  }
   # If parsed is a character vector, parse it first
   if (is.character(parsed)) {
     parsed <- parse_partial_date(parsed)

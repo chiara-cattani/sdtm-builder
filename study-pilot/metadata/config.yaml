@@ -1,0 +1,67 @@
+# =============================================================================
+# sdtmbuilder configuration for STUDY-PILOT
+# =============================================================================
+
+studyid: "STUDY-PILOT"
+timezone: "UTC"
+
+# Reference start date: RFSTDTC comes from DM (icdat → RFSTDTC in SAS DM.sas)
+ref_start_rule:
+  method: "dm_var"
+  dataset: "dm_raw"
+  column: "rfstdtc"
+
+# Paths (relative to where run_study() is called, or absolute)
+paths:
+  metadata: "metadata/Study_Metadata.xlsx"
+  ct: "metadata/Study_CT.xlsx"
+  raw_data: "raw"
+  output: "sdtm/datasets"
+  programs: "sdtm/programs"
+
+# Export formats
+export:
+  formats:
+    - "xpt"
+    - "rda"
+  generate_programs: true
+
+# Controlled terminology
+ct:
+  files:
+    - "metadata/Study_CT.xlsx"
+
+# Study metadata
+metadata:
+  file: "metadata/Study_Metadata.xlsx"
+
+# No visit map needed for AE (AE is not visit-based)
+# visit_map will be added when expanding to visit-based domains (VS, LB, etc.)
+
+# No epoch map for this demo (can be added later)
+
+# Policies
+policies:
+  unknown_ct: "WARN_AND_KEEP"
+  date_partial_allowed: true
+  imputation:
+    day: "first"
+    month: null
+    year: null
+  join_cardinality_default: "m:1"
+  blank_is_na: true
+  na_strings:
+    - "."
+    - "UNK"
+    - "NA"
+
+# SUPP domain generation: keep SUPP variables in SUPPAE
+create_supp: true
+
+# Study day convention
+study_day:
+  convention: "no_day_zero"
+
+log_level: "INFO"
+
+sponsor_overrides: {}

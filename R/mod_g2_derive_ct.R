@@ -1,5 +1,8 @@
 # ==============================================================================
-# Module G2: Controlled Terminology Derivations
+# Module G2: Controlled Terminology & Dictionary Derivations
+# ==============================================================================
+# Functions: assign_ct, decode_ct, map_yes_no, map_unknown, validate_ct_values,
+#            get_meddra_version, get_whodrug_version, derive_dict_version
 # ==============================================================================
 
 #' Assign controlled terminology coded values
@@ -193,4 +196,178 @@ validate_ct_values <- function(data, var, codelist_id, ct_lib,
     n_records = sum(vals %in% invalid),
     example  = invalid[1]
   )
+}
+
+
+#' Get MedDRA dictionary version from a dataset
+#'
+#' Extracts the MedDRA version string from a column (typically `DictInstance`
+#' or `version`). Returns a character scalar such as `"27.1"`.
+#'
+#' @param indata A data frame containing the dictionary version column.
+#' @param dictvar Character. Column name to inspect. Default `"DictInstance"`
+#'   (matched case-insensitively).
+#' @param compare Optional character. If provided, a message is emitted
+#'   when the detected version does not match.
+#' @return Character scalar with the MedDRA version(s), or `""`.
+#' @export
+get_meddra_version <- function(indata,
+                               dictvar = "DictInstance",
+                               compare = NULL) {
+  if (missing(indata) || is.null(indata)) {
+    message("get_meddra_version: No dataset provided.")
+    return("")
+  }
+  if (!is.data.frame(indata)) {
+    message("get_meddra_version: Input is not a data frame.")
+    return("")
+  }
+
+  dictvar_match <- names(indata)[tolower(names(indata)) == tolower(dictvar)]
+  if (length(dictvar_match) == 0L) {
+    dictvar_match <- names(indata)[tolower(names(indata)) == "version"]
+  }
+  if (length(dictvar_match) == 0L) {
+    message("get_meddra_version: Column '", dictvar,
+            "' (or 'version') not found in dataset.")
+    return("")
+  }
+
+  dictvar <- dictvar_match[1L]
+  vals <- as.character(indata[[dictvar]])
+  vals <- vals[!is.na(vals) & trimws(vals) != ""]
+  if (length(vals) == 0L) {
+    message("get_meddra_version: No non-empty values in '", dictvar, "'.")
+    return("")
+  }
+
+  extracted <- stringr::str_extract(vals, "\\d{2}\\.\\d")
+  versions <- unique(extracted[!is.na(extracted) & extracted != ""])
+  if (length(versions) == 0L) {
+    message("get_meddra_version: Could not extract version pattern.")
+    return("")
+  }
+
+  result <- paste(sort(versions), collapse = "#")
+  if (grepl("#", result, fixed = TRUE)) {
+    message("get_meddra_version: Multiple MedDRA versions found: ",
+            gsub("#", ", ", result))
+  }
+  if (!is.null(compare) && nzchar(compare) && result != compare) {
+    message("get_meddra_version: Detected version (", result,
+            ") does not match expected (", compare, ").")
+  }
+  result
+}
+
+
+#' Get WHODrug dictionary version from a dataset
+#'
+#' Extracts the WHODrug version string from a column (typically
+#' `DictInstance` or `version`). Returns a character scalar such as
+#' `"2023Q1"`.
+#'
+#' @param indata A data frame containing the dictionary version column.
+#' @param dictvar Character. Column name to inspect. Default `"DictInstance"`
+#'   (matched case-insensitively).
+#' @param compare Optional character. If provided, a message is emitted
+#'   when the detected version does not match.
+#' @return Character scalar with the WHODrug version(s), or `""`.
+#' @export
+get_whodrug_version <- function(indata,
+                                dictvar = "DictInstance",
+                                compare = NULL) {
+  if (missing(indata) || is.null(indata)) {
+    message("get_whodrug_version: No dataset provided.")
+    return("")
+  }
+  if (!is.data.frame(indata)) {
+    message("get_whodrug_version: Input is not a data frame.")
+    return("")
+  }
+
+  dictvar_match <- names(indata)[tolower(names(indata)) == tolower(dictvar)]
+  if (length(dictvar_match) == 0L) {
+    dictvar_match <- names(indata)[tolower(names(indata)) == "version"]
+  }
+  if (length(dictvar_match) == 0L) {
+    message("get_whodrug_version: Column '", dictvar,
+            "' (or 'version') not found in dataset.")
+    return("")
+  }
+
+  dictvar <- dictvar_match[1L]
+  vals <- as.character(indata[[dictvar]])
+  vals <- vals[!is.na(vals) & trimws(vals) != ""]
+  if (length(vals) == 0L) {
+    message("get_whodrug_version: No non-empty values in '", dictvar, "'.")
+    return("")
+  }
+
+  whodrug_versions <- vapply(vals, function(v) {
+    v <- as.character(v)
+    year <- stringr::str_extract(v, "20\\d{2}")
+    if (is.na(year)) return(NA_character_)
+    v_upper <- toupper(v)
+    quarter <- dplyr::case_when(
+      grepl("MAR|Q1", v_upper) ~ "Q1",
+      grepl("SEP|Q3", v_upper) ~ "Q3",
+      TRUE ~ NA_character_
+    )
+    if (is.na(quarter)) return(NA_character_)
+    paste0(year, quarter)
+  }, character(1), USE.NAMES = FALSE)
+
+  versions <- unique(whodrug_versions[!is.na(whodrug_versions)])
+  if (length(versions) == 0L) {
+    raw_versions <- unique(trimws(vals))
+    if (length(raw_versions) == 1L) return(raw_versions)
+    message("get_whodrug_version: Could not determine WHODrug version.")
+    return("")
+  }
+
+  result <- paste(sort(versions), collapse = "#")
+  if (grepl("#", result, fixed = TRUE)) {
+    message("get_whodrug_version: Multiple WHODrug versions found: ",
+            gsub("#", ", ", result))
+  }
+  if (!is.null(compare) && nzchar(compare) && result != compare) {
+    message("get_whodrug_version: Detected version (", result,
+            ") does not match expected (", compare, ").")
+  }
+  result
+}
+
+
+#' Derive dictionary version string for a domain variable
+#'
+#' Sets `--DICT` to e.g. `"MedDRA 27.1"` or `"WHODrug 2023Q1"` when
+#' the decoded variable is non-missing.
+#'
+#' @param data Tibble.
+#' @param target_var Character. Target dictionary variable (e.g., `"AEDICT"`).
+#' @param decode_var Character. The decoded variable to check for non-missing
+#'   values (e.g., `"AEDECOD"`).
+#' @param dict_type Character. `"meddra"` or `"whodrug"`.
+#' @param version Character. The version string (e.g., `"27.1"`).
+#' @return Tibble with `target_var` populated.
+#' @export
+derive_dict_version <- function(data, target_var, decode_var,
+                                dict_type = c("meddra", "whodrug"),
+                                version) {
+  dict_type <- match.arg(dict_type)
+  prefix <- switch(dict_type, meddra = "MedDRA", whodrug = "WHODrug")
+  dict_label <- paste(prefix, version)
+
+  if (!decode_var %in% names(data)) {
+    data[[target_var]] <- NA_character_
+    return(data)
+  }
+
+  data[[target_var]] <- dplyr::if_else(
+    !is.na(data[[decode_var]]) & nchar(trimws(data[[decode_var]])) > 0L,
+    dict_label,
+    ""
+  )
+  data
 }

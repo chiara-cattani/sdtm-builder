@@ -249,6 +249,11 @@ read_study_metadata_excel <- function(path) {
   # Uppercase domain
   df$domain <- toupper(df$domain)
 
+  # Rename SUPPFL -> to_supp if present (Excel uses SUPPFL, internal uses to_supp)
+  if ("suppfl" %in% names(df) && !"to_supp" %in% names(df)) {
+    df <- dplyr::rename(df, to_supp = "suppfl")
+  }
+
   # Add missing standard target_meta columns
   if (!"is_key" %in% names(df)) df$is_key <- NA
   if (!"to_supp" %in% names(df)) df$to_supp <- NA

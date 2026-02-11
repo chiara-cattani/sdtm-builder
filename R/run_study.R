@@ -49,8 +49,8 @@
 #' @section Folder Structure:
 #' ```
 #' my_study/
-#' ├── config.yaml
 #' ├── metadata/
+#' │   ├── config.yaml
 #' │   ├── Study_Metadata.xlsx
 #' │   └── Study_CT.xlsx
 #' ├── raw/
@@ -70,8 +70,8 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Using a config.yaml file
-#' out <- run_study("config.yaml")
+#' # Using a config.yaml file (stored in metadata/)
+#' out <- run_study("metadata/config.yaml")
 #'
 #' # Using explicit paths (no config.yaml needed)
 #' out <- run_study(
@@ -83,7 +83,7 @@
 #' )
 #'
 #' # Datasets only (no R programs generated)
-#' out <- run_study("config.yaml", generate_programs = FALSE)
+#' out <- run_study("metadata/config.yaml", generate_programs = FALSE)
 #' }
 #'
 #' @export
@@ -248,46 +248,29 @@ run_study <- function(config_path = NULL,
     dom_data <- results[[dom]]$data
     if (is.null(dom_data)) next
 
-    dom_paths <- list()
-
-    if ("xpt" %in% export_formats) {
-      xpt_path <- export_xpt(
-        data        = dom_data,
-        domain      = dom,
-        output_dir  = output_dir,
-        target_meta = target_meta,
-        domain_meta = domain_meta
-      )
-      dom_paths$xpt <- xpt_path
-    }
-
-    if ("rda" %in% export_formats) {
-      rda_paths <- export_rds_csv(dom_data, dom, output_dir, formats = "rda")
-      dom_paths$rda <- rda_paths$rda
-    }
-
-    if ("rds" %in% export_formats) {
-      rds_paths <- export_rds_csv(dom_data, dom, output_dir, formats = "rds")
-      dom_paths$rds <- rds_paths$rds
-    }
-
-    if ("csv" %in% export_formats) {
-      csv_paths <- export_rds_csv(dom_data, dom, output_dir, formats = "csv")
-      dom_paths$csv <- csv_paths$csv
-    }
+    # Export the main domain
+    export_domain(
+      data        = dom_data,
+      domain      = dom,
+      output_dir  = output_dir,
+      formats     = export_formats,
+      xpt_version = 8L,
+      target_meta = target_meta,
+      domain_meta = domain_meta
+    )
+    exported[[dom]] <- TRUE
 
     # Export SUPP if present
     if (!is.null(results[[dom]]$supp) && nrow(results[[dom]]$supp) > 0L) {
       supp_dom <- paste0("SUPP", dom)
-      if ("xpt" %in% export_formats) {
-        export_xpt(results[[dom]]$supp, supp_dom, output_dir)
-      }
-      if ("rda" %in% export_formats) {
-        export_rds_csv(results[[dom]]$supp, supp_dom, output_dir, formats = "rda")
-      }
+      export_domain(
+        data       = results[[dom]]$supp,
+        domain     = supp_dom,
+        output_dir = output_dir,
+        formats    = export_formats,
+        xpt_version = 8L
+      )
     }
-
-    exported[[dom]] <- dom_paths
   }
 
   # ---- 8. Generate R programs ------------------------------------------------
@@ -364,7 +347,7 @@ run_study <- function(config_path = NULL,
 #' get_template_config()
 #'
 #' # Copy to your study folder
-#' get_template_config(copy_to = "my_study/config.yaml")
+#' get_template_config(copy_to = "my_study/metadata/config.yaml")
 #'
 #' @export
 get_template_config <- function(copy_to = NULL) {

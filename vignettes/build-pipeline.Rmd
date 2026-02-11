@@ -27,10 +27,10 @@ building one or more SDTM domains with `sdtmbuilder`.
 │  Step 4 ─ Compile     ───► compile_rules()                      │
 │  Step 5 ─ Dependency  ───► build_dependency_graph()              │
 │                             topo_sort_rules()                   │
-│  Step 6 ─ Load Data   ───► load_raw_data() / load_raw_datasets()│
+│  Step 6 ─ Load Data   ───► load_raw_datasets()                 │
 │  Step 7 ─ Build       ───► build_domain()                       │
 │  Step 8 ─ Validate    ───► validate_domain_structure()           │
-│  Step 9 ─ Export      ───► export_xpt() / export_rds_csv()      │
+│  Step 9 ─ Export      ───► export_domain()                      │
 │  Step 10─ Codegen     ───► gen_domain_script() [optional]        │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -112,9 +112,6 @@ for (dom in domains) {
 ```r
 # Load all raw datasets from a directory
 raw_data <- load_raw_datasets("rawdata/", pattern = "\\.csv$")
-
-# Or load individually
-ae_raw <- load_raw_data("rawdata/ae_raw.csv", format = "csv")
 ```
 
 ### Step 7: Build Domains
@@ -152,8 +149,8 @@ output_dir <- "output/sdtm"
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 for (dom in names(results)) {
-  export_xpt(results[[dom]]$data, dom, output_dir, mb$target_meta)
-  export_rds_csv(results[[dom]]$data, dom, output_dir)
+  export_domain(results[[dom]]$data, dom, output_dir,
+                formats = c("xpt", "rds"), target_meta = mb$target_meta)
 }
 ```
 
@@ -207,7 +204,7 @@ vr <- validate_domain_structure(ae$data, study$target_meta, "AE",
                                 study$config, study$ct_lib)
 print(vr)
 
-export_xpt(ae$data, "AE", tempdir(), study$target_meta)
+export_domain(ae$data, "AE", tempdir(), target_meta = study$target_meta)
 ```
 
 ---

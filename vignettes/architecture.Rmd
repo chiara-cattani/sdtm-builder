@@ -35,8 +35,8 @@ vignette: >
     ┌──────────▼──────────┐   ┌────────▼───────────────┐
     │   Data Access (E)    │   │ Dependency System (D)  │
     │                      │   │                         │
-    │ load_raw_data()      │   │ build_dependency_graph()│
-    │ load_raw_datasets()  │   │ topo_sort_rules()       │
+    │ load_raw_datasets()  │   │ build_dependency_graph()│
+    │ standardize_names()  │   │ topo_sort_rules()       │
     │ standardize_names()  │   │ detect_cycles()         │
     │ standardize_types()  │   │ resolve_late_binding()  │
     │ apply_missing_conv() │   │ plan_build_steps()      │
@@ -99,8 +99,8 @@ vignette: >
      ┌─────────────────────▼────────────────────────┐
      │ Code Generation (J)  +  Export (K)            │
      │                                               │
-     │ gen_domain_script()   export_xpt()            │
-     │ gen_qmd_domain()      export_rds_csv()        │
+     │ gen_domain_script()   export_domain()          │
+     │ gen_qmd_domain()      write_define_support()   │
      │ gen_project_scaffold() write_define_support()  │
      │ serialize_rules_*()   write_codelist_support() │
      │                       write_value_level_*()    │
@@ -166,7 +166,7 @@ vignette: >
                     │
              ┌──────┴──────┐
              ▼              ▼
-        export_xpt()   gen_domain_script()
+        export_domain()   gen_domain_script()
         write_define   gen_qmd_domain()
         _support()
 ```
@@ -178,14 +178,14 @@ vignette: >
 | 1 | Meta | `read_study_metadata_excel()` → `validate_*()` | None |
 | 2 | Meta | `compile_rules()` → `validate_rules()` | Step 1 |
 | 3 | Plan | `build_dependency_graph()` → `topo_sort_rules()` | Step 2 |
-| 4 | Data | `load_raw_data()` → `standardize_*()` | Step 1 |
+| 4 | Data | `load_raw_datasets()` → `standardize_*()` | Step 1 |
 | 5 | Build | Trial design: `build_ta_tv_te_ts_plugins()` | Steps 1-4 |
 | 6 | Build | **DM**: `build_dm_plugin()` | Steps 1-4 |
 | 7 | Build | **SV**: `build_sv_plugin()` | Step 6 |
 | 8 | Build | Events: AE, DS, MH, ... | Steps 6-7 |
 | 9 | Build | Interventions: CM, EX, ... | Steps 6-7 |
 | 10 | Build | Findings: LB, VS, ... | Steps 6-7 |
-| 11 | Export | `export_xpt()` + `write_define_support()` | Steps 6-10 |
+| 11 | Export | `export_domain()` + `write_define_support()` | Steps 6-10 |
 | 12 | CodeGen | `gen_domain_script()` | Step 2 |
 
 Within each domain, variable derivation order follows the topological sort

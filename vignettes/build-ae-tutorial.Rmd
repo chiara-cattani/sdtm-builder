@@ -146,9 +146,9 @@ ae_result$report$findings
 
 ```{r export}
 output_dir <- tempdir()
-export_xpt(ae, "AE", output_dir, target_meta)
-cat("Exported:", file.path(output_dir, "ae.xpt"), "\n")
-cat("File size:", file.size(file.path(output_dir, "ae.xpt")), "bytes\n")
+export_domain(ae, "AE", output_dir, target_meta = target_meta)
+cat("Exported:", file.path(output_dir, "XPT", "ae.xpt"), "\n")
+cat("File size:", file.size(file.path(output_dir, "XPT", "ae.xpt")), "bytes\n")
 ```
 
 ## Building all domains

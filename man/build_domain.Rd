@@ -18,6 +18,7 @@ build_domain(
   value_level_meta = NULL,
   return_provenance = TRUE,
   validate = TRUE,
+  skip_existing = FALSE,
   verbose = TRUE
 )
 }

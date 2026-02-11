@@ -1,51 +1,149 @@
 # ==============================================================================
 # Module K: Export
 # ==============================================================================
+# Functions: export_domain, write_define_support, write_codelist_support,
+#            write_value_level_support, write_origin_support
+# ==============================================================================
 
-#' Export a domain dataset to XPT (SAS transport v5) format
+#' Export an SDTM domain dataset
 #'
-#' Writes a properly labelled SDTM domain to `.xpt` using `haven::write_xpt()`.
+#' Single, unified export function that finalizes a domain dataset using
+#' metadata (ordering, labelling, type enforcement) and writes it to one
+#' or more formats.
 #'
-#' @param data Tibble. The domain dataset.
-#' @param domain Character. Domain code.
-#' @param output_dir Character. Directory for output.
-#' @param target_meta Tibble or `NULL`. If provided, labels/types are enforced.
-#' @param max_label_length Integer. Default 40.
-#' @param version Integer. SAS transport version (5 or 8). Default 5.
-#' @return Invisible file path.
+#' @param data Data frame / tibble. The domain dataset to export.
+#' @param domain Character. SDTM domain code (e.g., \code{"AE"}).
+#' @param output_dir Character. Root output directory. Sub-directories
+#'   \code{XPT/}, \code{RDA/}, \code{CSV/} are created when the
+#'   corresponding format is requested.
+#' @param formats Character vector. Which output formats to produce.
+#'   Any combination of \code{"xpt"}, \code{"rds"}, \code{"csv"},
+#'   \code{"rda"}. Default \code{c("xpt")}.
+#' @param xpt_version Integer. SAS transport version: 5 or 8. Default 8.
+#' @param target_meta Tibble or \code{NULL}. Variable-level metadata with
+#'   \code{domain}, \code{var}, \code{label}, \code{core} (and optionally
+#'   \code{type}, \code{length}, \code{significant_digits}). Used to
+#'   enforce column order, labels, widths, rounding, and to drop all-empty
+#'   PERM variables.
+#' @param domain_meta Tibble or \code{NULL}. Dataset-level metadata with
+#'   \code{domain} and \code{description}.
+#' @param keys Character vector or \code{NULL}. Sort keys. If \code{NULL},
+#'   uses \code{STUDYID}, \code{USUBJID}, \code{<domain>SEQ}.
+#' @param drop_empty_perm Logical. If \code{TRUE} (default), drop PERM
+#'   variables that are entirely empty (all NA / blank).
+#' @param max_label_length Integer. Maximum label length. Default 40.
+#' @return Invisible tibble: the finalized dataset.
+#'
+#' @examples
+#' \dontrun{
+#' # Export to XPT v8 (default)
+#' export_domain(ae, "AE", "sdtm/datasets", target_meta = target_meta)
+#'
+#' # Export to XPT v8 + CSV
+#' export_domain(ae, "AE", "sdtm/datasets", formats = c("xpt", "csv"))
+#'
+#' # Export to all formats with XPT v5
+#' export_domain(ae, "AE", "sdtm/datasets",
+#'               formats = c("xpt", "rds", "csv", "rda"),
+#'               xpt_version = 5L)
+#' }
+#'
 #' @export
-export_xpt <- function(data, domain, output_dir,
-                       target_meta = NULL, domain_meta = NULL,
-                       max_label_length = 40L,
-                       version = 5L) {
-  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-
+export_domain <- function(data, domain, output_dir,
+                          formats = c("xpt"),
+                          xpt_version = 8L,
+                          target_meta = NULL,
+                          domain_meta = NULL,
+                          keys = NULL,
+                          drop_empty_perm = TRUE,
+                          max_label_length = 40L) {
   domain <- toupper(domain)
-  fname  <- paste0(tolower(domain), ".xpt")
-  fpath  <- file.path(output_dir, fname)
+  dom_lc <- tolower(domain)
 
-  # Apply labels, type enforcement, and width from target_meta if provided
+
+  # Uppercase column names
+  names(data) <- toupper(names(data))
+
+  # 1. Variable metadata for this domain
+  dom_meta <- NULL
   if (!is.null(target_meta)) {
-    dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
-    for (i in seq_len(nrow(dom_meta))) {
-      v <- dom_meta$var[i]
-      if (!v %in% names(data)) next
+    dom_meta <- dplyr::filter(target_meta, toupper(.data[["domain"]]) == domain)
+    if (nrow(dom_meta) == 0L) {
+      cli::cli_alert_warning(
+        "export_domain: no variable metadata for {domain}; skipping metadata enforcement."
+      )
+      dom_meta <- NULL
+    }
+  }
 
-      # Apply label
-      if (!is.na(dom_meta$label[i])) {
-        lbl <- substr(dom_meta$label[i], 1, max_label_length)
-        attr(data[[v]], "label") <- lbl
-      }
+  # 2. Resolve keys
+  if (is.null(keys) || length(keys) == 0L) {
+    seq_var <- paste0(domain, "SEQ")
+    keys <- c("STUDYID", "USUBJID", seq_var)
+  }
+  keys <- toupper(keys)
+  avail_keys <- intersect(keys, names(data))
 
-      # Set width attribute for character variables (used by haven for xpt)
-      if ("length" %in% names(dom_meta) && is.character(data[[v]])) {
-        max_len <- dom_meta$length[i]
-        if (!is.na(max_len) && is.numeric(max_len)) {
-          attr(data[[v]], "width") <- as.integer(max_len)
+  # 3. Sort by keys
+  if (length(avail_keys) > 0L) {
+    data <- dplyr::arrange(data, dplyr::across(dplyr::all_of(avail_keys)))
+  }
+
+  # 4. Enforce metadata variable order, labels, and core checks
+  if (!is.null(dom_meta)) {
+    core_map <- stats::setNames(toupper(dom_meta$core), toupper(dom_meta$var))
+
+    # Check REQ/EXP
+    req_exp_vars <- names(core_map)[core_map %in% c("REQ", "EXP")]
+    missing_req <- setdiff(req_exp_vars, names(data))
+    if (length(missing_req) > 0L) {
+      cli::cli_alert_warning(
+        "export_domain: missing REQ/EXP var(s): {paste(missing_req, collapse=', ')}"
+      )
+    }
+
+    # Drop all-empty PERM variables
+    if (isTRUE(drop_empty_perm)) {
+      perm_vars <- names(core_map)[core_map == "PERM"]
+      perm_in_data <- intersect(perm_vars, names(data))
+      if (length(perm_in_data) > 0L) {
+        all_empty <- vapply(perm_in_data, function(v) {
+          col <- data[[v]]
+          if (is.character(col)) all(is.na(col) | trimws(col) == "")
+          else all(is.na(col))
+        }, logical(1))
+        drop_cols <- perm_in_data[all_empty]
+        if (length(drop_cols) > 0L) {
+          data <- data[, setdiff(names(data), drop_cols), drop = FALSE]
+          cli::cli_alert_info(
+            "Dropped {length(drop_cols)} all-empty PERM var(s): {paste(drop_cols, collapse=', ')}"
+          )
         }
       }
+    }
 
-      # Apply significant_digits rounding for numeric variables
+    # Reorder columns per metadata + any extra columns at end
+    meta_order <- toupper(dom_meta$var)
+    meta_in_data <- intersect(meta_order, names(data))
+    extra_cols <- setdiff(names(data), meta_order)
+    data <- data[, c(meta_in_data, extra_cols), drop = FALSE]
+
+    # Apply labels, widths, and rounding
+    for (i in seq_len(nrow(dom_meta))) {
+      v <- toupper(dom_meta$var[i])
+      if (!v %in% names(data)) next
+      lbl <- dom_meta$label[i]
+      if (!is.na(lbl) && nzchar(lbl)) {
+        attr(data[[v]], "label") <- substr(lbl, 1, max_label_length)
+      }
+      # Width for character variables
+      if ("length" %in% names(dom_meta) && is.character(data[[v]])) {
+        w <- dom_meta$length[i]
+        if (!is.na(w) && is.numeric(w)) {
+          attr(data[[v]], "width") <- as.integer(w)
+        }
+      }
+      # Rounding for numeric variables
       if ("significant_digits" %in% names(dom_meta) && is.numeric(data[[v]])) {
         sig_d <- dom_meta$significant_digits[i]
         if (!is.na(sig_d) && is.numeric(sig_d)) {
@@ -55,60 +153,67 @@ export_xpt <- function(data, domain, output_dir,
     }
   }
 
-  # Set dataset label from domain_meta (if available) or fallback to domain code
+  # 5. Replace NA with "" for character columns
+  for (v in names(data)) {
+    if (is.character(data[[v]])) {
+      data[[v]][is.na(data[[v]])] <- ""
+    }
+  }
+
+  # 6. Dataset label
+  ds_label <- paste("SDTM domain", domain)
   if (!is.null(domain_meta)) {
-    dom_info <- dplyr::filter(domain_meta, .data[["domain"]] == .env[["domain"]])
+    dom_info <- dplyr::filter(domain_meta, toupper(.data[["domain"]]) == domain)
     if (nrow(dom_info) > 0L && "description" %in% names(dom_info) &&
         !is.na(dom_info$description[1L])) {
-      attr(data, "label") <- substr(dom_info$description[1L], 1, max_label_length)
-    } else {
-      attr(data, "label") <- domain
+      ds_label <- substr(dom_info$description[1L], 1, max_label_length)
     }
-  } else {
-    attr(data, "label") <- domain
   }
+  attr(data, "label") <- ds_label
 
-  haven::write_xpt(data, fpath, version = version)
-  cli::cli_alert_success("Exported {domain} -> {fpath} ({nrow(data)} rows)")
-  invisible(fpath)
-}
-
-#' Export a domain to RDS and CSV
-#'
-#' @param data Tibble. Domain dataset.
-#' @param domain Character.
-#' @param output_dir Character.
-#' @param formats Character vector. Subset of `c("rds","csv","rda")`.
-#' @return Invisible named list of paths.
-#' @export
-export_rds_csv <- function(data, domain, output_dir,
-                           formats = c("rds", "csv")) {
-  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-  domain <- toupper(domain)
-  paths <- list()
+  # 7. Multi-format export
+  if ("xpt" %in% formats) {
+    xpt_dir <- file.path(output_dir, "XPT")
+    dir.create(xpt_dir, recursive = TRUE, showWarnings = FALSE)
+    xpt_path <- file.path(xpt_dir, paste0(dom_lc, ".xpt"))
+    haven::write_xpt(data, path = xpt_path, version = xpt_version)
+    cli::cli_alert_success("XPT v{xpt_version} written: {xpt_path}")
+  }
 
   if ("rds" %in% formats) {
-    p <- file.path(output_dir, paste0(tolower(domain), ".rds"))
-    saveRDS(data, p)
-    paths$rds <- p
-  }
-  if ("csv" %in% formats) {
-    p <- file.path(output_dir, paste0(tolower(domain), ".csv"))
-    readr::write_csv(data, p)
-    paths$csv <- p
-  }
-  if ("rda" %in% formats) {
-    p <- file.path(output_dir, paste0(tolower(domain), ".rda"))
-    # Save with the domain name as the variable name (e.g., AE, DM)
-    assign(domain, data)
-    save(list = domain, file = p)
-    paths$rda <- p
+    rda_dir <- file.path(output_dir, "RDA")
+    dir.create(rda_dir, recursive = TRUE, showWarnings = FALSE)
+    rds_path <- file.path(rda_dir, paste0(dom_lc, ".rds"))
+    saveRDS(data, rds_path)
+    cli::cli_alert_success("RDS written: {rds_path}")
   }
 
-  fmts_done <- intersect(formats, names(paths))
-  cli::cli_alert_success("Exported {domain}: {paste(fmts_done, collapse=', ')}")
-  invisible(paths)
+  if ("csv" %in% formats) {
+    csv_dir <- file.path(output_dir, "CSV")
+    dir.create(csv_dir, recursive = TRUE, showWarnings = FALSE)
+    csv_path <- file.path(csv_dir, paste0(dom_lc, ".csv"))
+    utils::write.csv(data, csv_path, row.names = FALSE, na = "")
+    cli::cli_alert_success("CSV written: {csv_path}")
+  }
+
+  if ("rda" %in% formats) {
+    rda_dir <- file.path(output_dir, "RDA")
+    dir.create(rda_dir, recursive = TRUE, showWarnings = FALSE)
+    rda_path <- file.path(rda_dir, paste0(dom_lc, ".rda"))
+    assign(domain, data)
+    save(list = domain, file = rda_path)
+    cli::cli_alert_success("RDA written: {rda_path}")
+  }
+
+  cli::cli_alert_success(
+    "export_domain: {domain} | {ncol(data)} vars | {nrow(data)} rows | formats: {paste(formats, collapse=', ')}"
+  )
+
+  invisible(data)
 }
+
+
+# --- Support file writers -----------------------------------------------------
 
 #' Write define.xml support file
 #'
@@ -116,7 +221,7 @@ export_rds_csv <- function(data, domain, output_dir,
 #'
 #' @param domains Named list of built domain tibbles.
 #' @param target_meta Tibble.
-#' @param config `sdtm_config`.
+#' @param config \code{sdtm_config}.
 #' @param output_path Character.
 #' @return Invisible file path.
 #' @export
@@ -166,9 +271,9 @@ write_codelist_support <- function(ct_lib, output_path) {
 }
 
 #' Write value-level metadata support file
-#' @param vlm Tibble or `NULL`.
+#' @param vlm Tibble or \code{NULL}.
 #' @param output_path Character.
-#' @return Invisible file path or `NULL`.
+#' @return Invisible file path or \code{NULL}.
 #' @export
 write_value_level_support <- function(vlm = NULL, output_path) {
   if (is.null(vlm) || nrow(vlm) == 0L) return(invisible(NULL))

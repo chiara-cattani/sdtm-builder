@@ -102,7 +102,14 @@ FUNCTION_REGISTRY <- list(
                                             absent_value = NA_character_)),
   derive_status     = list(rule_type = "status",         required = c("result_var"),
                            optional  = list(done_value = NA_character_,
-                                            not_done_value = "NOT DONE"))
+                                            not_done_value = "NOT DONE")),
+  derive_seriousness = list(rule_type = "seriousness",   required = c("flag_vars"),
+                            optional  = list(present_value = "Y",
+                                             absent_value = "N")),
+  derive_ref_time_point = list(rule_type = "ref_time_point", required = c("source_var", "tpt_label"),
+                               optional  = list(tpt_var = NULL,
+                                                mode = "pattern",
+                                                mapping = NULL))
 )
 
 # ---------------------------------------------------------------------------

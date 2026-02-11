@@ -264,8 +264,9 @@ dir.create(output_dir)
 
 for (dom in build_ok) {
   tryCatch({
-    export_xpt(built_data[[dom]]$data, dom, output_dir, target_meta)
-    fpath <- file.path(output_dir, paste0(tolower(dom), ".xpt"))
+    export_domain(built_data[[dom]]$data, dom, output_dir,
+                  formats = "xpt", target_meta = target_meta)
+    fpath <- file.path(output_dir, "XPT", paste0(tolower(dom), ".xpt"))
     fsize <- file.size(fpath)
     cat(sprintf("  %-4s -> %s (%s bytes)\n", dom, basename(fpath),
                 format(fsize, big.mark = ",")))

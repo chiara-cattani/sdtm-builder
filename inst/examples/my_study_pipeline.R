@@ -11,8 +11,8 @@
 #
 # Expected folder structure:
 #   my_study/
-#   ├── config.yaml
 #   ├── metadata/
+#   │   ├── config.yaml
 #   │   ├── Study_Metadata.xlsx
 #   │   └── Study_CT.xlsx
 #   ├── raw/
@@ -36,7 +36,7 @@ library(sdtmbuilder)
 # Set working directory to your study root
 # setwd("C:/Users/you/my_study")
 
-out <- run_study("config.yaml")
+out <- run_study("metadata/config.yaml")
 
 # That's it! Check your sdtm/datasets/ and sdtm/programs/ folders.
 # Results are also in memory:
@@ -45,7 +45,7 @@ head(out$results$DM$data)    # inspect DM dataset
 head(out$results$AE$data)    # inspect AE dataset
 
 # If you only want datasets (no R programs generated):
-out <- run_study("config.yaml", generate_programs = FALSE)
+out <- run_study("metadata/config.yaml", generate_programs = FALSE)
 
 
 # ==============================================================================
@@ -87,8 +87,8 @@ raw_data <- load_raw_datasets("raw")
 cat("Raw datasets loaded:", paste(names(raw_data), collapse = ", "), "\n")
 
 # ── Step 3: Create configuration ─────────────────────────────────────────────
-# Read from config.yaml:
-cfg_yaml <- yaml::read_yaml("config.yaml")
+# Read from config.yaml (in metadata/ folder):
+cfg_yaml <- yaml::read_yaml("metadata/config.yaml")
 
 config <- new_sdtm_config(
   studyid        = cfg_yaml$studyid,
@@ -115,23 +115,21 @@ results <- build_all_domains(
 
 cat("Built", length(results), "domains:", paste(names(results), collapse = ", "), "\n")
 
-# ── Step 6: Export each domain as XPT + RDA ──────────────────────────────────
+# ── Step 6: Export each domain as XPT v8 + RDA ──────────────────────────────
 for (dom in names(results)) {
   dom_data <- results[[dom]]$data
   if (is.null(dom_data)) next
 
-  # Export as XPT (SAS transport)
-  export_xpt(dom_data, dom, "sdtm/datasets",
-             target_meta = target_meta, domain_meta = domain_meta)
-
-  # Export as RDA (R binary)
-  export_rds_csv(dom_data, dom, "sdtm/datasets", formats = "rda")
+  # Export as XPT v8 + RDA
+  export_domain(dom_data, dom, "sdtm/datasets",
+                formats = c("xpt", "rda"),
+                target_meta = target_meta, domain_meta = domain_meta)
 
   # Export SUPP if present
   supp <- results[[dom]]$supp
   if (!is.null(supp) && nrow(supp) > 0) {
-    export_xpt(supp, paste0("SUPP", dom), "sdtm/datasets")
-    export_rds_csv(supp, paste0("SUPP", dom), "sdtm/datasets", formats = "rda")
+    export_domain(supp, paste0("SUPP", dom), "sdtm/datasets",
+                  formats = c("xpt", "rda"))
   }
 }
 
