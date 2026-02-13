@@ -252,14 +252,14 @@ cli::cli_alert_success(
 # USUBJID derivation:
 #   catx('-', "&studyid", scan(subjectid,-3,'-'), scan(subjectid,-2,'-'),
 #        put(input(scan(subjectid,-1,'-'), best.), z4.))
-# SubjectId format: CC-SITE-NN-SSSS  (e.g. NL-AMC-01-0001)
-# USUBJID format:   STUDY-PILOT-AMC-01-0001  (studyid + last 3 segments)
+# SubjectId format: CC-SITE-NN-SSSS  (e.g. XX-SITE-01-0001)
+# USUBJID format:   STUDY-PILOT-SITEA-01-0001  (studyid + last 3 segments)
 derive_usubjid_study <- function(subjectid, studyid = "STUDY-PILOT") {
   parts <- strsplit(subjectid, "-")
   vapply(parts, function(p) {
     n <- length(p)
     if (n < 4) return(NA_character_)
-    site_name <- p[n - 2]   # e.g. "AMC"
+    site_name <- p[n - 2]   # e.g. "SITEA"
     site_num  <- p[n - 1]   # e.g. "01"
     subj_num  <- sprintf("%04d", as.integer(p[n]))  # z4. format
     paste(studyid, site_name, site_num, subj_num, sep = "-")

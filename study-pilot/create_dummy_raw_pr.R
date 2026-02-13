@@ -12,7 +12,7 @@
 #
 # Variable names match the EDC export column names.
 #
-# SubjectID format: CC-SITE-NN-SSSS  (e.g., NL-AMC-01-0001)
+# SubjectID format: CC-SITE-NN-SSSS  (e.g., XX-SITEA-01-0001)
 # =============================================================================
 
 set.seed(99)
@@ -22,8 +22,8 @@ library(tibble)
 # --- Configuration -----------------------------------------------------------
 n_subjects <- 8
 studyid    <- "STUDY-PILOT"
-sites      <- c("AMC-01", "LUH-02", "UHB-03")
-countries  <- c("NL", "DE", "UK")
+sites      <- c("SITEA-01", "SITEB-02", "SITEC-03")
+countries  <- c("XX", "XX", "XX")
 date_anchor <- as.Date("2025-06-01")
 
 # Generate SubjectIDs in the real format: CC-SITE-NN-SSSS

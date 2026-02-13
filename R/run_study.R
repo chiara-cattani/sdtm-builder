@@ -284,11 +284,17 @@ run_study <- function(config_path = NULL,
       prog_path <- file.path(programs_dir, paste0(tolower(dom), ".R"))
       tryCatch({
         gen_domain_script(
-          domain      = dom,
-          rule_set    = rule_set,
-          target_meta = target_meta,
-          config      = config,
-          output_path = prog_path
+          domain        = dom,
+          rule_set      = rule_set,
+          target_meta   = target_meta,
+          config        = config,
+          domain_meta   = domain_meta,
+          output_path   = prog_path,
+          metadata_path = metadata_path,
+          ct_path       = ct_path,
+          raw_dir       = raw_dir,
+          output_dir    = output_dir,
+          tpt_source_var = config$tpt_source_var
         )
         generated_programs[[dom]] <- prog_path
       }, error = function(e) {

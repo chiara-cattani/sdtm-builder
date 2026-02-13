@@ -18,9 +18,9 @@ setwd(DEMO_DIR)
 dir.create("raw", showWarnings = FALSE)
 
 # Same 8 subjects as other dummy data
-subjects <- c("NL-AMC-01-0001", "NL-AMC-01-0002", "NL-AMC-01-0003",
-              "DE-CHA-02-0004", "DE-CHA-02-0005", "DE-CHA-02-0006",
-              "IT-BGM-03-0007", "IT-BGM-03-0008")
+subjects <- c("XX-SITEA-01-0001", "XX-SITEA-01-0002", "XX-SITEA-01-0003",
+              "XX-SITEB-02-0004", "XX-SITEB-02-0005", "XX-SITEB-02-0006",
+              "XX-SITEC-03-0007", "XX-SITEC-03-0008")
 
 set.seed(789)
 
