@@ -71,19 +71,41 @@ export_domain <- function(data, domain, output_dir,
   # 1. Variable metadata for this domain
   dom_meta <- NULL
   if (!is.null(target_meta)) {
-    dom_meta <- dplyr::filter(target_meta, toupper(.data[["domain"]]) == domain)
+    dom_filter <- domain  # capture domain name outside dplyr context
+    dom_meta <- dplyr::filter(target_meta, toupper(.data[["domain"]]) == dom_filter)
     if (nrow(dom_meta) == 0L) {
       cli::cli_alert_warning(
         "export_domain: no variable metadata for {domain}; skipping metadata enforcement."
       )
       dom_meta <- NULL
+    } else {
+      # Sort by the metadata ordering column so variables appear in correct order
+      if ("order" %in% names(dom_meta)) {
+        dom_meta <- dplyr::arrange(dom_meta, .data[["order"]])
+      } else if ("seqorder" %in% names(dom_meta)) {
+        dom_meta <- dplyr::arrange(dom_meta, .data[["seqorder"]])
+      }
+      # De-duplicate: keep first occurrence of each variable (preserve order)
+      dom_meta <- dom_meta[!duplicated(toupper(dom_meta$var)), , drop = FALSE]
     }
   }
 
   # 2. Resolve keys
   if (is.null(keys) || length(keys) == 0L) {
-    seq_var <- paste0(domain, "SEQ")
-    keys <- c("STUDYID", "USUBJID", seq_var)
+    # Try to read keys from domain_meta (Domains sheet metadata)
+    if (!is.null(domain_meta)) {
+      dom_info <- dplyr::filter(domain_meta, toupper(.data[["domain"]]) == dom_filter)
+      if (nrow(dom_info) > 0L && "keys" %in% names(dom_info) &&
+          !is.na(dom_info$keys[1L]) && nzchar(trimws(dom_info$keys[1L]))) {
+        keys_raw <- dom_info$keys[1L]
+        keys <- toupper(trimws(unlist(strsplit(keys_raw, "\\s*,\\s*"))))
+      }
+    }
+    # Fallback to default keys if none found in metadata
+    if (is.null(keys) || length(keys) == 0L) {
+      seq_var <- paste0(domain, "SEQ")
+      keys <- c("STUDYID", "USUBJID", seq_var)
+    }
   }
   keys <- toupper(keys)
   avail_keys <- intersect(keys, names(data))
@@ -97,12 +119,12 @@ export_domain <- function(data, domain, output_dir,
   if (!is.null(dom_meta)) {
     core_map <- stats::setNames(toupper(dom_meta$core), toupper(dom_meta$var))
 
-    # Check REQ/EXP
+    # Check REQ/EXP — only for THIS domain's variables
     req_exp_vars <- names(core_map)[core_map %in% c("REQ", "EXP")]
     missing_req <- setdiff(req_exp_vars, names(data))
     if (length(missing_req) > 0L) {
       cli::cli_alert_warning(
-        "export_domain: missing REQ/EXP var(s): {paste(missing_req, collapse=', ')}"
+        "export_domain({domain}): missing REQ/EXP var(s): {paste(missing_req, collapse=', ')}"
       )
     }
 
@@ -126,9 +148,15 @@ export_domain <- function(data, domain, output_dir,
       }
     }
 
-    # Reorder columns per metadata + any extra columns at end
+    # Reorder columns per metadata ordering + any extra columns at end
     meta_order <- toupper(dom_meta$var)
     meta_in_data <- intersect(meta_order, names(data))
+    extra_cols <- setdiff(names(data), meta_order)
+    if (length(extra_cols) > 0L) {
+      cli::cli_alert_info(
+        "export_domain({domain}): {length(extra_cols)} non-metadata var(s) removed: {paste(extra_cols, collapse=', ')}"
+      )
+    }
     data <- data[, meta_in_data, drop = FALSE]
 
     # Apply labels, widths, and rounding
@@ -166,7 +194,7 @@ export_domain <- function(data, domain, output_dir,
   # 6. Dataset label
   ds_label <- paste("SDTM domain", domain)
   if (!is.null(domain_meta)) {
-    dom_info <- dplyr::filter(domain_meta, toupper(.data[["domain"]]) == domain)
+    dom_info <- dplyr::filter(domain_meta, toupper(.data[["domain"]]) == dom_filter)
     if (nrow(dom_info) > 0L && "description" %in% names(dom_info) &&
         !is.na(dom_info$description[1L])) {
       ds_label <- substr(dom_info$description[1L], 1, max_label_length)
