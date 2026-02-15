@@ -12,6 +12,7 @@ ref_start_date:
   sdtm:
     domain: "DM"
     variable: "RFSTDTC"
+    # path: "path/to/dm.sas7bdat"  # optional: explicit path to DM SDTM dataset
   raw:
     dataset: "dm"
     variable: "icdat"

@@ -186,9 +186,26 @@ run_study <- function(config_path = NULL,
   # Parse ref_start_date — new format with sdtm + raw fallback
   ref_start_date <- cfg_yaml$ref_start_date
   if (!is.null(ref_start_date)) {
+    # Resolve sdtm.path relative to the study directory (where config lives)
+    sdtm_path_raw <- ref_start_date$sdtm$path
+    if (!is.null(sdtm_path_raw) && !is.na(sdtm_path_raw) && nchar(sdtm_path_raw) > 0) {
+      if (!file.exists(sdtm_path_raw)) {
+        # Try relative to config directory
+        sdtm_path_resolved <- file.path(dirname(config_path), sdtm_path_raw)
+        if (file.exists(sdtm_path_resolved)) {
+          sdtm_path_raw <- normalizePath(sdtm_path_resolved, winslash = "/")
+        }
+      } else {
+        sdtm_path_raw <- normalizePath(sdtm_path_raw, winslash = "/")
+      }
+    } else {
+      sdtm_path_raw <- NULL
+    }
+
     ref_start_rule <- list(
       sdtm_domain   = ref_start_date$sdtm$domain   %||% "DM",
       sdtm_variable = ref_start_date$sdtm$variable  %||% "RFSTDTC",
+      sdtm_path     = sdtm_path_raw,
       raw_dataset   = ref_start_date$raw$dataset     %||% "dm",
       raw_variable  = ref_start_date$raw$variable    %||% "rfstdtc"
     )

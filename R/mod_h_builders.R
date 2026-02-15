@@ -136,34 +136,84 @@ build_domain <- function(domain, target_meta, raw_data,
   }
 
   # Join reference start date for --DY calculations; skip for DM itself.
-  # Uses config$ref_start_rule which specifies:
-  #   sdtm_domain / sdtm_variable  — primary source (built DM SDTM)
-  #   raw_dataset / raw_variable   — fallback when DM hasn't been built yet
+  # Lookup priority:
+  #   1. Config path (ref_start_rule$sdtm_path) — explicit file on disk
+  #   2. In-memory dm_data (passed from build_all_domains) or SDTM output folder
+  #   3. Raw dataset fallback (ref_start_rule$raw_dataset / raw_variable)
   if (domain != "DM") {
     rsr <- config$ref_start_rule %||%
       list(sdtm_domain = "DM", sdtm_variable = "RFSTDTC",
            raw_dataset = "dm", raw_variable = "rfstdtc")
     sdtm_var <- rsr$sdtm_variable %||% "RFSTDTC"
 
-    # Try to load built DM from disk if not passed in-memory
+    # Helper: read a single dataset file from a path
+    .read_dataset_file <- function(path) {
+      ext <- tolower(tools::file_ext(path))
+      switch(ext,
+        sas7bdat = haven::read_sas(path),
+        xpt      = haven::read_xpt(path),
+        rda = , rdata = {
+          env <- new.env(parent = emptyenv())
+          load(path, envir = env)
+          env[[ls(env)[1]]]
+        },
+        rds = readRDS(path),
+        csv = readr::read_csv(path, show_col_types = FALSE),
+        xlsx = , xls = readxl::read_excel(path),
+        {
+          .log("WARNING: Unsupported DM file format: .{ext}")
+          NULL
+        }
+      )
+    }
+
+    # ---- Priority 1: explicit path from config ----
+    if (is.null(dm_data) && !is.null(rsr$sdtm_path) && nchar(rsr$sdtm_path) > 0) {
+      if (file.exists(rsr$sdtm_path)) {
+        tryCatch({
+          dm_data <- .read_dataset_file(rsr$sdtm_path)
+          if (!is.null(dm_data)) {
+            dm_data <- tibble::as_tibble(dm_data)
+            .log(glue::glue("Loaded DM from config path: {rsr$sdtm_path}"))
+          }
+        }, error = function(e) {
+          .log(glue::glue("WARNING: Failed to load DM from config path '{rsr$sdtm_path}': {e$message}"))
+        })
+      } else {
+        .log(glue::glue("WARNING: DM config path not found: {rsr$sdtm_path}"))
+      }
+    }
+
+    # ---- Priority 2: in-memory or SDTM output folder ----
     if (is.null(dm_data) && !is.null(config$output_dir)) {
-      dm_rda <- file.path(config$output_dir, "RDA", "dm.rda")
-      dm_xpt <- file.path(config$output_dir, "XPT", "dm.xpt")
-      if (file.exists(dm_rda)) {
-        env <- new.env(parent = emptyenv())
-        load(dm_rda, envir = env)
-        dm_data <- env[[ls(env)[1]]]
-        .log("Loaded DM from {dm_rda}")
-      } else if (file.exists(dm_xpt)) {
-        dm_data <- haven::read_xpt(dm_xpt)
-        .log("Loaded DM from {dm_xpt}")
+      # Search output folder for dm.* in any supported format
+      dm_candidates <- c(
+        file.path(config$output_dir, "RDA", "dm.rda"),
+        file.path(config$output_dir, "XPT", "dm.xpt"),
+        file.path(config$output_dir, "dm.sas7bdat"),
+        file.path(config$output_dir, "dm.rds"),
+        file.path(config$output_dir, "dm.csv")
+      )
+      for (cand in dm_candidates) {
+        if (file.exists(cand)) {
+          tryCatch({
+            dm_data <- .read_dataset_file(cand)
+            if (!is.null(dm_data)) {
+              dm_data <- tibble::as_tibble(dm_data)
+              .log(glue::glue("Loaded DM from SDTM folder: {cand}"))
+            }
+          }, error = function(e) {
+            .log(glue::glue("WARNING: Failed to load DM from '{cand}': {e$message}"))
+          })
+          if (!is.null(dm_data)) break
+        }
       }
     }
 
     ref_joined <- FALSE
 
     if (!is.null(dm_data)) {
-      # ---- Primary path: use built DM SDTM ----
+      # ---- Use built DM SDTM data ----
       # Auto-extract $data if a build_domain result list was passed
       if (is.list(dm_data) && "data" %in% names(dm_data) && !is.data.frame(dm_data)) {
         dm_data <- dm_data[["data"]]
@@ -171,11 +221,15 @@ build_domain <- function(domain, target_meta, raw_data,
 
       dm_ref <- dm_data
       # Ensure the configured SDTM variable is accessible (case-insensitive)
-      if (!sdtm_var %in% names(dm_ref) && tolower(sdtm_var) %in% names(dm_ref)) {
-        dm_ref[[sdtm_var]] <- dm_ref[[tolower(sdtm_var)]]
+      all_names <- names(dm_ref)
+      all_names_uc <- toupper(all_names)
+      sdtm_var_uc <- toupper(sdtm_var)
+      if (!sdtm_var %in% all_names) {
+        idx <- match(sdtm_var_uc, all_names_uc)
+        if (!is.na(idx)) dm_ref[[sdtm_var]] <- dm_ref[[all_names[idx]]]
       }
 
-      # Determine join key
+      # Determine join key (case-insensitive matching)
       data_names_lc <- tolower(names(data))
       dm_names_lc   <- tolower(names(dm_ref))
       data_key <- NULL
@@ -187,6 +241,9 @@ build_domain <- function(domain, target_meta, raw_data,
       } else if ("usubjid" %in% data_names_lc && "usubjid" %in% dm_names_lc) {
         data_key <- names(data)[match("usubjid", data_names_lc)]
         dm_key   <- names(dm_ref)[match("usubjid", dm_names_lc)]
+      } else if ("subjectid" %in% data_names_lc && "subjectid" %in% dm_names_lc) {
+        data_key <- names(data)[match("subjectid", data_names_lc)]
+        dm_key   <- names(dm_ref)[match("subjectid", dm_names_lc)]
       }
 
       if (!is.null(data_key) && !is.null(dm_key) && sdtm_var %in% names(dm_ref)) {
@@ -199,29 +256,46 @@ build_domain <- function(domain, target_meta, raw_data,
                           type = "left", cardinality = "m:1",
                           on_violation = "warn")
         ref_joined <- TRUE
-        .log(glue::glue("Reference date: {sdtm_var} from built DM"))
+        .log(glue::glue("Reference date: {sdtm_var} from DM SDTM"))
       }
     }
 
+    # ---- Priority 3: raw dataset fallback ----
     if (!ref_joined) {
-      # ---- Fallback path: use raw dataset ----
       raw_ds  <- rsr$raw_dataset  %||% "dm"
       raw_var <- rsr$raw_variable %||% "rfstdtc"
+      # Look for the raw dataset in raw_data list
       raw_key <- if (raw_ds %in% names(raw_data)) raw_ds
                  else if (paste0(raw_ds, "_raw") %in% names(raw_data)) paste0(raw_ds, "_raw")
+                 else if (tolower(raw_ds) %in% names(raw_data)) tolower(raw_ds)
                  else NULL
 
       if (!is.null(raw_key)) {
         dm_ref <- raw_data[[raw_key]]
+        dm_names_orig <- names(dm_ref)
         names(dm_ref) <- tolower(names(dm_ref))
         raw_var_lc <- tolower(raw_var)
 
-        if (raw_var_lc %in% names(dm_ref) &&
-            "subjectid" %in% names(data) && "subjectid" %in% names(dm_ref)) {
-          dm_slim <- dplyr::distinct(dm_ref[, c("subjectid", raw_var_lc), drop = FALSE])
+        # Determine join key for raw data
+        data_names_lc <- tolower(names(data))
+        raw_names_lc  <- names(dm_ref)  # already lowered
+        data_key <- NULL
+        raw_key_col <- NULL
+
+        if ("subjectid" %in% data_names_lc && "subjectid" %in% raw_names_lc) {
+          data_key    <- names(data)[match("subjectid", data_names_lc)]
+          raw_key_col <- "subjectid"
+        } else if ("usubjid" %in% data_names_lc && "usubjid" %in% raw_names_lc) {
+          data_key    <- names(data)[match("usubjid", data_names_lc)]
+          raw_key_col <- "usubjid"
+        }
+
+        if (!is.null(data_key) && !is.null(raw_key_col) && raw_var_lc %in% raw_names_lc) {
+          dm_slim <- dplyr::distinct(dm_ref[, c(raw_key_col, raw_var_lc), drop = FALSE])
           dm_slim$RFSTDTC <- dm_slim[[raw_var_lc]]
-          data <- safe_join(data, dm_slim[, c("subjectid", "RFSTDTC")],
-                            by = "subjectid", type = "left",
+          dm_slim[[data_key]] <- dm_slim[[raw_key_col]]
+          data <- safe_join(data, dm_slim[, c(data_key, "RFSTDTC"), drop = FALSE],
+                            by = data_key, type = "left",
                             cardinality = "m:1", on_violation = "warn")
           ref_joined <- TRUE
           .log(glue::glue("Reference date: {raw_var} from raw '{raw_key}' (DM not yet built)"))
