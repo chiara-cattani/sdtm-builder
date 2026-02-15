@@ -9,9 +9,16 @@ gen_domain_script(
   rule_set,
   target_meta,
   config,
+  domain_meta = NULL,
   style = "tidyverse",
   include_comments = TRUE,
-  output_path = NULL
+  output_path = NULL,
+  metadata_path = NULL,
+  ct_path = NULL,
+  raw_dir = NULL,
+  output_dir = NULL,
+  tpt_source_var = NULL,
+  export_formats = c("xpt", "rda")
 )
 }
 \arguments{
@@ -21,18 +28,41 @@ gen_domain_script(
 
 \item{target_meta}{Tibble.}
 
-\item{config}{\code{sdtm_config}.}
+\item{config}{\code{sdtm_config} or list.}
 
-\item{style}{Character. \code{"tidyverse"} or \code{"base"}.}
+\item{domain_meta}{Tibble or \code{NULL}.}
+
+\item{style}{Character. \code{"tidyverse"} (default).}
 
 \item{include_comments}{Logical. Default \code{TRUE}.}
 
-\item{output_path}{Character or \code{NULL}.}
+\item{output_path}{Character or \code{NULL}. If non-\code{NULL}, writes the script.}
+
+\item{metadata_path}{Character or \code{NULL}.}
+
+\item{ct_path}{Character or \code{NULL}.}
+
+\item{raw_dir}{Character or \code{NULL}.}
+
+\item{output_dir}{Character or \code{NULL}.}
+
+\item{tpt_source_var}{Character or \code{NULL}. Source variable for TPT
+derivation (e.g., \code{"eventid"}). Defaults to \code{"eventid"}.}
+
+\item{export_formats}{Character vector. Output formats for the generated
+export step. Default \code{c("xpt", "rda")}.}
 }
 \value{
 Character string of the generated script (invisibly if written).
 }
 \description{
-Produces a fully commented, self-contained R program that reproduces the
-derivation for one domain.
+Produces a fully commented, piped R program that reproduces the derivation
+for one domain.  The generated script uses only \code{sdtmbuilder} functions
+(no sdtm.oak), follows a professional layout with a header, working-directory
+setup, metadata and raw-data import, a grouped piped derivation chain, and
+an \code{\link[=export_domain]{export_domain()}} call.
+}
+\details{
+If the \code{config} contains a \code{timepoint_map}, planned time point variables
+are derived from that map using \code{case_when()}.
 }

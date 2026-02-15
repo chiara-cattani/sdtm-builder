@@ -93,11 +93,31 @@
       if (is.character(val)) paste0(var, ' = "', val, '"')
       else                   paste0(var, " = ", val)
     },
+    sourceid = {
+      fid <- p$form_id
+      paste0(var, ' = paste("CRF:", sources$formname[match("', fid,
+             '", toupper(sources$formid))])')
+    },
     direct_map = {
       col   <- p$column
       xform <- p$transform
+      # Auto-infer type cast from metadata target_type
+      target_t <- rule$target_type
+      type_wrap <- ""
+      type_close <- ""
+      if (!is.null(target_t) && is.null(xform)) {
+        if (target_t == "num") {
+          type_wrap  <- "as.numeric("
+          type_close <- ")"
+        } else if (target_t == "char") {
+          type_wrap  <- "as.character("
+          type_close <- ")"
+        }
+      }
       if (!is.null(xform) && !is.na(xform) && nchar(xform) > 0) {
         paste0(var, " = ", xform, "(", col, ")")
+      } else if (nchar(type_wrap) > 0) {
+        paste0(var, " = ", type_wrap, col, type_close)
       } else {
         paste0(var, " = ", col)
       }
@@ -119,9 +139,9 @@
       paste0(var, " = dplyr::coalesce(", cols, ")")
     },
     concat = {
-      cols <- paste(unlist(p$columns %||% p$sources), collapse = ", ")
+      cols <- paste0('"', unlist(p$columns %||% p$sources), '"', collapse = ", ")
       sep  <- p$separator %||% p$sep %||% ""
-      paste0(var, ' = paste(', cols, ', sep = "', sep, '")')
+      paste0(var, ' = purrr::pmap_chr(list(', gsub('"', '', cols), '), ~ paste(na.omit(c(...)), collapse = "', sep, '"))')
     },
     numeric_round = {
       digits <- rule$significant_digits %||% p$significant_digits %||% 3L
@@ -171,6 +191,19 @@
     status = {
       paste0(var, " = ", p$result_var %||% "NA_character_",
              "  # TODO: status derivation")
+    },
+    dict_version = {
+      ds_name   <- p$dataset %||% "ae_meddra"
+      prefix    <- p$prefix  %||% "MedDRA"
+      dictvar   <- p$dictvar %||% "DictInstance"
+      coded_var <- p$coded_var %||% NULL
+      ver_fn <- if (tolower(prefix) == "whodrug") "get_whodrug_version" else "get_meddra_version"
+      ver_expr <- paste0(ver_fn, '(', ds_name, ', dictvar = "', dictvar, '")')
+      if (!is.null(coded_var)) {
+        paste0(var, ' = dplyr::if_else(!is.na(', coded_var, '), paste("', prefix, '", ', ver_expr, '), "")')
+      } else {
+        paste0(var, ' = paste("', prefix, '", ', ver_expr, ')')
+      }
     },
     # Default
     paste0(var, " = NA_character_  # TODO: ", type, " derivation")
@@ -250,7 +283,8 @@
       glue::glue('derive_ref_time_point("{var}", "{src_var}", "{label}")')
     },
     usubjid = {
-      glue::glue("derive_usubjid(study)")
+      subjid_col <- p$subjid_col %||% "subjid"
+      glue::glue('derive_usubjid(study, subjid_col = "{subjid_col}")')
     },
     # Default
     glue::glue('mutate({var} = NA_character_)  # TODO: {type} pipe step')
@@ -262,7 +296,11 @@
 #' Detect unique source datasets referenced by domain rules
 #' @keywords internal
 .detect_source_datasets <- function(dom_rules) {
-  sources <- unique(unlist(lapply(dom_rules, function(r) r$params$dataset)))
+  sources <- unique(unlist(lapply(dom_rules, function(r) {
+    # For sourceid rules, the dataset is a lookup (review_status), not a data source
+    if (identical(r$type, "sourceid")) return(NULL)
+    r$params$dataset
+  })))
   sources[!is.na(sources)]
 }
 
@@ -284,7 +322,15 @@
       code <- "  mutate("
       for (k in seq_along(mut_buf)) {
         sfx <- if (k < length(mut_buf)) "," else ""
-        code <- c(code, paste0("    ", mut_buf[k], sfx))
+        expr <- mut_buf[k]
+        # If expression ends with a # comment, insert comma before the comment
+        if (nzchar(sfx) && grepl("\\s+#\\s+", expr)) {
+          cmt   <- regmatches(expr, regexpr("\\s+#.*$", expr))
+          base  <- sub("\\s+#.*$", "", expr)
+          expr  <- paste0(base, sfx, cmt)
+          sfx   <- ""  # already appended
+        }
+        code <- c(code, paste0("    ", expr, sfx))
       }
       code <- c(code, "  )")
     }
@@ -456,6 +502,8 @@
 #' @param output_dir Character or `NULL`.
 #' @param tpt_source_var Character or `NULL`. Source variable for TPT
 #'   derivation (e.g., `"eventid"`). Defaults to `"eventid"`.
+#' @param export_formats Character vector. Output formats for the generated
+#'   export step. Default `c("xpt", "rda")`.
 #' @return Character string of the generated script (invisibly if written).
 #' @export
 gen_domain_script <- function(domain, rule_set, target_meta,
@@ -468,7 +516,8 @@ gen_domain_script <- function(domain, rule_set, target_meta,
                               ct_path = NULL,
                               raw_dir = NULL,
                               output_dir = NULL,
-                              tpt_source_var = NULL) {
+                              tpt_source_var = NULL,
+                              export_formats = c("xpt", "rda")) {
   domain <- toupper(domain)
   dom_lc <- tolower(domain)
 
@@ -551,12 +600,14 @@ gen_domain_script <- function(domain, rule_set, target_meta,
   .blk()
 
   # ---- 3. Working directory --------------------------------------------------
-  .add("# Set working directory ----")
+  # Navigate to study root (2 levels up from sdtm/programs/)
+  .add("# Set working directory to study root ----")
   .add("if (requireNamespace(\"rstudioapi\", quietly = TRUE) &&")
   .add("    rstudioapi::isAvailable()) {")
-  .add("  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))")
+  .add("  prog_dir <- dirname(rstudioapi::getActiveDocumentContext()$path)")
+  .add("  setwd(file.path(prog_dir, \"..\", \"..\"))")
   .add("} else if (exists(\"progdir\")) {")
-  .add("  setwd(progdir)")
+  .add("  setwd(file.path(progdir, \"..\", \"..\"))")
   .add("}")
   .blk()
 
@@ -590,16 +641,89 @@ gen_domain_script <- function(domain, rule_set, target_meta,
   }
   .blk()
 
+  # ---- Sources lookup for SOURCEID derivation ----
+  has_sourceid <- any(vapply(dom_rules, function(r) identical(r$type, "sourceid"), logical(1)))
+  if (has_sourceid) {
+    # Find the review_status dataset name (default "review_status")
+    rs_ds <- "review_status"
+    for (r in dom_rules) {
+      if (identical(r$type, "sourceid") && !is.null(r$params$dataset)) {
+        rs_ds <- r$params$dataset
+        break
+      }
+    }
+    .add("# Sources lookup (for SOURCEID) ----")
+    .add(glue::glue('review_status <- all_raw[["{rs_ds}"]]'))
+    .add("sources <- review_status %>%")
+    .add('  dplyr::filter(trimws(formname) != "") %>%')
+    .add("  dplyr::distinct(formid, formname)")
+    .blk()
+  }
+
+  # ---- Auto-merge secondary source datasets into primary ----
+  prim_clean <- gsub("_raw$", "", primary)
+  secondary  <- setdiff(gsub("_raw$", "", sources), prim_clean)
+  dom_spid   <- tolower(paste0(dom_lc, "spid"))  # e.g. "aespid"
+  if (length(secondary) > 0L) {
+    .add("# Merge secondary source datasets ----")
+    for (sec in secondary) {
+      # Check if secondary has its own SPID that needs renaming
+      # e.g. sae has "saespid" -> rename to "aespid"
+      sec_spid <- paste0(sec, "spid")
+      if (sec_spid != dom_spid) {
+        .add(glue::glue('{sec} <- dplyr::rename({sec}, dplyr::any_of(c({dom_spid} = "{sec_spid}")))'))
+      }
+      # Keep only non-overlapping columns from secondary (+ join keys)
+      .add(glue::glue('{sec}_new <- setdiff(names({sec}), names({prim_clean}))'))
+      .add(glue::glue('{sec}_slim <- {sec}[, c("subjectid", "{dom_spid}", {sec}_new), drop = FALSE]'))
+      .add(glue::glue('{prim_clean} <- {prim_clean} %>%'))
+      .add(glue::glue('  dplyr::left_join({sec}_slim, by = c("subjectid", "{dom_spid}"))'))
+    }
+    .blk()
+  }
+
   # ---- 6. Pre-merge DM for RFSTDTC -------------------------------------------
   if (needs_dm) {
+    # Detect RFSTDTC source from config
+    ref_col <- config$ref_start_rule$var %||% "rfstdtc"
+    ref_src <- config$ref_start_rule$source %||% "dm"
+    ref_src_clean <- gsub("_raw$", "", ref_src)
+    dm_var <- if (ref_src_clean %in% assigned) ref_src_clean else "dm1"
     .add("# Prepare DM for RFSTDTC ----")
-    .add("dm_slim <- dm1 %>%")
-    .add('  select(any_of(c("usubjid", "rfstdtc"))) %>%')
-    .add("  distinct()")
+    .add("# Load DM SDTM dataset (has RFSTDTC); fall back to raw DM")
+    .add('dm_rda <- "sdtm/datasets/RDA/dm.rda"')
+    .add('dm_xpt <- "sdtm/datasets/XPT/dm.xpt"')
+    .add("if (file.exists(dm_rda)) {")
+    .add("  dm_env <- new.env(parent = emptyenv())")
+    .add("  load(dm_rda, envir = dm_env)")
+    .add("  dm_sdtm <- dm_env[[ls(dm_env)[1]]]")
+    .add("  names(dm_sdtm) <- tolower(names(dm_sdtm))")
+    .add("} else if (file.exists(dm_xpt)) {")
+    .add("  dm_sdtm <- haven::read_xpt(dm_xpt)")
+    .add("  names(dm_sdtm) <- tolower(names(dm_sdtm))")
+    .add("} else {")
+    .add(glue::glue("  dm_sdtm <- {dm_var}"))
+    .add("}")
     .blk()
+    .add("dm_slim <- dm_sdtm %>%")
+    .add(glue::glue('  dplyr::select(dplyr::any_of(c("subjectid", "subjid", "usubjid", "{ref_col}"))) %>%'))
+    .add("  dplyr::distinct()")
+    .blk()
+    # Determine join key: SubjectId→SUBJID or USUBJID
     prim_clean <- gsub("_raw$", "", primary)
-    .add(glue::glue("{prim_clean} <- {prim_clean} %>%"))
-    .add('  left_join(dm_slim, by = "usubjid")')
+    .add(glue::glue("# Join RFSTDTC: try subjectid=subjid, fall back to usubjid"))
+    .add(glue::glue('if ("subjectid" %in% names({prim_clean}) && "subjid" %in% names(dm_slim)) {{'))
+    .add(glue::glue("  {prim_clean} <- {prim_clean} %>%"))
+    .add(glue::glue('    dplyr::left_join(dm_slim %>% dplyr::select(dplyr::any_of(c("subjid", "{ref_col}"))) %>% dplyr::rename(subjectid = subjid), by = "subjectid")'))
+    .add(glue::glue("}} else if (\"usubjid\" %in% names({prim_clean}) && \"usubjid\" %in% names(dm_slim)) {{"))
+    .add(glue::glue("  {prim_clean} <- {prim_clean} %>%"))
+    .add(glue::glue('    dplyr::left_join(dm_slim %>% dplyr::select(dplyr::any_of(c("usubjid", "{ref_col}"))), by = "usubjid")'))
+    .add("}")
+    # Ensure RFSTDTC is uppercase for derive_dy
+    ref_col_uc <- toupper(ref_col)
+    if (ref_col != ref_col_uc) {
+      .add(glue::glue('if ("{ref_col}" %in% names({prim_clean}) && !"{ref_col_uc}" %in% names({prim_clean})) {prim_clean}${ref_col_uc} <- {prim_clean}${ref_col}'))
+    }
     .blk()
   }
 
@@ -632,7 +756,8 @@ gen_domain_script <- function(domain, rule_set, target_meta,
   .add(glue::glue("  data        = {dom_lc}2,"))
   .add("  domain      = sdtm_domain,")
   .add(glue::glue('  output_dir  = "{output_dir}",'))
-  .add('  formats     = c("xpt", "rds", "csv"),')
+  fmts_str <- paste0('"', export_formats, '"', collapse = ', ')
+  .add(glue::glue('  formats     = c({fmts_str}),'))
   .add("  xpt_version = 8L,")
   .add("  target_meta = target_meta,")
   .add("  domain_meta = domain_meta,")
@@ -675,9 +800,24 @@ render_rule_code <- function(var, rule, style = "tidyverse") {
       val <- if (is.character(p$value)) paste0('"', p$value, '"') else p$value
       glue::glue('data${var} <- {val}')
     },
+    sourceid = {
+      fid <- p$form_id
+      glue::glue('data${var} <- paste("CRF:", sources$formname[match("{fid}", toupper(sources$formid))])')
+    },
     direct_map = {
-      xform <- if (!is.null(p$transform)) paste0(p$transform, "(") else ""
-      xform_close <- if (!is.null(p$transform)) ")" else ""
+      xform <- if (!is.null(p$transform) && !is.na(p$transform)) paste0(p$transform, "(") else ""
+      xform_close <- if (!is.null(p$transform) && !is.na(p$transform)) ")" else ""
+      # Auto-infer type cast from metadata target_type
+      target_t <- rule$target_type
+      if (nchar(xform) == 0 && !is.null(target_t)) {
+        if (target_t == "num") {
+          xform <- "as.numeric("
+          xform_close <- ")"
+        } else if (target_t == "char") {
+          xform <- "as.character("
+          xform_close <- ")"
+        }
+      }
       glue::glue('data${var} <- {xform}data${p$column}{xform_close}')
     },
     ct_assign = {
@@ -714,8 +854,7 @@ render_rule_code <- function(var, rule, style = "tidyverse") {
     duration = {
       glue::glue('data <- derive_duration(data, "{var}", "{p$start_dtc}", "{p$end_dtc}")')
     },
-    usubjid = ,
-    unusbjid = {
+    usubjid = {
       glue::glue('data <- derive_usubjid(data, studyid = "{p$studyid %||% "STUDYID"}")')
     },
     baseline_flag = {

@@ -13,6 +13,8 @@ build_all_domains(
   domains = NULL,
   domain_meta = NULL,
   value_level_meta = NULL,
+  sources_meta = NULL,
+  source_cols_meta = NULL,
   create_supp = NULL,
   validate = TRUE,
   verbose = TRUE
@@ -35,6 +37,15 @@ in the rule\_set. Otherwise builds only the listed domains.}
 \item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata from
 \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}. Controls build order and provides
 keys/description/structure for finalization.}
+
+\item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata for
+per-condition validation.}
+
+\item{sources_meta}{Tibble or \code{NULL}. Domain-level preprocessing
+metadata from the "Sources" sheet. When provided, replaces manual hooks.}
+
+\item{source_cols_meta}{Tibble or \code{NULL}. Column-level preprocessing
+metadata from the "Source Columns" sheet.}
 
 \item{create_supp}{Logical or \code{NULL}. Default \code{NULL} (inherits from
 \code{config$create_supp}, itself defaulting to \code{TRUE}). Set \code{FALSE} to

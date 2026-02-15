@@ -62,6 +62,48 @@ derive_constant <- function(data, target_var, value, when = NULL, type = NULL) {
   data
 }
 
+#' Derive SOURCEID from review_status lookup
+#'
+#' Looks up the CRF form name from a review_status-like dataset and sets
+#' SOURCEID = "CRF: <FormName>".
+#'
+#' @param data Tibble.
+#' @param target_var Character — target column name.
+#' @param form_id Character — the form code to look up (e.g. "AE").
+#' @param raw_data Named list of raw datasets.
+#' @param dataset Character — name of the review_status dataset in raw_data.
+#' @param id_col Character — column containing form IDs.
+#' @param name_col Character — column containing form names.
+#' @return Tibble.
+#' @export
+derive_sourceid <- function(data, target_var, form_id,
+                            raw_data = NULL,
+                            dataset = "review_status",
+                            id_col = "formid",
+                            name_col = "formname") {
+  form_name <- NA_character_
+  if (!is.null(raw_data) && dataset %in% names(raw_data)) {
+    rs <- raw_data[[dataset]]
+    nms <- tolower(names(rs))
+    names(rs) <- nms
+    id_col_lc   <- tolower(id_col)
+    name_col_lc <- tolower(name_col)
+    if (id_col_lc %in% nms && name_col_lc %in% nms) {
+      match_idx <- which(tolower(rs[[id_col_lc]]) == tolower(form_id))
+      if (length(match_idx) > 0L) {
+        form_name <- trimws(rs[[name_col_lc]][match_idx[1]])
+      }
+    }
+  }
+  val <- if (!is.na(form_name) && nchar(form_name) > 0L) {
+    paste("CRF:", form_name)
+  } else {
+    paste("CRF:", form_id)
+  }
+  data[[target_var]] <- val
+  data
+}
+
 #' Derive variable as first non-missing across sources
 #' @param data Tibble.
 #' @param target_var Character.

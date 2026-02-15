@@ -153,15 +153,19 @@ test_that("validate_studyid_constant passes for single STUDYID", {
 
 test_that("validate_no_allna_reqexp flags all-NA required var", {
   rpt <- new_validation_report(domain = "TEST")
-  tm <- data.frame(domain = "TEST", var = c("STUDYID", "TESTVAR"),
-                   label = c("A", "B"), type = c("char", "char"),
-                   core = c("REQ", "EXP"), rule_type = c("constant", "direct_map"),
+  tm <- data.frame(domain = "TEST", var = c("STUDYID", "REQVAR", "EXPVAR"),
+                   label = c("A", "B", "C"), type = c("char", "char", "char"),
+                   core = c("REQ", "REQ", "EXP"),
+                   rule_type = c("constant", "direct_map", "direct_map"),
                    stringsAsFactors = FALSE)
-  df <- data.frame(STUDYID = c("S1", "S1"), TESTVAR = c(NA, NA),
-                   stringsAsFactors = FALSE)
+  df <- data.frame(STUDYID = c("S1", "S1"), REQVAR = c(NA, NA),
+                   EXPVAR = c(NA, NA), stringsAsFactors = FALSE)
   rpt <- validate_no_allna_reqexp(df, tm, "TEST", rpt)
+  # REQ all-NA -> ERROR, EXP all-NA -> WARNING
   expect_true(any(rpt$findings$severity == "ERROR"))
-  expect_true(any(grepl("TESTVAR", rpt$findings$message)))
+  expect_true(any(grepl("REQVAR", rpt$findings$message)))
+  expect_true(any(rpt$findings$severity == "WARNING"))
+  expect_true(any(grepl("EXPVAR", rpt$findings$message)))
 })
 
 test_that("validate_seq_integrity flags non-positive SEQ", {

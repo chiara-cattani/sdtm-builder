@@ -4,7 +4,7 @@
 \alias{validate_keys_unique}
 \title{Validate key variables are unique}
 \usage{
-validate_keys_unique(data, target_meta, domain, report)
+validate_keys_unique(data, target_meta, domain, report, domain_meta = NULL)
 }
 \arguments{
 \item{data}{Tibble.}
@@ -14,6 +14,9 @@ validate_keys_unique(data, target_meta, domain, report)
 \item{domain}{Character.}
 
 \item{report}{\code{validation_report}.}
+
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata used as
+fallback source for key variable definitions.}
 }
 \value{
 Updated \code{validation_report}.

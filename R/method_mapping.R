@@ -23,7 +23,7 @@
 FUNCTION_REGISTRY <- list(
   # -- Mapping / Constants --
   map_direct        = list(rule_type = "direct_map",     required = c("column"),
-                           optional  = list(transform = NULL, dataset = NULL)),
+                           optional  = list(transform = NULL, type = NULL, dataset = NULL)),
   derive_constant   = list(rule_type = "constant",       required = c("value"),
                            optional  = list()),
   assign_ct         = list(rule_type = "ct_assign",      required = c("column"),
@@ -106,10 +106,20 @@ FUNCTION_REGISTRY <- list(
   derive_seriousness = list(rule_type = "seriousness",   required = c("flag_vars"),
                             optional  = list(present_value = "Y",
                                              absent_value = "N")),
+  derive_dict_version = list(rule_type = "dict_version", required = c("dataset"),
+                             optional  = list(prefix = "MedDRA", dictvar = "DictInstance")),
+  get_dict_version    = list(rule_type = "dict_version", required = c("dataset"),
+                             optional  = list(prefix = "MedDRA", dictvar = "DictInstance")),
   derive_ref_time_point = list(rule_type = "ref_time_point", required = c("source_var", "tpt_label"),
                                optional  = list(tpt_var = NULL,
                                                 mode = "pattern",
-                                                mapping = NULL))
+                                                mapping = NULL)),
+
+  # -- Source traceability --
+  derive_sourceid = list(rule_type = "sourceid", required = c("form_id"),
+                         optional  = list(dataset = "review_status",
+                                          id_col = "formid",
+                                          name_col = "formname"))
 )
 
 # ---------------------------------------------------------------------------

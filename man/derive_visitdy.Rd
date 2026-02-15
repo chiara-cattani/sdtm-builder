@@ -20,6 +20,9 @@ derive_visitdy(
 \item{visit_var}{Character. Default \code{"VISIT"}.}
 
 \item{dy_var}{Character. Study day variable.}
+
+\item{visit_map}{Tibble or \code{NULL}. Visit-level mapping with planned
+day windows. Default \code{NULL}.}
 }
 \value{
 Tibble.

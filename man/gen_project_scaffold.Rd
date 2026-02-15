@@ -17,7 +17,5 @@ gen_project_scaffold(output_dir, config, domains)
 Invisible \code{NULL}.
 }
 \description{
-Creates the standard directory structure for an SDTM study project and
-copies the \code{Study_Metadata.xlsx} and \code{Study_CT.xlsx} templates into
-the \verb{metadata/} directory.
+Generate project scaffold (directories and template files)
 }

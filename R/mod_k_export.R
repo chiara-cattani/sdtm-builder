@@ -61,8 +61,12 @@ export_domain <- function(data, domain, output_dir,
   dom_lc <- tolower(domain)
 
 
-  # Uppercase column names
+  # Uppercase column names and deduplicate (keep last, i.e. derived version)
   names(data) <- toupper(names(data))
+  dup_mask <- duplicated(names(data), fromLast = TRUE)
+  if (any(dup_mask)) {
+    data <- data[, !dup_mask, drop = FALSE]
+  }
 
   # 1. Variable metadata for this domain
   dom_meta <- NULL
@@ -125,8 +129,7 @@ export_domain <- function(data, domain, output_dir,
     # Reorder columns per metadata + any extra columns at end
     meta_order <- toupper(dom_meta$var)
     meta_in_data <- intersect(meta_order, names(data))
-    extra_cols <- setdiff(names(data), meta_order)
-    data <- data[, c(meta_in_data, extra_cols), drop = FALSE]
+    data <- data[, meta_in_data, drop = FALSE]
 
     # Apply labels, widths, and rounding
     for (i in seq_len(nrow(dom_meta))) {

@@ -92,9 +92,10 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         )
       }
       # Auto-set column for direct_map if still missing
-      if (rule_type == "direct_map" && is.null(params$column)) {
+      # Also check source_var alias to avoid overwriting explicit dataset
+      if (rule_type == "direct_map" && is.null(params$column) && is.null(params$source_var)) {
         params$column <- tolower(vlm_var)
-        params$dataset <- paste0(tolower(dom), "_raw")
+        params$dataset <- tolower(dom)
       }
       params$vlm_branches <- conditions
 
@@ -187,7 +188,7 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
           params    <- list(value = dom)
         } else {
           rule_type <- "direct_map"
-          params    <- list(dataset = paste0(dom_lower, "_raw"),
+          params    <- list(dataset = dom_lower,
                             column  = tolower(var_name))
         }
         compile_log <- c(compile_log,
@@ -210,19 +211,45 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         }
       }
 
+      # --- Normalise source_var -> column alias (user-friendly synonym) ---
+      if (!is.null(params$source_var) && is.null(params$column)) {
+        params$column <- params$source_var
+      }
+
       # --- Auto-generate missing params for direct_map ---
       if (rule_type == "direct_map" && is.null(params$column)) {
         params$column  <- tolower(var_name)
-        params$dataset <- paste0(dom_lower, "_raw")
+        params$dataset <- dom_lower
       }
       if (rule_type == "direct_map" && is.null(params$dataset)) {
-        params$dataset <- paste0(dom_lower, "_raw")
+        params$dataset <- dom_lower
       }
 
       # Parse depends_on
       deps <- character()
       if (!is.na(row$depends_on) && nchar(row$depends_on) > 0) {
         deps <- trimws(strsplit(row$depends_on, ";")[[1]])
+      }
+
+      # Auto-add dependencies from params that reference other domain vars
+      # (e.g. coded_var = "AEDECOD" for dict_version, condition for if_else)
+      dom_vars <- unique(dom_meta$var)
+      implicit_refs <- c(params$coded_var, params$dtc_var, params$ref_var)
+      for (ref in implicit_refs) {
+        if (!is.null(ref) && ref %in% dom_vars && ref != var_name && !ref %in% deps) {
+          deps <- c(deps, ref)
+        }
+      }
+      # Also scan condition / true_value / false_value for references
+      for (txt in c(params$condition, params$true_value, params$false_value)) {
+        if (!is.null(txt) && is.character(txt)) {
+          tokens <- regmatches(txt, gregexpr("[A-Z][A-Z0-9_]+", txt))[[1]]
+          for (tok in tokens) {
+            if (tok %in% dom_vars && tok != var_name && !tok %in% deps) {
+              deps <- c(deps, tok)
+            }
+          }
+        }
       }
 
       # Resolve extensibility for this codelist

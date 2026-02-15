@@ -8,7 +8,7 @@ derive_seq(
   data,
   target_var,
   by = "USUBJID",
-  order_by,
+  order_by = character(),
   ties = "dense",
   start_at = 1L
 )

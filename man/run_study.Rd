@@ -77,8 +77,8 @@ Given a \code{config.yaml} (or individual paths), this function:
 
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{my_study/
-├── config.yaml
 ├── metadata/
+│   ├── config.yaml
 │   ├── Study_Metadata.xlsx
 │   └── Study_CT.xlsx
 ├── raw/
@@ -99,8 +99,8 @@ Given a \code{config.yaml} (or individual paths), this function:
 
 \examples{
 \dontrun{
-# Using a config.yaml file
-out <- run_study("config.yaml")
+# Using a config.yaml file (stored in metadata/)
+out <- run_study("metadata/config.yaml")
 
 # Using explicit paths (no config.yaml needed)
 out <- run_study(
@@ -112,7 +112,7 @@ out <- run_study(
 )
 
 # Datasets only (no R programs generated)
-out <- run_study("config.yaml", generate_programs = FALSE)
+out <- run_study("metadata/config.yaml", generate_programs = FALSE)
 }
 
 }

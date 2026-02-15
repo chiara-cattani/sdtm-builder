@@ -93,11 +93,23 @@ read_study_metadata_excel <- function(path) {
   # --- Read Value Level sheet -------------------------------------------------
   value_level_meta <- .read_value_level_sheet(path, where_clauses)
 
+  # --- Read Sources & Source Columns sheets (optional) ------------------------
+  sources_meta      <- NULL
+  source_cols_meta  <- NULL
+  if ("Sources" %in% available_sheets) {
+    sources_meta <- .read_sources_sheet(path)
+  }
+  if ("Source Columns" %in% available_sheets) {
+    source_cols_meta <- .read_source_columns_sheet(path)
+  }
+
   list(
     study_name       = study_name,
     target_meta      = target_meta,
     domain_meta      = domain_meta,
-    value_level_meta = value_level_meta
+    value_level_meta = value_level_meta,
+    sources_meta     = sources_meta,
+    source_cols_meta = source_cols_meta
   )
 }
 
@@ -137,6 +149,8 @@ read_study_metadata_excel <- function(path) {
   df <- readxl::read_excel(path, sheet = "Domains")
   df <- tibble::as_tibble(df)
   names(df) <- tolower(names(df))
+  # Remove duplicate columns (keep first occurrence)
+  df <- df[, !duplicated(names(df)), drop = FALSE]
 
   # Filter selected domains
   if ("select" %in% names(df)) {
@@ -424,6 +438,70 @@ read_study_metadata_excel <- function(path) {
 
   df
 }
+
+
+#' Read and parse the Sources sheet (optional)
+#'
+#' Defines domain-level preprocessing: which raw datasets feed each domain,
+#' how they combine, filtering, visit/timepoint mapping.
+#'
+#' @param path Path to Excel file.
+#' @return Tibble with source block definitions, or NULL.
+#' @noRd
+.read_sources_sheet <- function(path) {
+  df <- readxl::read_excel(path, sheet = "Sources")
+  df <- tibble::as_tibble(df)
+  names(df) <- tolower(names(df))
+
+  # Filter selected rows
+  if ("select" %in% names(df)) {
+    df <- dplyr::filter(df, toupper(.data$select) == "Y")
+    df$select <- NULL
+  }
+  if (nrow(df) == 0L) return(NULL)
+
+  # Validate required columns
+  required <- c("domain", "source", "block_id", "step_order", "merge_type")
+  miss <- setdiff(required, names(df))
+  if (length(miss)) abort(paste("Sources sheet missing columns:", paste(miss, collapse = ", ")))
+
+  # Ensure optional columns
+  for (col in c("join_by", "filter", "map_visit", "map_timepoint",
+                "tpt_normalize", "sourceid", "pivot_pattern")) {
+    if (!col %in% names(df)) df[[col]] <- NA_character_
+  }
+
+  df$domain <- toupper(df$domain)
+  df$step_order <- as.numeric(df$step_order)
+  df
+}
+
+
+#' Read and parse the Source Columns sheet (optional)
+#'
+#' Defines column-level derivations within each source block.
+#'
+#' @param path Path to Excel file.
+#' @return Tibble with column derivation definitions, or NULL.
+#' @noRd
+.read_source_columns_sheet <- function(path) {
+  df <- readxl::read_excel(path, sheet = "Source Columns")
+  df <- tibble::as_tibble(df)
+  names(df) <- tolower(names(df))
+
+  if (nrow(df) == 0L) return(NULL)
+
+  # Validate required columns
+  required <- c("block_id", "target_column", "method")
+  miss <- setdiff(required, names(df))
+  if (length(miss)) abort(paste("Source Columns sheet missing columns:", paste(miss, collapse = ", ")))
+
+  # Ensure col_order
+  if (!"col_order" %in% names(df)) df$col_order <- seq_len(nrow(df))
+  df$col_order <- as.numeric(df$col_order)
+  df
+}
+
 
 # --- Section 2: Read Study_CT.xlsx ------------------------------------------
 

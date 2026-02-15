@@ -13,14 +13,18 @@
 derive_usubjid <- function(data, studyid, subjid_col = "subjid",
                            sep = "-", validate_existing = TRUE) {
   if ("USUBJID" %in% names(data) && validate_existing) return(data)
+  # Prefer subjid_col derivation over pre-existing lowercase usubjid,
+
+  # which may be empty or contain non-study-qualified values.
+  if (subjid_col %in% names(data)) {
+    data$USUBJID <- paste(studyid, data[[subjid_col]], sep = sep)
+    return(data)
+  }
   if ("usubjid" %in% names(data)) {
     data$USUBJID <- data$usubjid
     return(data)
   }
-  if (!subjid_col %in% names(data)) {
-    abort(glue::glue("derive_usubjid: '{subjid_col}' not found"))
-  }
-  data$USUBJID <- paste(studyid, data[[subjid_col]], sep = sep)
+  abort(glue::glue("derive_usubjid: '{subjid_col}' not found"))
   data
 }
 
@@ -52,9 +56,10 @@ derive_domain_keys <- function(data, domain, config,
 #' @param start_at Integer. Default `1L`.
 #' @return Tibble.
 #' @export
-derive_seq <- function(data, target_var, by = "USUBJID", order_by,
+derive_seq <- function(data, target_var, by = "USUBJID", order_by = character(),
                        ties = "dense", start_at = 1L) {
   # Handle missing order_by columns gracefully
+  if (length(order_by) == 0L) order_by <- character()
   available_order <- intersect(order_by, names(data))
   if (length(available_order) == 0L) available_order <- by
 

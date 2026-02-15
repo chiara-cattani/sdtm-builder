@@ -11,6 +11,7 @@ validate_domain_structure(
   config,
   ct_lib = NULL,
   value_level_meta = NULL,
+  domain_meta = NULL,
   checks = "all"
 )
 }
@@ -24,6 +25,12 @@ validate_domain_structure(
 \item{config}{\code{sdtm_config}.}
 
 \item{ct_lib}{Tibble or \code{NULL}.}
+
+\item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata for
+per-condition validation.}
+
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata providing
+keys and structure information for validation.}
 
 \item{checks}{Character vector of check names to run, or \code{"all"}.}
 }

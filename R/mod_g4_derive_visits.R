@@ -56,6 +56,8 @@ derive_visitnum <- function(data, target_var = "VISITNUM", visit_map,
 #' @param target_var Character. Default `"VISITDY"`.
 #' @param visit_var Character. Default `"VISIT"`.
 #' @param dy_var Character. Study day variable.
+#' @param visit_map Tibble or `NULL`. Visit-level mapping with planned
+#'   day windows. Default `NULL`.
 #' @return Tibble.
 #' @export
 derive_visitdy <- function(data, target_var = "VISITDY",

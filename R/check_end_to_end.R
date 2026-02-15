@@ -172,7 +172,7 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
       n_warn <- sum(result$report$findings$severity == "WARNING")
 
       domain_summaries[[dom]] <- list(
-        status   = if (n_err == 0) "PASS" else "WARN",
+        status   = if (n_err == 0) "PASS" else "FAIL",
         nrow     = nrow(result$data),
         ncol     = ncol(result$data),
         errors   = n_err,

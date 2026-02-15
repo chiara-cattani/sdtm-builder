@@ -27,6 +27,8 @@
 #'   per-condition validation.
 #' @param return_provenance Logical. Default `TRUE`.
 #' @param validate Logical. Default `TRUE`.
+#' @param skip_existing Logical. Default `FALSE`. If `TRUE`, skip building
+#'   this domain when its output already exists.
 #' @param verbose Logical. Default `TRUE`.
 #' @return Named list (build_result).
 #' @export
@@ -71,10 +73,12 @@ build_domain <- function(domain, target_meta, raw_data,
   }
 
   if (is.null(primary_ds)) {
-    # Fall back to convention: {domain_lower}_raw
-    convention_ds <- paste0(tolower(domain), "_raw")
-    if (convention_ds %in% names(raw_data)) {
-      primary_ds <- convention_ds
+    # Fall back to convention: try {domain_lower} first, then {domain_lower}_raw
+    dom_lc <- tolower(domain)
+    if (dom_lc %in% names(raw_data)) {
+      primary_ds <- dom_lc
+    } else if (paste0(dom_lc, "_raw") %in% names(raw_data)) {
+      primary_ds <- paste0(dom_lc, "_raw")
     } else {
       abort(glue::glue("Cannot determine primary source dataset for {domain}"))
     }
@@ -84,12 +88,69 @@ build_domain <- function(domain, target_meta, raw_data,
     abort(glue::glue("Source dataset '{primary_ds}' not found in raw_data"))
   }
 
-  # Start with primary dataset
+  # Start with primary dataset and normalize column names to lowercase
   data <- raw_data[[primary_ds]]
+  names(data) <- tolower(names(data))
   .log(glue::glue("Primary source: {primary_ds} ({nrow(data)} rows)"))
+
+  # Auto-merge secondary source datasets referenced by rules
+  all_ds <- unique(unlist(lapply(dom_rules, function(r) r$params$dataset)))
+  all_ds <- all_ds[!is.na(all_ds) & all_ds != primary_ds]
+  dom_spid <- tolower(paste0(tolower(domain), "spid"))  # e.g. "aespid"
+
+  for (sec_ds in all_ds) {
+    if (!sec_ds %in% names(raw_data)) next
+    sec_data <- raw_data[[sec_ds]]
+    names(sec_data) <- tolower(names(sec_data))
+
+    # Rename secondary SPID to domain SPID if needed
+    # e.g. sae has "saespid" -> rename to "aespid" to match ae primary
+    sec_spid_candidates <- grep("spid$", names(sec_data), value = TRUE)
+    if (dom_spid %in% names(data) && !dom_spid %in% names(sec_data)) {
+      for (cand in sec_spid_candidates) {
+        if (cand != dom_spid) {
+          names(sec_data)[names(sec_data) == cand] <- dom_spid
+          .log(glue::glue("  Renamed '{cand}' -> '{dom_spid}' in {sec_ds}"))
+          break
+        }
+      }
+    }
+
+    # Find common join keys
+    common_cols <- intersect(names(data), names(sec_data))
+    join_keys <- common_cols[common_cols %in% c("subjectid", "subjid", "usubjid", dom_spid)]
+    if (length(join_keys) == 0L) {
+      # Fall back to subject-level merge only
+      join_keys <- common_cols[common_cols %in% c("subjectid", "subjid", "usubjid")]
+    }
+    if (length(join_keys) > 0L) {
+      # Keep only columns not already in data (except join keys)
+      new_cols <- setdiff(names(sec_data), names(data))
+      if (length(new_cols) > 0L) {
+        sec_slim <- sec_data[, c(join_keys, new_cols), drop = FALSE]
+        data <- dplyr::left_join(data, sec_slim, by = join_keys)
+        .log(glue::glue("  Merged secondary source: {sec_ds} (by {paste(join_keys, collapse = ', ')})"))
+      }
+    }
+  }
 
   # Join DM data for RFSTDTC (needed for DY calculations) - skip for DM itself
   if (domain != "DM") {
+    # Try to load DM from disk if not passed in-memory
+    if (is.null(dm_data) && !is.null(config$output_dir)) {
+      dm_rda <- file.path(config$output_dir, "RDA", "dm.rda")
+      dm_xpt <- file.path(config$output_dir, "XPT", "dm.xpt")
+      if (file.exists(dm_rda)) {
+        env <- new.env(parent = emptyenv())
+        load(dm_rda, envir = env)
+        dm_data <- env[[ls(env)[1]]]
+        .log("Loaded DM from {dm_rda}")
+      } else if (file.exists(dm_xpt)) {
+        dm_data <- haven::read_xpt(dm_xpt)
+        .log("Loaded DM from {dm_xpt}")
+      }
+    }
+
     if (!is.null(dm_data)) {
       # Auto-extract $data if a build_domain result list was passed
       if (is.list(dm_data) && "data" %in% names(dm_data) && !is.data.frame(dm_data)) {
@@ -100,11 +161,25 @@ build_domain <- function(domain, target_meta, raw_data,
       if (!"RFSTDTC" %in% names(dm_ref) && "rfstdtc" %in% names(dm_ref)) {
         dm_ref$RFSTDTC <- dm_ref$rfstdtc
       }
-      # Determine join key — built DM has UPPERCASE names, raw data lowercase
-      data_key <- if ("usubjid" %in% names(data)) "usubjid" else
-                  if ("USUBJID" %in% names(data)) "USUBJID" else NULL
-      dm_key   <- if ("usubjid" %in% names(dm_ref)) "usubjid" else
-                  if ("USUBJID" %in% names(dm_ref)) "USUBJID" else NULL
+      # Determine join key — built DM has UPPERCASE names, raw data may have
+      # USUBJID/usubjid (if already derived) or SubjectId/subjectid (raw CSV)
+      # Prefer subjectid→SUBJID since USUBJID in raw data may not yet
+      # be the full study-qualified value that DM SDTM has.
+      data_names_lc <- tolower(names(data))
+      dm_names_lc   <- tolower(names(dm_ref))
+
+      data_key <- NULL
+      dm_key   <- NULL
+
+      if ("subjectid" %in% data_names_lc && "subjid" %in% dm_names_lc) {
+        # Raw data has SubjectId; DM SDTM has SUBJID (same values)
+        data_key <- names(data)[match("subjectid", data_names_lc)]
+        dm_key   <- names(dm_ref)[match("subjid", dm_names_lc)]
+      } else if ("usubjid" %in% data_names_lc && "usubjid" %in% dm_names_lc) {
+        data_key <- names(data)[match("usubjid", data_names_lc)]
+        dm_key   <- names(dm_ref)[match("usubjid", dm_names_lc)]
+      }
+
       if (!is.null(data_key) && !is.null(dm_key)) {
         # Normalise dm_ref key to match data
         if (data_key != dm_key) dm_ref[[data_key]] <- dm_ref[[dm_key]]
@@ -114,14 +189,20 @@ build_domain <- function(domain, target_meta, raw_data,
                           type = "left", cardinality = "m:1",
                           on_violation = "warn")
       }
-    } else if ("dm_raw" %in% names(raw_data)) {
-      dm_ref <- raw_data[["dm_raw"]]
-      if ("usubjid" %in% names(data) && "usubjid" %in% names(dm_ref)) {
-        dm_slim <- dplyr::distinct(dm_ref[, c("usubjid", "rfstdtc"), drop = FALSE])
-        dm_slim$RFSTDTC <- dm_slim$rfstdtc
-        data <- safe_join(data, dm_slim[, c("usubjid", "RFSTDTC")],
-                          by = "usubjid", type = "left",
-                          cardinality = "m:1", on_violation = "warn")
+    } else if ("dm" %in% names(raw_data) || "dm_raw" %in% names(raw_data)) {
+      dm_raw_key <- if ("dm" %in% names(raw_data)) "dm" else "dm_raw"
+      dm_ref <- raw_data[[dm_raw_key]]
+      names(dm_ref) <- tolower(names(dm_ref))
+      if ("subjectid" %in% names(data) && "subjectid" %in% names(dm_ref)) {
+        # Look for rfstdtc or common date columns
+        ref_col <- intersect(c("rfstdtc", "rfstdat", "rfstdtc"), names(dm_ref))
+        if (length(ref_col) > 0L) {
+          dm_slim <- dplyr::distinct(dm_ref[, c("subjectid", ref_col[1]), drop = FALSE])
+          dm_slim$RFSTDTC <- dm_slim[[ref_col[1]]]
+          data <- safe_join(data, dm_slim[, c("subjectid", "RFSTDTC")],
+                            by = "subjectid", type = "left",
+                            cardinality = "m:1", on_violation = "warn")
+        }
       }
     }
   }  # end domain != "DM"
@@ -156,7 +237,8 @@ build_domain <- function(domain, target_meta, raw_data,
       data <- derive_variable(data, var_name, rule,
                                context = list(config = config,
                                               ct_lib = rule_set$ct_lib,
-                                              domain = domain))
+                                              domain = domain,
+                                              raw_data = raw_data))
       provenance <- dplyr::bind_rows(provenance, tibble::tibble(
         var = var_name, rule_type = rule$type,
         source = rule$params$dataset %||% "derived"
@@ -198,7 +280,8 @@ build_domain <- function(domain, target_meta, raw_data,
     ct_lib <- rule_set$ct_lib
     report <- validate_domain_structure(data, dom_meta, domain, config,
                                         ct_lib = ct_lib,
-                                        value_level_meta = value_level_meta)
+                                        value_level_meta = value_level_meta,
+                                        domain_meta = domain_meta)
   }
 
   result <- list(
@@ -290,17 +373,44 @@ derive_variable <- function(data, var, rule, context) {
       }
       data <- derive_constant(data, var, value = val)
     },
+    sourceid = {
+      form_id  <- params$form_id
+      ds_name  <- params$dataset  %||% "review_status"
+      id_col   <- params$id_col   %||% "formid"
+      name_col <- params$name_col %||% "formname"
+      data <- derive_sourceid(data, var, form_id = form_id,
+                              raw_data = context$raw_data,
+                              dataset  = ds_name,
+                              id_col   = id_col,
+                              name_col = name_col)
+    },
     direct_map = {
-      src_col <- params$column
+      src_col <- params$column %||% params$source_var
       src_ds  <- params$dataset
 
       # If the source column isn't in data, check if we can find it
       if (!src_col %in% names(data)) {
-        # Try lowercase
+        # Try lowercase / uppercase
         if (tolower(src_col) %in% names(data)) {
           src_col <- tolower(src_col)
         } else if (toupper(src_col) %in% names(data)) {
           src_col <- toupper(src_col)
+        } else if (!is.null(src_ds) && src_ds %in% names(context$raw_data)) {
+          # Late-bind from raw_data when auto-merge didn't cover it
+          sec <- context$raw_data[[src_ds]]
+          names(sec) <- tolower(names(sec))
+          src_col <- tolower(src_col)
+          if (src_col %in% names(sec)) {
+            join_keys <- intersect(names(data), names(sec))
+            join_keys <- join_keys[join_keys %in% c("subjectid", "subjid", "usubjid")]
+            if (length(join_keys) > 0L) {
+              new_cols <- c(join_keys, src_col)
+              data <- dplyr::left_join(data, sec[, new_cols, drop = FALSE],
+                                       by = join_keys)
+            }
+          } else {
+            abort(glue::glue("derive_variable({var}): source column '{src_col}' not found in {src_ds}"))
+          }
         } else {
           abort(glue::glue("derive_variable({var}): source column '{src_col}' not found"))
         }
@@ -316,7 +426,17 @@ derive_variable <- function(data, var, rule, context) {
         )
       }
 
-      data <- map_direct(data, var, src_col, transform = xform)
+      # Auto-infer type from metadata DATA_TYPE when not explicitly set
+      map_type <- params$type
+      if (is.null(map_type) && !is.null(rule$target_type)) {
+        map_type <- switch(rule$target_type,
+          num  = "numeric",
+          char = "character",
+          NULL
+        )
+      }
+
+      data <- map_direct(data, var, src_col, transform = xform, type = map_type)
     },
     ct_assign = {
       src_col     <- params$column
@@ -695,6 +815,46 @@ derive_variable <- function(data, var, rule, context) {
         data[[var]] <- NA_character_
       }
     },
+    dict_version = {
+      dict_ds  <- params$dataset
+      prefix   <- params$prefix %||% "MedDRA"
+      dictvar  <- params$dictvar %||% "DictInstance"
+      coded_var <- params$coded_var %||% NULL
+
+      # Locate the source dataset in raw_data or merged data
+      dict_data <- NULL
+      if (!is.null(dict_ds) && !is.null(context$raw_data) && dict_ds %in% names(context$raw_data)) {
+        dict_data <- context$raw_data[[dict_ds]]
+      }
+
+      version_str <- ""
+      if (!is.null(dict_data)) {
+        if (tolower(prefix) == "whodrug") {
+          version_str <- get_whodrug_version(dict_data, dictvar = dictvar)
+        } else {
+          version_str <- get_meddra_version(dict_data, dictvar = dictvar)
+        }
+      }
+
+      if (nzchar(version_str)) {
+        full_label <- paste(prefix, version_str)
+      } else {
+        full_label <- ""
+      }
+
+      # If coded_var specified, only set version where coded variable is non-NA
+      if (!is.null(coded_var)) {
+        ref <- coded_var
+        if (!ref %in% names(data) && tolower(ref) %in% names(data)) ref <- tolower(ref)
+        if (ref %in% names(data)) {
+          data[[var]] <- dplyr::if_else(!is.na(data[[ref]]), full_label, "")
+        } else {
+          data[[var]] <- full_label
+        }
+      } else {
+        data[[var]] <- full_label
+      }
+    },
     {
       # Unknown rule type — set NA with warning
       warn(glue::glue("Unknown rule type '{type}' for variable {var}"))
@@ -741,7 +901,7 @@ derive_variable <- function(data, var, rule, context) {
 
     if (base_type == "ct_assign" && !is.null(branch_cl_id) && !is.null(ct_lib)) {
       # CT assignment with per-branch codelist
-      src_col <- params$column
+      src_col <- params$column %||% params$source_var
       if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
         src_col <- tolower(src_col)
       }
@@ -765,7 +925,7 @@ derive_variable <- function(data, var, rule, context) {
       result[mask] <- mapped_vals[mask]
 
     } else if (base_type == "direct_map") {
-      src_col <- params$column
+      src_col <- params$column %||% params$source_var
       if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
         src_col <- tolower(src_col)
       }
@@ -774,8 +934,8 @@ derive_variable <- function(data, var, rule, context) {
     } else {
       # Generic: use whatever the base rule type produces
       # For now, attempt direct mapping from the base rule source
-      if (!is.null(params$column)) {
-        src_col <- params$column
+      if (!is.null(params$column %||% params$source_var)) {
+        src_col <- params$column %||% params$source_var
         if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
           src_col <- tolower(src_col)
         }
@@ -796,8 +956,8 @@ derive_variable <- function(data, var, rule, context) {
   # Also handle non-VLM base derivation for rows not matched by any branch
   # Apply the default (base params) rule for unmatched rows
   unmatched <- is.na(result)
-  if (any(unmatched) && !is.null(params$column)) {
-    src_col <- params$column
+  if (any(unmatched) && !is.null(params$column %||% params$source_var)) {
+    src_col <- params$column %||% params$source_var
     if (!src_col %in% names(data) && tolower(src_col) %in% names(data)) {
       src_col <- tolower(src_col)
     }
@@ -988,63 +1148,452 @@ build_supp <- function(domain_data, domain, target_meta,
 }
 
 #' Build RELREC dataset
-#' @param relationship_specs List.
-#' @param domain_data Named list.
-#' @param config `sdtm_config`.
-#' @return Tibble or `NULL`.
+#'
+#' Constructs the SDTM RELREC (Related Records) dataset from relationship
+#' specifications defined in `config.yaml`.  Each specification describes
+#' a pair of domains linked by cross-reference columns in the raw CRF data
+#' or by a domain-level structural relationship.
+#'
+#' Two types of relationships are supported:
+#'
+#' \describe{
+#'   \item{record}{Subject-level links derived from raw data columns
+#'     (e.g., `cmae1` in CM linking to an AE via `AESPID`).  One pair of
+#'     RELREC rows is produced for each non-missing link value.}
+#'   \item{domain}{Dataset-level structural relationships (e.g., EC ↔ EX
+#'     via ECLNKGRP / EXLNKID).  A single pair of rows with empty USUBJID
+#'     and IDVARVAL is produced.}
+#' }
+#'
+#' @param relationship_specs List of relationship specification lists.
+#'   Each element must contain:
+#'   \describe{
+#'     \item{rdomain1}{Character. First domain (e.g. "CM").}
+#'     \item{rdomain2}{Character. Second domain (e.g. "AE").}
+#'     \item{idvar1}{Character. Identifier variable in domain 1 (e.g. "CMSPID").}
+#'     \item{idvar2}{Character. Identifier variable in domain 2 (e.g. "AESPID").}
+#'     \item{dataset}{Character. Raw dataset containing the link columns.}
+#'     \item{link_prefix}{Character. Column prefix to search for link values
+#'       (e.g. "cmae").  All columns matching `^<link_prefix>[0-9]*$` are
+#'       pivoted to extract cross-references.}
+#'     \item{relid_prefix}{Character. Optional prefix for RELID
+#'       (default: paste0(rdomain1, rdomain2)).}
+#'     \item{type}{Character. Either `"record"` (default) or `"domain"`.}
+#'     \item{reltype1}{Character. Optional RELTYPE for domain 1 row.}
+#'     \item{reltype2}{Character. Optional RELTYPE for domain 2 row.}
+#'     \item{idvar1_val_col}{Character. Optional column name to use as
+#'       IDVARVAL for domain 1 (default: `<rdomain1>spid` lowercased).}
+#'   }
+#' @param raw_data Named list of raw data tibbles keyed by dataset name.
+#' @param config `sdtm_config` object (needs `$studyid`).
+#' @param built_domains Optional named list of built SDTM domain tibbles
+#'   (e.g., `list(DS = ds_tibble, XS = xs_tibble)`).
+#'   Required only for `type = "identity"` or `type = "seq_lookup"` specs.
+#' @return A tibble with RELREC columns, or `NULL` if no relationships found.
 #' @export
-build_relrec <- function(relationship_specs, domain_data, config) {
+build_relrec <- function(relationship_specs, raw_data, config,
+                         built_domains = NULL) {
   if (is.null(relationship_specs) || length(relationship_specs) == 0L) return(NULL)
-  rows <- lapply(relationship_specs, function(spec) {
-    tibble::tibble(
-      STUDYID  = config$studyid,
-      RDOMAIN  = spec$rdomain1,
-      USUBJID  = "",
-      IDVAR    = spec$idvar1 %||% "",
-      IDVARVAL = "",
-      RELTYPE  = spec$reltype %||% "",
-      RELID    = spec$relid %||% ""
+
+  studyid <- config$studyid %||% "UNKNOWN"
+  all_blocks <- list()
+
+  for (spec in relationship_specs) {
+    r1 <- toupper(spec$rdomain1)
+    r2 <- toupper(spec$rdomain2)
+    relid_pfx <- spec$relid_prefix %||% paste0(r1, r2)
+    rel_type <- spec$type %||% "record"
+
+    # --- Domain-level relationship (no per-subject data needed) ---
+    if (rel_type == "domain") {
+      block <- tibble::tibble(
+        STUDYID  = rep(studyid, 2L),
+        RDOMAIN  = c(r1, r2),
+        USUBJID  = c("", ""),
+        IDVAR    = c(spec$idvar1 %||% "", spec$idvar2 %||% ""),
+        IDVARVAL = c("", ""),
+        RELTYPE  = c(spec$reltype1 %||% "", spec$reltype2 %||% ""),
+        RELID    = c(relid_pfx, relid_pfx)
+      )
+      all_blocks <- c(all_blocks, list(block))
+      next
+    }
+
+    # --- Identity relationship (from built domains, 1:1 SPID match) ---
+    # e.g. XS <-> AE where XSSPID = AESPID
+    if (rel_type == "identity") {
+      built1 <- built_domains[[r1]]
+      if (is.null(built1) || nrow(built1) == 0L) next
+      names(built1) <- toupper(names(built1))
+      spid1_col <- toupper(spec$idvar1 %||% paste0(r1, "SPID"))
+      subj_col  <- "USUBJID"
+      if (!spid1_col %in% names(built1) || !subj_col %in% names(built1)) next
+      vals <- built1[, c(subj_col, spid1_col), drop = FALSE]
+      vals <- dplyr::distinct(vals)
+      n <- nrow(vals)
+      if (n == 0L) next
+
+      d1_rows <- tibble::tibble(
+        STUDYID  = studyid,
+        RDOMAIN  = r1,
+        USUBJID  = as.character(vals[[subj_col]]),
+        IDVAR    = spid1_col,
+        IDVARVAL = as.character(vals[[spid1_col]]),
+        RELTYPE  = spec$reltype1 %||% "",
+        RELID    = paste0(relid_pfx, as.character(vals[[spid1_col]]))
+      )
+      d2_rows <- tibble::tibble(
+        STUDYID  = studyid,
+        RDOMAIN  = r2,
+        USUBJID  = as.character(vals[[subj_col]]),
+        IDVAR    = toupper(spec$idvar2 %||% paste0(r2, "SPID")),
+        IDVARVAL = as.character(vals[[spid1_col]]),
+        RELTYPE  = spec$reltype2 %||% "",
+        RELID    = paste0(relid_pfx, as.character(vals[[spid1_col]]))
+      )
+      block <- dplyr::bind_rows(d1_rows, d2_rows)
+      all_blocks <- c(all_blocks, list(block))
+      next
+    }
+
+    # --- Sequence-lookup relationship (raw link_col + built domain SEQ) ---
+    # e.g. DS <-> AE where eos.etae1 links to AESPID,
+    #      and DS DSSEQ is looked up from built DS domain.
+    if (rel_type == "seq_lookup") {
+      ds_name <- spec$dataset %||% tolower(r1)
+      df <- raw_data[[ds_name]]
+      if (is.null(df) || nrow(df) == 0L) next
+      names(df) <- tolower(names(df))
+
+      link_col <- tolower(spec$link_col %||% "")
+      if (!nzchar(link_col) || !link_col %in% names(df)) next
+
+      subj_col <- if ("usubjid" %in% names(df)) "usubjid" else "subjectid"
+      if (!subj_col %in% names(df)) next
+
+      # Filter to rows with non-missing link values
+      df$link_val <- as.character(df[[link_col]])
+      df <- df[!is.na(df$link_val) & df$link_val != "", , drop = FALSE]
+      if (nrow(df) == 0L) next
+
+      # Optional filter (e.g. DSCAT = "DISPOSITION")
+      filter_col <- tolower(spec$filter_col %||% "")
+      filter_val <- spec$filter_val %||% ""
+
+      # Look up sequence from built domain
+      built1 <- built_domains[[r1]]
+      if (is.null(built1) || nrow(built1) == 0L) next
+      names(built1) <- toupper(names(built1))
+      seq_col <- toupper(spec$idvar1 %||% paste0(r1, "SEQ"))
+
+      if (!seq_col %in% names(built1) || !"USUBJID" %in% names(built1)) next
+
+      # Apply filter on built domain if specified
+      if (nzchar(filter_col) && nzchar(filter_val)) {
+        fc <- toupper(filter_col)
+        if (fc %in% names(built1)) {
+          built1 <- built1[built1[[fc]] == filter_val, , drop = FALSE]
+        }
+      }
+      if (nrow(built1) == 0L) next
+
+      # Derive USUBJID for raw data subjects
+      df$usubjid_derived <- if (subj_col == "usubjid") {
+        as.character(df[[subj_col]])
+      } else {
+        paste0(studyid, "-", as.character(df[[subj_col]]))
+      }
+
+      # Match raw subjects to built domain
+      built_slim <- built1[, c("USUBJID", seq_col), drop = FALSE]
+      built_slim <- dplyr::distinct(built_slim)
+      names(built_slim) <- c("usubjid_derived", "seq_val")
+      built_slim$seq_val <- as.character(built_slim$seq_val)
+
+      merged <- merge(
+        df[, c("usubjid_derived", "link_val"), drop = FALSE],
+        built_slim,
+        by = "usubjid_derived", all.x = FALSE
+      )
+      if (nrow(merged) == 0L) next
+
+      d1_rows <- tibble::tibble(
+        STUDYID  = studyid,
+        RDOMAIN  = r1,
+        USUBJID  = merged$usubjid_derived,
+        IDVAR    = seq_col,
+        IDVARVAL = merged$seq_val,
+        RELTYPE  = spec$reltype1 %||% "",
+        RELID    = paste0(relid_pfx, merged$seq_val)
+      )
+      d2_rows <- tibble::tibble(
+        STUDYID  = studyid,
+        RDOMAIN  = r2,
+        USUBJID  = merged$usubjid_derived,
+        IDVAR    = toupper(spec$idvar2 %||% paste0(r2, "SPID")),
+        IDVARVAL = merged$link_val,
+        RELTYPE  = spec$reltype2 %||% "",
+        RELID    = paste0(relid_pfx, merged$seq_val)
+      )
+      block <- dplyr::bind_rows(d1_rows, d2_rows)
+      block <- dplyr::distinct(block)
+      all_blocks <- c(all_blocks, list(block))
+      next
+    }
+
+    # --- Record-level relationship (from link columns in raw data) ---
+    ds_name <- spec$dataset %||% tolower(r1)
+    df <- raw_data[[ds_name]]
+    if (is.null(df) || nrow(df) == 0L) next
+
+    # Normalize column names to lowercase
+    names(df) <- tolower(names(df))
+
+    # Find link columns: match <link_prefix><digits>
+    pfx <- tolower(spec$link_prefix %||% paste0(tolower(r1), tolower(r2)))
+    link_cols <- grep(
+      paste0("^", pfx, "[0-9]*$"),
+      names(df), value = TRUE, ignore.case = TRUE
     )
-  })
-  dplyr::bind_rows(rows)
+    if (length(link_cols) == 0L) next
+
+    # Determine IDVAR and IDVARVAL column for domain 1
+    idvar1_col <- tolower(spec$idvar1_val_col %||% paste0(tolower(r1), "spid"))
+    if (!idvar1_col %in% names(df)) {
+      # Fallback: try the IDVAR1 name as-is
+      idvar1_col_alt <- tolower(spec$idvar1 %||% paste0(r1, "SPID"))
+      if (idvar1_col_alt %in% names(df)) {
+        idvar1_col <- idvar1_col_alt
+      } else {
+        next
+      }
+    }
+
+    # Ensure USUBJID or subjectid exists
+    subj_col <- if ("usubjid" %in% names(df)) "usubjid" else "subjectid"
+    if (!subj_col %in% names(df)) next
+
+    # Derive full USUBJID if raw data uses subjectid
+    if (subj_col == "subjectid") {
+      df$usubjid_full <- paste0(studyid, "-", as.character(df[[subj_col]]))
+    } else {
+      df$usubjid_full <- as.character(df[[subj_col]])
+    }
+
+    # Pivot link columns to long format
+    keep_cols <- intersect(c("usubjid_full", idvar1_col, link_cols), names(df))
+    long <- tryCatch({
+      df[, keep_cols, drop = FALSE] |>
+        tidyr::pivot_longer(
+          cols = dplyr::all_of(link_cols),
+          names_to  = "link_col",
+          values_to = "link_val"
+        )
+    }, error = function(e) return(NULL))
+    if (is.null(long) || nrow(long) == 0L) next
+
+    # Convert to character and filter non-missing
+    long$link_val <- as.character(long$link_val)
+    long <- long[!is.na(long$link_val) & long$link_val != "", , drop = FALSE]
+    if (nrow(long) == 0L) next
+
+    # Extract the numeric part of the link column name for RELID suffix
+    long$link_idx <- gsub(paste0("^", pfx), "", long$link_col, ignore.case = TRUE)
+    long$link_idx[long$link_idx == ""] <- "1"
+
+    # Build RELID: combine prefix with the domain-1 SPID for uniqueness
+    long$relid <- paste0(relid_pfx, as.character(long[[idvar1_col]]))
+
+    # Extract the first token of the link value (before any '-')
+    first_token <- function(x) sub("^([^-]+).*", "\\1", x)
+
+    # Domain-1 rows (main side)
+    d1_rows <- tibble::tibble(
+      STUDYID  = studyid,
+      RDOMAIN  = r1,
+      USUBJID  = as.character(long[["usubjid_full"]]),
+      IDVAR    = toupper(spec$idvar1 %||% paste0(r1, "SPID")),
+      IDVARVAL = as.character(long[[idvar1_col]]),
+      RELTYPE  = spec$reltype1 %||% "",
+      RELID    = long$relid
+    )
+
+    # Domain-2 rows (related side)
+    d2_rows <- tibble::tibble(
+      STUDYID  = studyid,
+      RDOMAIN  = r2,
+      USUBJID  = as.character(long[["usubjid_full"]]),
+      IDVAR    = toupper(spec$idvar2 %||% paste0(r2, "SPID")),
+      IDVARVAL = first_token(long$link_val),
+      RELTYPE  = spec$reltype2 %||% "",
+      RELID    = long$relid
+    )
+
+    block <- dplyr::bind_rows(d1_rows, d2_rows)
+    block <- dplyr::distinct(block)
+    all_blocks <- c(all_blocks, list(block))
+  }
+
+  if (length(all_blocks) == 0L) return(NULL)
+
+  relrec <- dplyr::bind_rows(all_blocks)
+  relrec <- dplyr::distinct(relrec)
+  relrec <- dplyr::arrange(relrec, .data$STUDYID, .data$RDOMAIN,
+                            .data$USUBJID, .data$IDVAR,
+                            .data$IDVARVAL, .data$RELID)
+
+  # Ensure all columns are character (SDTM requirement)
+  relrec[] <- lapply(relrec, as.character)
+
+  relrec
 }
 
-#' DM domain plugin
-#' @param target_meta Tibble.
-#' @param raw_data Named list.
-#' @param config `sdtm_config`.
-#' @param rule_set `rule_set`.
-#' @return `build_result` for DM.
-#' @export
-build_dm_plugin <- function(target_meta, raw_data, config, rule_set) {
-  build_domain("DM", target_meta, raw_data, config, rule_set)
-}
 
-#' Trial design domain plugins
-#' @param domains Character vector.
-#' @param target_meta Tibble.
-#' @param config `sdtm_config`.
-#' @param rule_set `rule_set`.
-#' @param trial_design_data Named list.
-#' @return Named list of `build_result` objects.
+#' Expand config-driven domains into raw data
+#'
+#' Some trial design domains (e.g. TV, TI) are not collected in a raw CRF
+#' dataset — they come from the study configuration (protocol visit schedule,
+#' inclusion/exclusion criteria text, etc.).
+#'
+#' Standard trial design domains (TV from `visit_map`, TI from
+#' `ie_criteria.criteria`) are handled automatically — no explicit
+#' `config_domains` section is needed.  If a `config_domains` entry is
+#' present in `config.yaml`, it overrides the built-in default for that
+#' domain and can also define additional config-driven domains.
+#'
+#' The resulting tibbles are injected into `raw_data` so that the standard
+#' rule engine ([build_domain()]) can process them like any other domain.
+#'
+#' @section config.yaml format (optional overrides):
+#' ```yaml
+#' # Only needed to override defaults or add new config-driven domains
+#' config_domains:
+#'   TV:
+#'     source: visit_map
+#'     filter_field: tvstrl
+#'     columns:
+#'       visitnum: visitnum
+#'       visit: visit
+#'       visitdy: visitdy
+#'       tvstrl: tvstrl
+#' ```
+#'
+#' @param raw_data Named list of tibbles (modified in place).
+#' @param config `sdtm_config` with `cfg_yaml` attached.
+#' @param domains Character vector of requested domains.
+#' @param verbose Logical. Default `TRUE`.
+#' @return Modified `raw_data` with new tibbles injected.
 #' @export
-build_ta_tv_te_ts_plugins <- function(domains = c("TA","TV","TE","TS"),
-                                       target_meta, config, rule_set,
-                                       trial_design_data = list()) {
-  rlang::inform("Trial design domains (TA/TV/TE/TS) are not yet implemented.")
-  list()
-}
+expand_config_domains <- function(raw_data, config, domains = NULL,
+                                  verbose = TRUE) {
+  cfg_yaml <- config$cfg_yaml
+  if (is.null(cfg_yaml)) return(raw_data)
 
-#' SV domain plugin
-#' @param target_meta Tibble.
-#' @param raw_data Named list.
-#' @param config `sdtm_config`.
-#' @param rule_set `rule_set`.
-#' @return `build_result` for SV.
-#' @export
-build_sv_plugin <- function(target_meta, raw_data, config, rule_set) {
-  rlang::inform("SV domain plugin is not yet implemented.")
-  list()
+  # --- Standard defaults for trial design domains ---------------------------
+  # These are always derived from standard config sections (visit_map,
+
+  # ie_criteria) unless overridden in config_domains.
+  defaults <- list(
+    TV = list(
+      source       = "visit_map",
+      filter_field = "tvstrl",
+      columns      = list(visitnum = "visitnum", visit = "visit",
+                          visitdy = "visitdy", tvstrl = "tvstrl")
+    ),
+    TI = list(
+      source  = "ie_criteria.criteria",
+      columns = list(ietestcd = "ietestcd", ietest = "ietest",
+                     iecat = "iecat"),
+      extra   = list(tivers = "ie_criteria.tivers")
+    )
+  )
+
+  # Merge: explicit config_domains entries override the defaults
+  cd <- defaults
+  if (!is.null(cfg_yaml$config_domains)) {
+    for (nm in names(cfg_yaml$config_domains)) {
+      cd[[nm]] <- cfg_yaml$config_domains[[nm]]
+    }
+  }
+
+  for (dom_name in names(cd)) {
+    # Only expand if this domain was actually requested
+    if (!is.null(domains) && !toupper(dom_name) %in% toupper(domains)) next
+
+    dom_lc <- tolower(dom_name)
+    # Skip if raw data already exists for this domain
+    if (dom_lc %in% names(raw_data)) next
+
+    spec <- cd[[dom_name]]
+    source_path <- spec$source  # e.g. "visit_map" or "ie_criteria.criteria"
+    if (is.null(source_path)) next
+
+    # Navigate the config to reach the source list
+    path_parts <- strsplit(source_path, "\\.")[[1]]
+    src <- cfg_yaml
+    for (p in path_parts) {
+      if (is.null(src[[p]])) { src <- NULL; break }
+      src <- src[[p]]
+    }
+    if (is.null(src) || length(src) == 0L) {
+      if (verbose) cli::cli_alert_warning(
+        "config_domains: source '{source_path}' not found for {dom_name}")
+      next
+    }
+
+    # Apply filter: only keep entries that have the filter_field non-empty
+    filter_field <- spec$filter_field
+    if (!is.null(filter_field)) {
+      src <- Filter(function(entry) {
+        val <- entry[[filter_field]]
+        !is.null(val) && nzchar(as.character(val))
+      }, src)
+    }
+    if (length(src) == 0L) next
+
+    # Build tibble from column mapping
+    col_map <- spec$columns  # named list: raw_col_name -> config_field_name
+    if (is.null(col_map) || length(col_map) == 0L) next
+
+    rows <- lapply(src, function(entry) {
+      vals <- lapply(col_map, function(cfg_field) {
+        v <- entry[[cfg_field]]
+        if (is.null(v)) NA else v
+      })
+      tibble::as_tibble(vals)
+    })
+    tbl <- dplyr::bind_rows(rows)
+
+    # Add extra columns from higher-level config sections
+    if (!is.null(spec$extra) && length(spec$extra) > 0L) {
+      for (col_name in names(spec$extra)) {
+        extra_path <- strsplit(spec$extra[[col_name]], "\\.")[[1]]
+        val <- cfg_yaml
+        for (p in extra_path) {
+          if (is.null(val[[p]])) { val <- NULL; break }
+          val <- val[[p]]
+        }
+        if (!is.null(val)) tbl[[col_name]] <- as.character(val)
+      }
+    }
+
+    # Enforce types: numeric for columns ending in 'num' or 'dy'
+    for (cn in names(tbl)) {
+      if (grepl("(num|dy)$", cn, ignore.case = TRUE)) {
+        tbl[[cn]] <- suppressWarnings(as.numeric(tbl[[cn]]))
+      } else {
+        tbl[[cn]] <- as.character(tbl[[cn]])
+      }
+    }
+
+    raw_data[[dom_lc]] <- tbl
+    if (verbose) {
+      cli::cli_alert_info(
+        "  Config domain {dom_name}: {nrow(tbl)} rows from {source_path}")
+    }
+  }
+
+  raw_data
 }
 
 
@@ -1068,6 +1617,12 @@ build_sv_plugin <- function(target_meta, raw_data, config, rule_set) {
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata from
 #'   [read_study_metadata_excel()]. Controls build order and provides
 #'   keys/description/structure for finalization.
+#' @param sources_meta Tibble or `NULL`. Domain-level preprocessing
+#'   metadata from the "Sources" sheet. When provided, replaces manual hooks.
+#' @param source_cols_meta Tibble or `NULL`. Column-level preprocessing
+#'   metadata from the "Source Columns" sheet.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata for
+#'   per-condition validation.
 #' @param create_supp Logical or `NULL`. Default `NULL` (inherits from
 #'   `config$create_supp`, itself defaulting to `TRUE`). Set `FALSE` to
 #'   keep all variables in the main domain instead of splitting to SUPP--.
@@ -1081,6 +1636,8 @@ build_all_domains <- function(target_meta, raw_data,
                               domains = NULL,
                               domain_meta = NULL,
                               value_level_meta = NULL,
+                              sources_meta = NULL,
+                              source_cols_meta = NULL,
                               create_supp = NULL,
                               validate = TRUE,
                               verbose = TRUE) {
@@ -1123,8 +1680,78 @@ build_all_domains <- function(target_meta, raw_data,
   results <- list()
   dm_built <- NULL
 
+  # ---- Expand config-driven domains ----
+  # Trial design domains (TV, TI, ...) may not have raw CRF datasets.
+  # expand_config_domains() reads config_domains from config.yaml and
+  # generates raw_data tibbles so they flow through build_domain().
+  raw_data <- expand_config_domains(raw_data, config, domains = ordered,
+                                     verbose = verbose)
+
+  # ---- Metadata-driven preprocessing ----
+  # Replaces manual hooks: reads Sources + Source Columns metadata and
+  # applies standardized preprocessing (filter, derive, stack, merge).
+  has_preprocessing <- !is.null(sources_meta) && nrow(sources_meta) > 0L
+  if (has_preprocessing && verbose) {
+    n_src_doms <- length(unique(toupper(sources_meta$domain)))
+    cli::cli_alert_info("  Preprocessing: {n_src_doms} domains from Sources metadata")
+  }
+
+  # Fallback to hooks directory if no Sources metadata
+  hooks_dir <- config$hooks_dir
+  use_hooks <- !has_preprocessing && !is.null(hooks_dir) && dir.exists(hooks_dir)
+  if (use_hooks && verbose) {
+    hook_files <- list.files(hooks_dir, pattern = "\\.R$", full.names = FALSE)
+    if (length(hook_files) > 0L) {
+      cli::cli_alert_info("  Hooks directory: {hooks_dir} ({length(hook_files)} hooks)")
+    }
+  }
+
   for (dom in ordered) {
     if (verbose) cli::cli_alert_info("Building {dom}...")
+
+    result <- NULL
+
+    # ---- 1. Preprocess domain (metadata-driven or hook fallback) ----
+    if (has_preprocessing) {
+      dom_has_sources <- any(toupper(sources_meta$domain) == dom)
+      if (dom_has_sources) {
+        if (verbose) cli::cli_alert_info("  Preprocessing: {dom}")
+        tryCatch({
+          raw_data <- preprocess_domain(
+            domain          = dom,
+            raw_data        = raw_data,
+            config          = config,
+            sources_meta    = sources_meta,
+            source_cols_meta = source_cols_meta %||% data.frame(
+              block_id = character(), target_column = character(),
+              method = character(), col_order = numeric(),
+              stringsAsFactors = FALSE
+            ),
+            built_domains   = results,
+            verbose         = verbose
+          )
+        }, error = function(e) {
+          if (verbose) cli::cli_alert_danger("  Preprocessing error ({dom}): {e$message}")
+        })
+      }
+    } else if (use_hooks) {
+      hook_path <- file.path(hooks_dir, paste0(tolower(dom), ".R"))
+      if (file.exists(hook_path)) {
+        hook_env <- new.env(parent = globalenv())
+        tryCatch({
+          source(hook_path, local = hook_env)
+          fn_name <- paste0("preprocess_", tolower(dom))
+          if (exists(fn_name, envir = hook_env, inherits = FALSE)) {
+            if (verbose) cli::cli_alert_info("  Running hook: {basename(hook_path)}")
+            raw_data <- hook_env[[fn_name]](raw_data, config, results)
+          }
+        }, error = function(e) {
+          if (verbose) cli::cli_alert_danger("  Hook error ({dom}): {e$message}")
+        })
+      }
+    }
+
+    # ---- 2. Build the domain via the rule engine ----
     result <- tryCatch(
       build_domain(
         domain      = dom,

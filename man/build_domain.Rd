@@ -55,6 +55,9 @@ per-condition validation.}
 
 \item{validate}{Logical. Default \code{TRUE}.}
 
+\item{skip_existing}{Logical. Default \code{FALSE}. If \code{TRUE}, skip building
+this domain when its output already exists.}
+
 \item{verbose}{Logical. Default \code{TRUE}.}
 }
 \value{

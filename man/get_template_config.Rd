@@ -22,6 +22,6 @@ to your study folder as a starting point.
 get_template_config()
 
 # Copy to your study folder
-get_template_config(copy_to = "my_study/config.yaml")
+get_template_config(copy_to = "my_study/metadata/config.yaml")
 
 }

@@ -154,13 +154,16 @@ make_dummy_study <- function(seed = 123,
     brthdtc = format(date_anchor - (365.25 * sample(25:75, n_subjects,
                                                      replace = TRUE)),
                      "%Y-%m-%d"),
-    age     = sample(25:75, n_subjects, replace = TRUE),
     sex     = sample(sexes, n_subjects, replace = TRUE, prob = c(0.5, 0.5)),
     race    = sample(races, n_subjects, replace = TRUE,
                      prob = c(0.6, 0.2, 0.15, 0.05)),
     armcd   = sample(arms, n_subjects, replace = TRUE, prob = c(0.5, 0.5)),
     arm     = NA_character_
   )
+  # Derive age from brthdtc so it's consistent with birth date
+  dm_raw$age <- as.integer(round(as.numeric(
+    difftime(as.Date(dm_raw$rfstdtc), as.Date(dm_raw$brthdtc), units = "days")
+  ) / 365.25))
   dm_raw$arm <- ifelse(dm_raw$armcd == "TREATMENT",
                        "Active Treatment 10mg",
                        "Placebo")

@@ -127,11 +127,11 @@ run_study <- function(config_path = NULL,
   output_dir     <- .resolve(output_dir, "output", "sdtm/datasets")
   programs_dir   <- .resolve(programs_dir, "programs", "sdtm/programs")
 
-  # Resolve export_formats and generate_programs from config if not overridden
-  if (!is.null(cfg_yaml$export$formats)) {
+  # Resolve export_formats and generate_programs: explicit arg wins, else config.yaml
+  if (missing(export_formats) && !is.null(cfg_yaml$export$formats)) {
     export_formats <- cfg_yaml$export$formats
   }
-  if (!is.null(cfg_yaml$export$generate_programs)) {
+  if (missing(generate_programs) && !is.null(cfg_yaml$export$generate_programs)) {
     generate_programs <- cfg_yaml$export$generate_programs
   }
 
@@ -150,9 +150,11 @@ run_study <- function(config_path = NULL,
   .log("Step 1: Reading metadata...")
   checkmate::assert_file_exists(metadata_path)
   study_meta <- read_study_metadata_excel(metadata_path)
-  target_meta     <- study_meta$target_meta
-  domain_meta     <- study_meta$domain_meta
+  target_meta      <- study_meta$target_meta
+  domain_meta      <- study_meta$domain_meta
   value_level_meta <- study_meta$value_level_meta
+  sources_meta     <- study_meta$sources_meta
+  source_cols_meta <- study_meta$source_cols_meta
 
   ct_lib <- NULL
   if (file.exists(ct_path)) {
@@ -212,8 +214,15 @@ run_study <- function(config_path = NULL,
     timezone       = cfg_yaml$timezone %||% "UTC",
     ref_start_rule = ref_start_rule,
     visit_map      = visit_map,
-    create_supp    = create_supp %||% (cfg_yaml$create_supp %||% TRUE)
+    create_supp    = create_supp %||% (cfg_yaml$create_supp %||% FALSE)
   )
+  # Store output_dir so build_domain can load DM from disk if needed
+  config$output_dir <- output_dir
+  # Store full YAML config for trial design plugins (TV, TI, IE)
+  config$cfg_yaml <- cfg_yaml
+  # Store hooks directory for study-level pre-processing scripts
+  hooks_dir <- cfg_yaml$paths$hooks %||% file.path(dirname(metadata_path), "hooks")
+  config$hooks_dir <- if (dir.exists(hooks_dir)) hooks_dir else NULL
 
   # ---- 5. Compile rules ------------------------------------------------------
   .log("Step 4: Compiling rules...")
@@ -231,6 +240,8 @@ run_study <- function(config_path = NULL,
     domains          = domains,
     domain_meta      = domain_meta,
     value_level_meta = value_level_meta,
+    sources_meta     = sources_meta,
+    source_cols_meta = source_cols_meta,
     create_supp      = create_supp,
     validate         = validate,
     verbose          = verbose
@@ -238,6 +249,37 @@ run_study <- function(config_path = NULL,
 
   built_domains <- names(results)
   .log("  Built {length(built_domains)} domains: {paste(built_domains, collapse = ', ')}")
+
+  # ---- 6a. Build RELREC (Related Records) ------------------------------------
+  relrec_data <- NULL
+  if (!is.null(cfg_yaml$relrec) && length(cfg_yaml$relrec) > 0L) {
+    .log("Step 5b: Building RELREC (Related Records)...")
+
+    # Collect built domain tibbles for identity/seq_lookup specs
+    built_domain_data <- stats::setNames(
+      lapply(built_domains, function(d) results[[d]]$data),
+      built_domains
+    )
+
+    relrec_data <- tryCatch(
+      build_relrec(
+        relationship_specs = cfg_yaml$relrec,
+        raw_data           = raw_data,
+        config             = config,
+        built_domains      = built_domain_data
+      ),
+      error = function(e) {
+        if (verbose) cli::cli_alert_warning("RELREC build failed: {e$message}")
+        NULL
+      }
+    )
+
+    if (!is.null(relrec_data) && nrow(relrec_data) > 0L) {
+      .log("  RELREC: {nrow(relrec_data)} rows")
+    } else {
+      .log("  RELREC: 0 rows (no relationships found in data)")
+    }
+  }
 
   # ---- 7. Export datasets ----------------------------------------------------
   .log("Step 6: Exporting datasets to {output_dir}...")
@@ -273,6 +315,19 @@ run_study <- function(config_path = NULL,
     }
   }
 
+  # Export RELREC if built
+  if (!is.null(relrec_data) && nrow(relrec_data) > 0L) {
+    export_domain(
+      data        = relrec_data,
+      domain      = "RELREC",
+      output_dir  = output_dir,
+      formats     = export_formats,
+      xpt_version = 8L
+    )
+    exported[["RELREC"]] <- TRUE
+    .log("  Exported RELREC ({nrow(relrec_data)} rows)")
+  }
+
   # ---- 8. Generate R programs ------------------------------------------------
   generated_programs <- NULL
   if (generate_programs) {
@@ -294,7 +349,8 @@ run_study <- function(config_path = NULL,
           ct_path       = ct_path,
           raw_dir       = raw_dir,
           output_dir    = output_dir,
-          tpt_source_var = config$tpt_source_var
+          tpt_source_var = cfg_yaml$tpt_source_var,
+          export_formats = export_formats
         )
         generated_programs[[dom]] <- prog_path
       }, error = function(e) {
@@ -317,7 +373,7 @@ run_study <- function(config_path = NULL,
   total_warns  <- 0L
   for (dom in built_domains) {
     rpt <- results[[dom]]$report
-    if (!is.null(rpt)) {
+    if (!is.null(rpt) && !is.null(rpt$findings)) {
       n_err <- sum(rpt$findings$severity == "ERROR", na.rm = TRUE)
       n_wrn <- sum(rpt$findings$severity == "WARN", na.rm = TRUE)
       total_errors <- total_errors + n_err
@@ -334,7 +390,8 @@ run_study <- function(config_path = NULL,
     rule_set   = rule_set,
     config     = config,
     exported   = exported,
-    programs   = generated_programs
+    programs   = generated_programs,
+    relrec     = relrec_data
   ))
 }
 
