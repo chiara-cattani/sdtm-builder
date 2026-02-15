@@ -5,11 +5,16 @@
 studyid: "STUDY-PILOT"
 timezone: "UTC"
 
-# Reference start date: RFSTDTC comes from DM (icdat → RFSTDTC in SAS DM.sas)
-ref_start_rule:
-  method: "dm_var"
-  dataset: "dm"
-  column: "rfstdtc"
+# Reference start date for --DY derivation.
+# sdtm: the built domain + variable to use (primary, used when DM is already built)
+# raw:  the raw domain + variable to use as fallback (when DM hasn't been built yet)
+ref_start_date:
+  sdtm:
+    domain: "DM"
+    variable: "RFSTDTC"
+  raw:
+    dataset: "dm"
+    variable: "icdat"
 
 # Paths (relative to where run_study() is called, or absolute)
 paths:

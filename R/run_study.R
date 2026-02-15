@@ -183,17 +183,32 @@ run_study <- function(config_path = NULL,
 
   # Parse ref_start_rule from YAML
   rsr_yaml <- cfg_yaml$ref_start_rule
-  if (!is.null(rsr_yaml)) {
-    # Support both formats: {var, source} and {method, dataset, column}
+  # Parse ref_start_date — new format with sdtm + raw fallback
+  ref_start_date <- cfg_yaml$ref_start_date
+  if (!is.null(ref_start_date)) {
+    ref_start_rule <- list(
+      sdtm_domain   = ref_start_date$sdtm$domain   %||% "DM",
+      sdtm_variable = ref_start_date$sdtm$variable  %||% "RFSTDTC",
+      raw_dataset   = ref_start_date$raw$dataset     %||% "dm",
+      raw_variable  = ref_start_date$raw$variable    %||% "rfstdtc"
+    )
+  } else if (!is.null(rsr_yaml)) {
+    # Legacy format: ref_start_rule with {var, source} or {method, dataset, column}
     ref_start_rule <- if (!is.null(rsr_yaml$var)) {
-      list(var = rsr_yaml$var, source = rsr_yaml$source)
+      list(sdtm_domain = "DM", sdtm_variable = "RFSTDTC",
+           raw_dataset = rsr_yaml$source %||% "dm",
+           raw_variable = rsr_yaml$var %||% "rfstdtc")
     } else if (!is.null(rsr_yaml$column)) {
-      list(var = rsr_yaml$column, source = rsr_yaml$dataset)
+      list(sdtm_domain = "DM", sdtm_variable = "RFSTDTC",
+           raw_dataset = rsr_yaml$dataset %||% "dm",
+           raw_variable = rsr_yaml$column %||% "rfstdtc")
     } else {
-      list(var = "rfstdtc", source = "dm_raw")
+      list(sdtm_domain = "DM", sdtm_variable = "RFSTDTC",
+           raw_dataset = "dm", raw_variable = "rfstdtc")
     }
   } else {
-    ref_start_rule <- list(var = "rfstdtc", source = "dm_raw")
+    ref_start_rule <- list(sdtm_domain = "DM", sdtm_variable = "RFSTDTC",
+                           raw_dataset = "dm", raw_variable = "rfstdtc")
   }
 
   # Parse visit_map
@@ -252,7 +267,9 @@ run_study <- function(config_path = NULL,
 
   # ---- 6a. Build RELREC (Related Records) ------------------------------------
   relrec_data <- NULL
-  if (!is.null(cfg_yaml$relrec) && length(cfg_yaml$relrec) > 0L) {
+  # Only build RELREC if the user requested it (or requested all domains)
+  build_relrec_flag <- is.null(domains) || "RELREC" %in% toupper(domains)
+  if (build_relrec_flag && !is.null(cfg_yaml$relrec) && length(cfg_yaml$relrec) > 0L) {
     .log("Step 5b: Building RELREC (Related Records)...")
 
     # Collect built domain tibbles for identity/seq_lookup specs
@@ -371,16 +388,43 @@ run_study <- function(config_path = NULL,
   # Report validation summary
   total_errors <- 0L
   total_warns  <- 0L
+  all_issues   <- list()  # collect per-domain issue tibbles
   for (dom in built_domains) {
     rpt <- results[[dom]]$report
-    if (!is.null(rpt) && !is.null(rpt$findings)) {
+    if (!is.null(rpt) && !is.null(rpt$findings) && nrow(rpt$findings) > 0L) {
       n_err <- sum(rpt$findings$severity == "ERROR", na.rm = TRUE)
-      n_wrn <- sum(rpt$findings$severity == "WARN", na.rm = TRUE)
+      n_wrn <- sum(rpt$findings$severity %in% c("WARN", "WARNING"), na.rm = TRUE)
       total_errors <- total_errors + n_err
       total_warns  <- total_warns + n_wrn
       status_icon <- if (n_err > 0L) "\u26a0\ufe0f" else "\u2705"
       .log("  {status_icon} {dom}: {nrow(results[[dom]]$data)} rows | E:{n_err} W:{n_wrn}")
+
+      # Print individual error/warning messages so user can see them
+      issues <- rpt$findings[rpt$findings$severity %in% c("ERROR", "WARNING", "WARN"), ]
+      if (nrow(issues) > 0L) {
+        for (i in seq_len(nrow(issues))) {
+          f <- issues[i, ]
+          sev_label <- if (f$severity == "ERROR") "ERROR" else "WARN"
+          var_label <- if (!is.na(f$variable)) paste0(" [", f$variable, "]") else ""
+          if (f$severity == "ERROR") {
+            cli::cli_alert_danger("    {sev_label}{var_label}: {f$message}")
+          } else {
+            cli::cli_alert_warning("    {sev_label}{var_label}: {f$message}")
+          }
+        }
+        all_issues[[dom]] <- issues
+      }
+    } else {
+      .log("  \u2705 {dom}: {nrow(results[[dom]]$data)} rows | E:0 W:0")
     }
+  }
+
+  # Print summary totals
+  if (total_errors > 0L || total_warns > 0L) {
+    cli::cli_alert_warning("Total: {total_errors} error(s), {total_warns} warning(s) across {length(all_issues)} domain(s)")
+    cli::cli_alert_info("Tip: use study_issues(result) to inspect all issues as a table")
+  } else {
+    cli::cli_alert_success("All domains passed validation with no errors or warnings")
   }
 
   invisible(list(
@@ -391,7 +435,8 @@ run_study <- function(config_path = NULL,
     config     = config,
     exported   = exported,
     programs   = generated_programs,
-    relrec     = relrec_data
+    relrec     = relrec_data,
+    issues     = all_issues
   ))
 }
 
@@ -429,4 +474,66 @@ get_template_config <- function(copy_to = NULL) {
 
   cli::cli_alert_info("Template config: {template}")
   invisible(template)
+}
+
+
+#' Extract all issues (errors and warnings) from a run_study result
+#'
+#' @description
+#' Convenience function to inspect all validation findings and derivation
+#' errors from a \code{run_study()} result as a single tidy tibble.
+#'
+#' @param study_result The list returned by \code{run_study()}.
+#' @param severity Character vector.
+#'   Filter to specific severity levels.
+#'   Default \code{c("ERROR", "WARNING")} — excludes NOTEs.
+#' @return A tibble with columns: \code{domain}, \code{severity},
+#'   \code{variable}, \code{rule_id}, \code{message}, \code{n_records},
+#'   \code{example}.
+#'
+#' @examples
+#' \dontrun{
+#' out <- run_study("metadata/config.yaml")
+#' study_issues(out)                    # all errors and warnings
+#' study_issues(out, severity = "ERROR") # errors only
+#' }
+#'
+#' @export
+study_issues <- function(study_result, severity = c("ERROR", "WARNING")) {
+  results <- study_result$results
+  if (is.null(results)) {
+    cli::cli_alert_info("No results found in study_result.")
+    return(tibble::tibble())
+  }
+
+  all_findings <- list()
+  for (dom in names(results)) {
+    rpt <- results[[dom]]$report
+    if (is.null(rpt) || is.null(rpt$findings) || nrow(rpt$findings) == 0L) next
+    f <- rpt$findings
+    f$domain <- dom
+    all_findings[[dom]] <- f
+  }
+
+  if (length(all_findings) == 0L) {
+    cli::cli_alert_success("No issues found across all domains!")
+    return(tibble::tibble())
+  }
+
+  combined <- dplyr::bind_rows(all_findings)
+  combined <- combined[combined$severity %in% severity, , drop = FALSE]
+
+  # Re-order columns for readability
+  col_order <- c("domain", "severity", "variable", "rule_id", "message",
+                 "n_records", "example", "key_value")
+  col_order <- intersect(col_order, names(combined))
+  combined <- combined[, col_order, drop = FALSE]
+
+  if (nrow(combined) == 0L) {
+    cli::cli_alert_success("No issues matching severity: {paste(severity, collapse = ', ')}")
+  } else {
+    cli::cli_alert_warning("{nrow(combined)} issue(s) across {length(unique(combined$domain))} domain(s)")
+  }
+
+  combined
 }

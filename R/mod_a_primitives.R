@@ -72,8 +72,12 @@ new_sdtm_config <- function(studyid,
   checkmate::assert_choice(log_level, c("DEBUG", "INFO", "WARN", "ERROR"))
 
   if (is.list(ref_start_rule)) {
-    if (!all(c("var", "source") %in% names(ref_start_rule))) {
-      abort("`ref_start_rule` list must contain 'var' and 'source' elements.")
+    # Accept new format (sdtm_domain/sdtm_variable/raw_dataset/raw_variable)
+    # or legacy format (var/source)
+    has_new   <- any(c("sdtm_domain", "sdtm_variable", "raw_dataset", "raw_variable") %in% names(ref_start_rule))
+    has_legacy <- all(c("var", "source") %in% names(ref_start_rule))
+    if (!has_new && !has_legacy) {
+      abort("`ref_start_rule` list must contain 'sdtm_domain'/'sdtm_variable'/'raw_dataset'/'raw_variable' or legacy 'var'/'source' elements.")
     }
   } else if (!is.function(ref_start_rule)) {
     abort("`ref_start_rule` must be a named list or a function.")

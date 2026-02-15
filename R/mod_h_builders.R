@@ -47,6 +47,7 @@ build_domain <- function(domain, target_meta, raw_data,
     create_supp <- if (!is.null(config$create_supp)) config$create_supp else TRUE
   }
   log_msgs <- character()
+  derivation_errors <- list()   # collect per-variable derivation errors
   .log <- function(msg) {
     log_msgs <<- c(log_msgs, paste(Sys.time(), msg))
     if (verbose) cli::cli_alert_info(msg)
@@ -134,9 +135,17 @@ build_domain <- function(domain, target_meta, raw_data,
     }
   }
 
-  # Join DM data for RFSTDTC (needed for DY calculations) - skip for DM itself
+  # Join reference start date for --DY calculations; skip for DM itself.
+  # Uses config$ref_start_rule which specifies:
+  #   sdtm_domain / sdtm_variable  — primary source (built DM SDTM)
+  #   raw_dataset / raw_variable   — fallback when DM hasn't been built yet
   if (domain != "DM") {
-    # Try to load DM from disk if not passed in-memory
+    rsr <- config$ref_start_rule %||%
+      list(sdtm_domain = "DM", sdtm_variable = "RFSTDTC",
+           raw_dataset = "dm", raw_variable = "rfstdtc")
+    sdtm_var <- rsr$sdtm_variable %||% "RFSTDTC"
+
+    # Try to load built DM from disk if not passed in-memory
     if (is.null(dm_data) && !is.null(config$output_dir)) {
       dm_rda <- file.path(config$output_dir, "RDA", "dm.rda")
       dm_xpt <- file.path(config$output_dir, "XPT", "dm.xpt")
@@ -151,28 +160,28 @@ build_domain <- function(domain, target_meta, raw_data,
       }
     }
 
+    ref_joined <- FALSE
+
     if (!is.null(dm_data)) {
+      # ---- Primary path: use built DM SDTM ----
       # Auto-extract $data if a build_domain result list was passed
       if (is.list(dm_data) && "data" %in% names(dm_data) && !is.data.frame(dm_data)) {
         dm_data <- dm_data[["data"]]
       }
-      # Add RFSTDTC from DM
+
       dm_ref <- dm_data
-      if (!"RFSTDTC" %in% names(dm_ref) && "rfstdtc" %in% names(dm_ref)) {
-        dm_ref$RFSTDTC <- dm_ref$rfstdtc
+      # Ensure the configured SDTM variable is accessible (case-insensitive)
+      if (!sdtm_var %in% names(dm_ref) && tolower(sdtm_var) %in% names(dm_ref)) {
+        dm_ref[[sdtm_var]] <- dm_ref[[tolower(sdtm_var)]]
       }
-      # Determine join key — built DM has UPPERCASE names, raw data may have
-      # USUBJID/usubjid (if already derived) or SubjectId/subjectid (raw CSV)
-      # Prefer subjectid→SUBJID since USUBJID in raw data may not yet
-      # be the full study-qualified value that DM SDTM has.
+
+      # Determine join key
       data_names_lc <- tolower(names(data))
       dm_names_lc   <- tolower(names(dm_ref))
-
       data_key <- NULL
       dm_key   <- NULL
 
       if ("subjectid" %in% data_names_lc && "subjid" %in% dm_names_lc) {
-        # Raw data has SubjectId; DM SDTM has SUBJID (same values)
         data_key <- names(data)[match("subjectid", data_names_lc)]
         dm_key   <- names(dm_ref)[match("subjid", dm_names_lc)]
       } else if ("usubjid" %in% data_names_lc && "usubjid" %in% dm_names_lc) {
@@ -180,29 +189,47 @@ build_domain <- function(domain, target_meta, raw_data,
         dm_key   <- names(dm_ref)[match("usubjid", dm_names_lc)]
       }
 
-      if (!is.null(data_key) && !is.null(dm_key)) {
-        # Normalise dm_ref key to match data
+      if (!is.null(data_key) && !is.null(dm_key) && sdtm_var %in% names(dm_ref)) {
         if (data_key != dm_key) dm_ref[[data_key]] <- dm_ref[[dm_key]]
-        dm_cols <- intersect(names(dm_ref), c(data_key, "RFSTDTC", "rfstdtc"))
+        dm_cols <- unique(c(data_key, sdtm_var))
         dm_slim <- dplyr::distinct(dm_ref[, dm_cols, drop = FALSE])
+        # Rename the reference variable to RFSTDTC so derive_dy() can find it
+        if (sdtm_var != "RFSTDTC") names(dm_slim)[names(dm_slim) == sdtm_var] <- "RFSTDTC"
         data <- safe_join(data, dm_slim, by = data_key,
                           type = "left", cardinality = "m:1",
                           on_violation = "warn")
+        ref_joined <- TRUE
+        .log(glue::glue("Reference date: {sdtm_var} from built DM"))
       }
-    } else if ("dm" %in% names(raw_data) || "dm_raw" %in% names(raw_data)) {
-      dm_raw_key <- if ("dm" %in% names(raw_data)) "dm" else "dm_raw"
-      dm_ref <- raw_data[[dm_raw_key]]
-      names(dm_ref) <- tolower(names(dm_ref))
-      if ("subjectid" %in% names(data) && "subjectid" %in% names(dm_ref)) {
-        # Look for rfstdtc or common date columns
-        ref_col <- intersect(c("rfstdtc", "rfstdat", "rfstdtc"), names(dm_ref))
-        if (length(ref_col) > 0L) {
-          dm_slim <- dplyr::distinct(dm_ref[, c("subjectid", ref_col[1]), drop = FALSE])
-          dm_slim$RFSTDTC <- dm_slim[[ref_col[1]]]
+    }
+
+    if (!ref_joined) {
+      # ---- Fallback path: use raw dataset ----
+      raw_ds  <- rsr$raw_dataset  %||% "dm"
+      raw_var <- rsr$raw_variable %||% "rfstdtc"
+      raw_key <- if (raw_ds %in% names(raw_data)) raw_ds
+                 else if (paste0(raw_ds, "_raw") %in% names(raw_data)) paste0(raw_ds, "_raw")
+                 else NULL
+
+      if (!is.null(raw_key)) {
+        dm_ref <- raw_data[[raw_key]]
+        names(dm_ref) <- tolower(names(dm_ref))
+        raw_var_lc <- tolower(raw_var)
+
+        if (raw_var_lc %in% names(dm_ref) &&
+            "subjectid" %in% names(data) && "subjectid" %in% names(dm_ref)) {
+          dm_slim <- dplyr::distinct(dm_ref[, c("subjectid", raw_var_lc), drop = FALSE])
+          dm_slim$RFSTDTC <- dm_slim[[raw_var_lc]]
           data <- safe_join(data, dm_slim[, c("subjectid", "RFSTDTC")],
                             by = "subjectid", type = "left",
                             cardinality = "m:1", on_violation = "warn")
+          ref_joined <- TRUE
+          .log(glue::glue("Reference date: {raw_var} from raw '{raw_key}' (DM not yet built)"))
         }
+      }
+
+      if (!ref_joined) {
+        .log("WARNING: No reference start date available for --DY derivation. DM not built and raw fallback not found.")
       }
     }
   }  # end domain != "DM"
@@ -245,6 +272,7 @@ build_domain <- function(domain, target_meta, raw_data,
       ))
     }, error = function(e) {
       .log(glue::glue("ERROR deriving {var_name}: {e$message}"))
+      derivation_errors[[var_name]] <<- e$message
     })
   }
 
@@ -282,6 +310,15 @@ build_domain <- function(domain, target_meta, raw_data,
                                         ct_lib = ct_lib,
                                         value_level_meta = value_level_meta,
                                         domain_meta = domain_meta)
+  }
+
+  # Add derivation errors as ERROR findings so they appear in the report
+  for (vn in names(derivation_errors)) {
+    report <- add_finding(report, rule_id = "derivation_error",
+                          severity = "ERROR", domain = domain,
+                          variable = vn,
+                          message = paste0("Derivation failed for ", vn, ": ",
+                                           derivation_errors[[vn]]))
   }
 
   result <- list(
