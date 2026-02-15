@@ -56,11 +56,20 @@ derive_visitnum <- function(data, target_var = "VISITNUM", visit_map,
 #' @param target_var Character. Default `"VISITDY"`.
 #' @param visit_var Character. Default `"VISIT"`.
 #' @param dy_var Character. Study day variable.
+#' @param visit_map Tibble or `NULL`. Visit-level mapping with planned
+#'   day windows. Default `NULL`.
 #' @return Tibble.
 #' @export
 derive_visitdy <- function(data, target_var = "VISITDY",
-                           visit_var = "VISIT", dy_var = NULL) {
+                           visit_var = "VISIT", dy_var = NULL,
+                           visit_map = NULL) {
   data[[target_var]] <- NA_real_
+  # If we have a visit_map with START_DAY, use it to map VISIT -> planned day
+  if (!is.null(visit_map) && nrow(visit_map) > 0L &&
+      visit_var %in% names(data) && "START_DAY" %in% names(visit_map)) {
+    lookup <- stats::setNames(visit_map$START_DAY, visit_map$VISIT)
+    data[[target_var]] <- unname(lookup[data[[visit_var]]])
+  }
   data
 }
 
@@ -74,6 +83,21 @@ derive_visitdy <- function(data, target_var = "VISITDY",
 derive_tpt <- function(data, target_var, source_var = NULL,
                        tpt_map = NULL) {
   data[[target_var]] <- NA_character_
+  # If source_var is provided and present, attempt to derive timepoint
+  if (!is.null(source_var) && source_var %in% names(data)) {
+    if (!is.null(tpt_map) && length(tpt_map) > 0L) {
+      # Named vector: time_value -> timepoint label
+      data[[target_var]] <- unname(tpt_map[data[[source_var]]])
+    } else {
+      # Default: classify time into named time-points
+      times <- data[[source_var]]
+      tpt <- dplyr::case_when(
+        is.na(times) ~ NA_character_,
+        TRUE         ~ paste0("PT", times)
+      )
+      data[[target_var]] <- tpt
+    }
+  }
   data
 }
 

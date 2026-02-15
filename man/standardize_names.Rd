@@ -7,7 +7,6 @@
 standardize_names(
   data,
   dataset_name = NA_character_,
-  source_meta = NULL,
   to_lower = TRUE,
   replace_special = TRUE
 )
@@ -16,8 +15,6 @@ standardize_names(
 \item{data}{Tibble.}
 
 \item{dataset_name}{Character.}
-
-\item{source_meta}{Tibble or \code{NULL}.}
 
 \item{to_lower}{Logical. Default \code{TRUE}.}
 

@@ -7,44 +7,45 @@
 > **A metadata-driven R package for building SDTM domains from raw clinical
 > data.**
 
-`sdtmbuilder` turns three metadata files (target\_meta, source\_meta,
-ct\_codelist) into validated SDTM datasets.  Every derivation rule is declared
-in the metadata — **no hand-coding per domain** — so a single engine
-(`build_domain()`) processes any CDISC domain.
+`sdtmbuilder` turns two structured Excel workbooks — **Study\_Metadata.xlsx**
+and **Study\_CT.xlsx** — into validated SDTM datasets.  Every derivation rule
+is declared in the metadata — **no hand-coding per domain** — so a single
+engine (`build_domain()`) processes any CDISC domain.
 
 ---
 
 ## Table of Contents
 
 1. [Installation](#installation)
-2. [Quick Start — 5 Minutes](#quick-start--5-minutes)
-3. [Architecture](#architecture)
-4. [Workflow](#workflow)
-5. [Metadata Files](#metadata-files)
+2. [Quick Demo (5 minutes)](#quick-demo-5-minutes)
+3. [Using sdtmbuilder on Your Own Study](#using-sdtmbuilder-on-your-own-study)
+   - [Step 0 — Set Up Your Folder Structure](#step-0--set-up-your-folder-structure)
+   - [Step 1 — Get the Template config.yaml](#step-1--get-the-template-configyaml)
+   - [Step 2 — Prepare Your Metadata](#step-2--prepare-your-metadata)
+   - [Step 3 — Place Your Raw Data](#step-3--place-your-raw-data)
+   - [Step 4 — Run the Pipeline](#step-4--run-the-pipeline)
+   - [Step 5 — Inspect Results](#step-5--inspect-results)
+   - [Step 6 — Step-by-Step Alternative](#step-6--step-by-step-alternative)
+4. [Architecture](#architecture)
+5. [Metadata Files Reference](#metadata-files-reference)
 6. [Rule Types Reference](#rule-types-reference)
 7. [Function Reference](#function-reference)
 8. [Adding a New Domain](#adding-a-new-domain)
 9. [Validation](#validation)
-10. [Code Generation](#code-generation)
-11. [Export](#export)
-12. [Running the Demo](#running-the-demo)
-13. [Domains Included](#domains-included)
-14. [Running Tests](#running-tests)
-15. [Troubleshooting](#troubleshooting)
+10. [Export Formats](#export-formats)
+11. [Running Tests](#running-tests)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Installation
 
 ```r
-# Install from GitHub (requires devtools)
+# Install from GitHub
 devtools::install_github("chiara-cattani/sdtm-builder")
 
 # Or clone and install locally
 devtools::install("path/to/sdtm-builder")
-
-# Or load for development
-devtools::load_all("path/to/sdtm-builder")
 ```
 
 ### Dependencies
@@ -58,59 +59,354 @@ devtools::load_all("path/to/sdtm-builder")
 | glue      | String interpolation             |
 | stringr   | String operations                |
 | readxl    | Read Excel (.xlsx) metadata      |
-| haven     | Export SAS .xpt files            |
+| haven     | Read .sas7bdat, export .xpt      |
 | yaml      | Read config.yaml                 |
 | jsonlite  | Parse rule\_params JSON          |
 
 ---
 
-## Quick Start — 5 Minutes
+## Quick Demo (5 minutes)
+
+The package ships with built-in dummy data so you can test the full pipeline
+immediately — no external files needed.
 
 ```r
 library(sdtmbuilder)
 
-# 1. Generate dummy study data (30 subjects, 10 raw datasets)
+# 1. Generate dummy study (30 subjects, raw datasets + metadata)
 study <- make_dummy_study(seed = 42)
 
 # 2. Compile derivation rules from metadata
-rule_set <- compile_rules(
-  study$target_meta,
-  study$source_meta,
-  study$ct_lib
-)
-print(rule_set)  # shows 10 domains, 146 rules
+rule_set <- compile_rules(study$target_meta, ct_lib = study$ct_lib)
+print(rule_set)
 
-# 3. Build ALL domains in dependency order (DM first, then the rest)
+# 3. Build ALL domains in dependency order
 results <- build_all_domains(
   target_meta = study$target_meta,
-  source_meta = study$source_meta,
   raw_data    = study$raw_data,
   config      = study$config,
   rule_set    = rule_set
 )
 
 # 4. Inspect results
+head(results$DM$data)       # the SDTM DM dataset
 head(results$AE$data)       # the SDTM AE dataset
-results$AE$supp             # SUPPAE (if any SUPP variables)
 results$AE$report           # validation report
 
-# 5. Build without SUPP domains (keep all vars in main domain)
-results_no_supp <- build_all_domains(
-  target_meta = study$target_meta,
-  source_meta = study$source_meta,
-  raw_data    = study$raw_data,
-  config      = study$config,
-  rule_set    = rule_set,
-  create_supp = FALSE
+# 5. Export
+export_domain(results$AE$data, "AE", "output/")
+
+# Or use the built-in end-to-end check
+result <- check_end_to_end(verbose = TRUE)
+```
+
+See also the full demo script:
+
+```r
+source(system.file("examples", "demo_full_pipeline.R", package = "sdtmbuilder"))
+```
+
+---
+
+## Using sdtmbuilder on Your Own Study
+
+This section walks you through using `sdtmbuilder` on your **real study data**.
+
+### Step 0 — Set Up Your Folder Structure
+
+Create the following folder structure for your study:
+
+```
+my_study/
+├── config.yaml                  <- study configuration (template provided)
+├── metadata/
+│   ├── Study_Metadata.xlsx      <- your target metadata + domains + VLM
+│   └── Study_CT.xlsx            <- your controlled terminology
+├── raw/
+│   ├── dm.sas7bdat              <- raw DM data (or .csv, .xpt, .xlsx)
+│   ├── ae.sas7bdat              <- raw AE data
+│   ├── cm.sas7bdat              <- raw CM data
+│   ├── lb.sas7bdat              <- raw LB data
+│   └── ...                      <- any other raw datasets
+└── sdtm/
+    ├── datasets/                <- OUTPUT: XPT + RDA files (created automatically)
+    └── programs/                <- OUTPUT: generated R scripts (created automatically)
+```
+
+**Notes on raw data file naming:**
+
+- Files can have **any name** — the file name (without extension) becomes the
+  dataset name used in the pipeline (e.g., `dm.sas7bdat` → `dm`, `lbs.sas7bdat` → `lbs`).
+- Supported formats: `.sas7bdat`, `.csv`, `.xlsx`, `.xls`, `.xpt`, `.rds`, `.rda`.
+- If your raw file is named the same as the final SDTM domain (e.g., `dm.sas7bdat`),
+  the auto-mapping convention `{domain}_raw` won't match.  You can either:
+  - Rename files to `dm_raw.sas7bdat`, `ae_raw.sas7bdat`, etc. (recommended), **or**
+  - Set explicit `dataset` in the METHOD column of Study_Metadata.xlsx.
+
+### Step 1 — Get the Template config.yaml
+
+```r
+library(sdtmbuilder)
+
+# Copy the template to your study folder
+get_template_config(copy_to = "my_study/config.yaml")
+```
+
+This creates a `config.yaml` with all available settings and comments.
+Open it in any editor and fill in:
+
+| Field | What to fill in |
+|-------|-----------------|
+| `studyid` | Your study identifier (e.g., `"ABC-001"`) |
+| `paths.metadata` | Path to Study\_Metadata.xlsx (default: `metadata/Study_Metadata.xlsx`) |
+| `paths.ct` | Path to Study\_CT.xlsx (default: `metadata/Study_CT.xlsx`) |
+| `paths.raw_data` | Directory with raw data files (default: `raw`) |
+| `paths.output` | Where to write SDTM datasets (default: `sdtm/datasets`) |
+| `paths.programs` | Where to write R programs (default: `sdtm/programs`) |
+| `ref_start_rule` | How to find RFSTDTC — usually `dataset: dm_raw`, `column: rfstdtc` |
+| `visit_map` | Your visit schedule (visitnum, visit name, start/end day windows) |
+| `epoch_map` | Your epoch definitions (epoch name, start/end day windows) |
+| `export.formats` | `["xpt", "rda"]` for both formats (default) |
+| `export.generate_programs` | `true` to generate R scripts (default) |
+
+### Step 2 — Prepare Your Metadata
+
+#### Study\_Metadata.xlsx
+
+This Excel workbook has these sheets (all use a `Select = "Y"` column to
+activate rows):
+
+| Sheet | Purpose |
+|-------|---------|
+| **Meta** | Study name, select flag |
+| **Domains** | Which domains to build (DM, AE, LB, CM, …), class, build order, keys |
+| **Variables** | Every target variable: name, label, type, length, codelist, derivation method |
+| **Value Level** | Value-level metadata (e.g., different rules for LBTEST=ALB vs LBTEST=GLUC) |
+| **Where Clauses** | Conditions for value-level rows |
+| **Method** | Optional method descriptions |
+
+The critical sheet is **Variables**. Each row defines one SDTM variable:
+
+| Column | Required | Example | Description |
+|--------|----------|---------|-------------|
+| Select | Yes | `Y` | Include this variable |
+| DOMAIN | Yes | `AE` | Domain code |
+| VARNAME | Yes | `AETERM` | SDTM variable name |
+| VARLABEL | Yes | `Reported Term` | Variable label |
+| DATA\_TYPE | Yes | `text` | `text`, `integer`, `float`, `datetime` |
+| LENGTH | No | `200` | Max character length |
+| CORE | No | `Req` | `Req`, `Exp`, `Perm`, or `SUPP` |
+| CODELIST\_ID | No | `SEV` | Links to Study\_CT.xlsx |
+| METHOD | No | `SEQ` | Derivation method (see below) |
+
+**METHOD column values:**
+
+| METHOD | What it does |
+|--------|-------------|
+| *(empty/NA)* | Auto-assigned: `STUDYID`/`DOMAIN` → constant, others → direct\_map |
+| `SEQ` | Sequence number (AESEQ, CMSEQ, etc.) |
+| `USUBJID` | Derives USUBJID from STUDYID + subject ID |
+| `DY` | Study day from date vs RFSTDTC |
+| `EPOCH` | Epoch from study day |
+| `DURATION` | ISO 8601 duration between start/end dates |
+| JSON string | Any custom rule, e.g., `{"rule_type": "case_when", ...}` |
+
+#### Study\_CT.xlsx
+
+Two sheets:
+
+| Sheet | Key Columns |
+|-------|-------------|
+| **Codelists** | `Select`, `CODELIST_ID`, `CODELIST_NAME`, `IS_EXTENSIBLE` |
+| **Codelists\_terms** | `Select`, `CODELIST_ID`, `SUBMISSION_VALUE`, `DECODE` |
+
+Example terms:
+
+| CODELIST\_ID | SUBMISSION\_VALUE | DECODE |
+|-------------|-------------------|--------|
+| SEV | MILD | Mild |
+| SEV | MODERATE | Moderate |
+| SEV | SEVERE | Severe |
+| YN | Y | Yes |
+| YN | N | No |
+
+### Step 3 — Place Your Raw Data
+
+Copy your raw SAS datasets (`.sas7bdat`) into the `raw/` folder.  Any of these
+formats work: `.sas7bdat`, `.csv`, `.xlsx`, `.xls`, `.xpt`, `.rds`, `.rda`.
+
+The file name (without extension) becomes the dataset name in the pipeline.
+For automatic mapping to work, name them with a `_raw` suffix:
+
+```
+raw/
+├── dm_raw.sas7bdat    → loaded as "dm_raw" → maps to DM domain
+├── ae_raw.sas7bdat    → loaded as "ae_raw" → maps to AE domain
+├── cm_raw.sas7bdat    → loaded as "cm_raw" → maps to CM domain
+└── lb_raw.sas7bdat    → loaded as "lb_raw" → maps to LB domain
+```
+
+Or, if your files are named `dm.sas7bdat`, `ae.sas7bdat` etc., you can
+override the dataset mapping in the METHOD column of Study\_Metadata.xlsx:
+
+```json
+{"rule_type": "direct_map", "params": {"dataset": "dm", "column": "subjid"}}
+```
+
+### Step 4 — Run the Pipeline
+
+```r
+library(sdtmbuilder)
+
+# Set working directory to your study root
+setwd("C:/Users/you/my_study")
+
+# ONE CALL DOES EVERYTHING:
+out <- run_study("config.yaml")
+```
+
+This single call:
+
+1. Reads `Study_Metadata.xlsx` and `Study_CT.xlsx`
+2. Loads all raw `.sas7bdat` files from `raw/`
+3. Compiles derivation rules from the metadata
+4. Builds every SDTM domain defined in the metadata
+5. Exports each domain as **XPT** and **RDA** to `sdtm/datasets/`
+6. Generates an **R script** per domain to `sdtm/programs/`
+
+After running, your folder will look like:
+
+```
+my_study/
+├── config.yaml
+├── metadata/
+│   ├── Study_Metadata.xlsx
+│   └── Study_CT.xlsx
+├── raw/
+│   ├── dm_raw.sas7bdat
+│   ├── ae_raw.sas7bdat
+│   └── ...
+└── sdtm/
+    ├── datasets/
+    │   ├── dm.xpt           <- SAS transport v5
+    │   ├── dm.rda           <- R binary format
+    │   ├── ae.xpt
+    │   ├── ae.rda
+    │   ├── lb.xpt
+    │   ├── lb.rda
+    │   └── ...
+    └── programs/
+        ├── dm.R             <- standalone R script to reproduce DM
+        ├── ae.R             <- standalone R script to reproduce AE
+        └── ...
+```
+
+**Options:**
+
+```r
+# Datasets only (no R programs generated)
+out <- run_study("config.yaml", generate_programs = FALSE)
+
+# Build specific domains only
+out <- run_study("config.yaml", domains = c("DM", "AE"))
+
+# Export as XPT only (no RDA)
+out <- run_study("config.yaml", export_formats = "xpt")
+
+# Without config.yaml — pass paths directly
+out <- run_study(
+  metadata_path = "metadata/Study_Metadata.xlsx",
+  ct_path       = "metadata/Study_CT.xlsx",
+  raw_dir       = "raw",
+  output_dir    = "sdtm/datasets",
+  programs_dir  = "sdtm/programs"
+)
+```
+
+### Step 5 — Inspect Results
+
+```r
+# What domains were built?
+names(out$results)
+# [1] "DM" "AE" "LB" "CM"
+
+# Inspect a domain
+head(out$results$DM$data)
+head(out$results$AE$data)
+
+# Validation report
+out$results$AE$report
+# → shows any validation errors/warnings (required vars, ISO dates, CT, etc.)
+
+# SUPP datasets (if any)
+out$results$AE$supp
+
+# Export paths
+out$exported$DM
+# $xpt [1] "sdtm/datasets/dm.xpt"
+# $rda [1] "sdtm/datasets/dm.rda"
+
+# Generated programs
+out$programs$DM
+# [1] "sdtm/programs/dm.R"
+```
+
+### Step 6 — Step-by-Step Alternative
+
+If you prefer full control over each step, here is the manual pipeline:
+
+```r
+library(sdtmbuilder)
+
+# ── 1. Read metadata ─────────────────────────────────────────────────────
+study_meta <- read_study_metadata_excel("metadata/Study_Metadata.xlsx")
+ct_lib     <- read_study_ct_excel("metadata/Study_CT.xlsx")
+
+target_meta      <- study_meta$target_meta
+domain_meta      <- study_meta$domain_meta
+value_level_meta <- study_meta$value_level_meta
+
+# Expand value-level metadata (if you use VLM)
+if (!is.null(value_level_meta) && nrow(value_level_meta) > 0) {
+  target_meta <- expand_value_level_meta(target_meta, value_level_meta)
+}
+
+# ── 2. Load raw data (sas7bdat, csv, xpt, ...) ───────────────────────────
+raw_data <- load_raw_datasets("raw")
+names(raw_data)  # see what was loaded
+
+# ── 3. Configuration ─────────────────────────────────────────────────────
+config <- new_sdtm_config(
+  studyid        = "MY-STUDY-001",
+  timezone       = "UTC",
+  ref_start_rule = list(var = "rfstdtc", source = "dm_raw")
 )
 
-# 6. Or build a single domain manually
-ae <- build_domain("AE", study$target_meta, study$source_meta,
-                   study$raw_data, study$config, rule_set,
-                   dm_data = results$DM$data)
+# ── 4. Compile rules ─────────────────────────────────────────────────────
+rule_set <- compile_rules(target_meta, ct_lib = ct_lib)
 
-# 7. Export
-export_xpt(results$AE$data, "AE", "output/")
+# ── 5. Build all domains ─────────────────────────────────────────────────
+results <- build_all_domains(
+  target_meta      = target_meta,
+  raw_data         = raw_data,
+  config           = config,
+  rule_set         = rule_set,
+  domain_meta      = domain_meta,
+  value_level_meta = value_level_meta
+)
+
+# ── 6. Export each domain ─────────────────────────────────────────────────
+for (dom in names(results)) {
+  export_domain(results[[dom]]$data, dom, "sdtm/datasets",
+                formats = c("xpt", "rda"),
+                target_meta = target_meta, domain_meta = domain_meta)
+}
+
+# ── 7. Generate R programs (optional) ─────────────────────────────────────
+for (dom in names(results)) {
+  gen_domain_script(dom, rule_set, target_meta, config,
+                    output_path = file.path("sdtm/programs", paste0(tolower(dom), ".R")))
+}
 ```
 
 ---
@@ -120,20 +416,20 @@ export_xpt(results$AE$data, "AE", "output/")
 ```
 +------------------------------------------------------------------+
 |                         Metadata Layer                            |
-|  target_meta.csv/xlsx   source_meta.csv/xlsx   ct_codelist.csv   |
+|  Study_Metadata.xlsx              Study_CT.xlsx                  |
 |  config.yaml                                                     |
 +----------------+--------------------------+----------------------+
                  |                          |
           +------v------+           +-------v------+
-          | compile_rules|           | make_dummy   |
-          |  (Module C)  |           | _study()     |
+          | compile_rules|           | load_raw     |
+          |  (Module C)  |           | _datasets()  |
           +------+------+           +-------+------+
                  | rule_set                 | raw_data
           +------v------------------------------v------+
           |            build_domain()                   |
           |  +----------------------------------------+ |
           |  | derive_variable() dispatcher           | |
-          |  |  -> 19 rule types                      | |
+          |  |  -> 26 rule types                      | |
           |  |  -> topological order                  | |
           |  +----------------------------------------+ |
           |  +----------+ +--------+ +-----------+      |
@@ -149,9 +445,8 @@ export_xpt(results$AE$data, "AE", "output/")
                +------------+------------+
                             |
                 +-----------v-----------+
-                |   export_xpt()        |
-                |   gen_domain_script() |
-                |   gen_qmd_domain()    |
+                |  export_domain()      |
+                |  gen_domain_script()  |
                 +-----------------------+
 ```
 
@@ -159,914 +454,194 @@ export_xpt(results$AE$data, "AE", "output/")
 
 | Module | File | Purpose |
 |--------|------|---------|
-| A | `mod_a_primitives.R` | S3 classes: `sdtm_config`, `meta_bundle`, `rule_set`, `build_context`, `validation_report`, `log_sink` |
-| B | `mod_b_metadata.R` | Read, validate, normalize metadata files (CSV & Excel) |
-| C | `mod_c_rules.R` | Parse JSON rule\_params into compiled rule\_set |
+| — | `run_study.R` | **High-level orchestrator**: `run_study()`, `get_template_config()` |
+| A | `mod_a_primitives.R` | S3 classes: `sdtm_config`, `meta_bundle`, `rule_set`, `validation_report` |
+| B | `mod_b_metadata.R` | Read Study\_Metadata.xlsx & Study\_CT.xlsx, validate, normalize |
+| — | `method_mapping.R` | Function registry & METHOD column parsing |
+| C | `mod_c_rules.R` | Parse rules, auto-assign rule\_type, compile rule\_set |
 | D | `mod_d_dependency.R` | Build dependency graph, topological sort |
-| E | `mod_e_data_access.R` | Load raw data, standardize names/types, apply missing conventions |
+| E | `mod_e_data_access.R` | Load raw data, `load_raw_datasets()`, `infer_source_meta()` |
 | F | `mod_f_joins.R` | Safe joins, key resolution, record assembly |
-| G1 | `mod_g1_derive_map.R` | Mapping & transform derivations (direct\_map, coalesce, case\_when, if\_else, concat, regex) |
-| G2 | `mod_g2_derive_ct.R` | Controlled terminology (ct\_assign, ct\_decode, yes/no, unknown) |
-| G3 | `mod_g3_derive_dates.R` | ISO 8601 dates, DY, EPOCH, duration |
-| G4 | `mod_g4_derive_visits.R` | VISIT, VISITNUM, VISITDY, timepoints |
-| G5 | `mod_g5_derive_ids.R` | USUBJID, --SEQ, SPID, GRPID |
-| G6 | `mod_g6_derive_flags.R` | Baseline flag, last-obs flag, occurrence, status |
-| H | `mod_h_builders.R` | `build_domain()`, `derive_variable()` dispatcher, `finalize_domain()`, SUPP/RELREC builders, plugins |
+| G1–G6 | `mod_g*.R` | Derivation functions (mapping, CT, dates, visits, IDs, flags) |
+| H | `mod_h_builders.R` | `build_domain()`, `build_all_domains()`, plugins |
 | I | `mod_i_validation.R` | Domain-level validation (15 checks) |
-| J | `mod_j_codegen.R` | Generate R scripts, Quarto docs, YAML/JSON serialization |
-| K | `mod_k_export.R` | Export to XPT, RDS, CSV; define.xml support files |
+| J | `mod_j_codegen.R` | Generate R scripts, Quarto docs |
+| K | `mod_k_export.R` | Export to XPT, RDA, RDS, CSV; define.xml support files |
 | L | `mod_l_utils.R` | Logging, error helpers, assertions, snapshots |
 
 ---
 
-## Workflow
+## Metadata Files Reference
 
-### Step 1 — Prepare Metadata
+### Study\_Metadata.xlsx
 
-The package ships with starter-kit metadata in `inst/extdata/starter_kit/`.
-You can use CSV **or** Excel (.xlsx) files — both are supported.
+| Sheet | Key Columns | Purpose |
+|-------|-------------|---------|
+| Meta | Select, STUDY\_NAME | Study-level info |
+| Domains | Select, DOMAIN, CLASS, CLASS\_ORDER, DOMAIN\_LEVEL\_ORDER, KEYS | Domain definitions + build order |
+| Variables | Select, DOMAIN, VARNAME, VARLABEL, DATA\_TYPE, LENGTH, CODELIST\_ID, METHOD | Variable definitions + derivation rules |
+| Value Level | Select, DOMAIN, VARNAME, VLM\_ID, WHERE\_CLAUSE\_ID | Value-level metadata |
+| Where Clauses | WHERE\_CLAUSE\_ID, DOMAIN, VARNAME, COMPARATOR, VALUE | Conditions for VLM |
+| Method | (informational) | Derivation descriptions |
 
-```r
-# Read from CSV
-target_meta <- read_target_meta("target_meta.csv")
-source_meta <- read_source_meta("source_meta.csv")
-ct_lib      <- read_ct_library("ct_codelist.csv")
+### Study\_CT.xlsx
 
-# Or read from Excel (same functions, automatic detection by extension)
-target_meta <- read_target_meta("target_meta.xlsx")
-source_meta <- read_source_meta("source_meta.xlsx")
-ct_lib      <- read_ct_library("ct_codelist.xlsx")
-```
-
-### Step 2 — Create Configuration
-
-```r
-config <- new_sdtm_config(
-  studyid        = "STUDY-XYZ",
-  timezone       = "UTC",
-  ref_start_rule = list(var = "rfstdtc", source = "dm_raw"),
-  visit_map      = visit_map_tibble,  # tibble with VISITNUM, VISIT, START_DAY, END_DAY
-  create_supp    = TRUE               # set FALSE to keep all vars in main domain
-)
-```
-
-Or load from YAML:
-
-```r
-config_yaml <- yaml::read_yaml("config.yaml")
-config <- new_sdtm_config(
-  studyid        = config_yaml$studyid,
-  timezone       = config_yaml$timezone %||% "UTC",
-  ref_start_rule = config_yaml$ref_start_rule,
-  visit_map      = config_yaml$visit_map
-)
-```
-
-### Step 3 — Compile Rules
-
-```r
-rule_set <- compile_rules(target_meta, source_meta, ct_lib)
-print(rule_set)
-```
-
-The compiler reads `rule_type` and `rule_params` (JSON) from each row of
-`target_meta`, parses them into an internal rule list, resolves dependencies
-declared in `depends_on`, and enriches rules with codelist information.
-
-### Step 4 — Build Domains
-
-The simplest way is `build_all_domains()` — it auto-detects that DM must be
-built first (other domains need `RFSTDTC`) and passes `dm_data` downstream.
-
-```r
-# Build all domains in dependency order
-results <- build_all_domains(
-  target_meta, source_meta, raw_data, config, rule_set
-)
-
-# Build only specific domains
-results <- build_all_domains(
-  target_meta, source_meta, raw_data, config, rule_set,
-  domains = c("DM", "AE", "VS")
-)
-
-# Build without SUPP domains (keep all vars in main domain)
-results <- build_all_domains(
-  target_meta, source_meta, raw_data, config, rule_set,
-  create_supp = FALSE
-)
-```
-
-Or build domains individually:
-
-```r
-# Build DM first
-dm <- build_domain("DM", target_meta, source_meta, raw_data, config, rule_set)
-
-# Build other domains, passing DM data for RFSTDTC
-ae <- build_domain("AE", target_meta, source_meta, raw_data, config, rule_set,
-                   dm_data = dm$data)
-```
-
-`build_domain()` returns a named list:
-
-| Element | Description |
-|---------|-------------|
-| `$data` | The SDTM dataset (tibble) |
-| `$supp` | SUPP-- dataset or NULL |
-| `$relrec` | RELREC rows or NULL |
-| `$report` | Validation report object |
-| `$log` | Build log messages |
-| `$provenance` | Column-level derivation trace |
-| `$artifacts` | Any extra artefacts |
-
-> **Tip:** You can also pass the full build result as `dm_data` — the function
-> automatically extracts `$data` from list objects.
-
-### Step 5 — Validate & Export
-
-```r
-# Export as SAS XPT
-export_xpt(ae$data, "AE", "output/xpt/", target_meta = target_meta)
-
-# Export as RDS + CSV
-export_rds_csv(ae$data, "AE", "output/rds/")
-
-# Generate a standalone R script that reproduces the domain
-gen_domain_script("AE", rule_set, target_meta, source_meta, config,
-                  output_path = "programs/ae.R")
-```
-
----
-
-## Metadata Files
-
-> **Extra columns are tolerated.** Metadata readers only require certain
-> columns (see tables below). Any additional columns in your files are
-> silently preserved — no error, no data loss.
-
-### SELECT Column — Study-Specific Filtering
-
-All three metadata files support an optional `select` column. When present,
-only rows with `select = "Y"` (case-insensitive) are loaded; all other rows
-are silently excluded. This allows you to maintain a **global metadata set**
-covering all studies and select the study-specific subset via the `select`
-column.
-
-If the `select` column is absent, **all rows are loaded** (backward
-compatible).
-
-### target\_meta.csv / target\_meta.xlsx
-
-Each row defines one SDTM variable for one domain.
-
-| Column | Type | Required | Description |
-|--------|------|----------|-------------|
-| `select` | char | No | `Y` to include this row for the study |
-| `domain` | char | **Yes** | SDTM domain abbreviation (DM, AE, VS, ...) |
-| `var` | char | **Yes** | SDTM variable name (STUDYID, AETERM, ...) |
-| `type` | char | **Yes** | `char` or `num` |
-| `length` | num | No | Max character length or numeric width |
-| `label` | char | **Yes** | Variable label (max 40 chars) |
-| `role` | char | No | CDISC role (Identifier, Topic, ...) |
-| `core` | char | No | `Req`, `Exp`, or `Perm` |
-| `codelist_id` | char | No | CT codelist ID (e.g. C66769, YN, ROUTE) |
-| `order` | num | Display order within the domain |
-| `is_key` | char | `Y` if part of the natural key |
-| `to_supp` | char | `Y` to move this variable to SUPP-- |
-| `rule_type` | char | Derivation rule type (see Rule Types below) |
-| `rule_params` | char | JSON string with rule parameters |
-| `depends_on` | char | Semicolon-separated list of variables this derivation depends on |
-
-### source\_meta.csv / source\_meta.xlsx
-
-Each row describes one column in a raw dataset.
-
-| Column | Type | Required | Description |
-|--------|------|----------|-------------|
-| `select` | char | No | `Y` to include this row for the study |
-| `dataset` | char | **Yes** | Raw dataset name (dm\_raw, ae\_raw, ...) |
-| `column` | char | **Yes** | Column name |
-| `type` | char | **Yes** | `character` or `numeric` |
-| `label` | char | No | Description |
-| `is_key` | char | No | `Y` if key column |
-| `notes` | char | No | Free-text notes |
-
-### ct\_codelist.csv / ct\_codelist.xlsx
-
-Controlled terminology mappings.
-
-| Column | Type | Required | Description |
-|--------|------|----------|-------------|
-| `select` | char | No | `Y` to include this row for the study |
-| `codelist_id` | char | **Yes** | Codelist identifier (C66769, YN, ROUTE, ...) |
-| `codelist_name` | char | No | Codelist description |
-| `input_value` | char | No | Value found in raw data |
-| `coded_value` | char | **Yes** | CDISC-coded value |
-| `decode` | char | No | Human-readable decode |
-| `case_sensitive` | char | No | `Y` or `N` |
-| `notes` | char | No | Free-text notes |
+| Sheet | Key Columns | Purpose |
+|-------|-------------|---------|
+| Codelists | Select, CODELIST\_ID, CODELIST\_NAME, IS\_EXTENSIBLE | Codelist definitions |
+| Codelists\_terms | Select, CODELIST\_ID, SUBMISSION\_VALUE, DECODE | Individual terms |
 
 ### config.yaml
 
 ```yaml
-studyid: "STUDY-XYZ"
+studyid: "MY-STUDY-001"
 timezone: "UTC"
+
+paths:
+  metadata: "metadata/Study_Metadata.xlsx"
+  ct:       "metadata/Study_CT.xlsx"
+  raw_data: "raw"
+  output:   "sdtm/datasets"
+  programs: "sdtm/programs"
+
 ref_start_rule:
-  var: rfstdtc
-  source: dm_raw
+  dataset: "dm_raw"
+  column:  "rfstdtc"
+
 visit_map:
-  - VISITNUM: 1
-    VISIT: SCREENING
-    START_DAY: -14
-    END_DAY: -1
-  - VISITNUM: 2
-    VISIT: BASELINE
-    START_DAY: 1
-    END_DAY: 1
-epoch_map:
-  - epoch: SCREENING
+  - visitnum: 1
+    visit: "SCREENING"
+    start_day: -14
     end_day: -1
-  - epoch: TREATMENT
-    start_day: 1
-    end_day: 92
-  - epoch: FOLLOW-UP
-    start_day: 93
+
+epoch_map:
+  - epoch: "SCREENING"
+    start_day: null
+    end_day: -1
+
+export:
+  formats: ["xpt", "rda"]
+  generate_programs: true
+
+log_level: "INFO"
+```
+
+Get the template:
+
+```r
+get_template_config(copy_to = "my_study/config.yaml")
 ```
 
 ---
 
 ## Rule Types Reference
 
-The `rule_type` column in `target_meta` determines how each SDTM variable is
-derived.  The `rule_params` column is a JSON string that configures the
-derivation.  Below are all **19 rule types** with example JSON:
-
-### constant
-
-Set a fixed value.
-
-```json
-{"value": "STUDY-XYZ"}
-```
-
-### direct\_map
-
-Copy a column from raw data, optionally transforming.
-
-```json
-{"dataset": "ae_raw", "column": "aeterm", "transform": "toupper"}
-```
-
-`transform` options: `toupper`, `tolower`, `trimws`, or omit.
-
-### ct\_assign
-
-Map raw values to controlled terminology coded values.
-
-```json
-{
-  "dataset": "ae_raw",
-  "column": "aesev_raw",
-  "codelist_id": "C66769",
-  "unknown_policy": "warn_and_keep"
-}
-```
-
-### ct\_decode
-
-Look up the decode (display name) for a coded value via codelist.
-
-```json
-{"column": "QSTESTCD", "codelist_id": "QSTEST"}
-```
-
-### iso\_dtc
-
-Combine date and optional time into ISO 8601 DTC format.
-
-```json
-{
-  "date_col": {"dataset": "ae_raw", "column": "aestdat"},
-  "time_col": {"dataset": "ae_raw", "column": "aestim"},
-  "partial_allowed": true
-}
-```
-
-### dy
-
-Calculate study day (DTC minus RFSTDTC, with no Day 0).
-
-```json
-{
-  "dtc_var": "AESTDTC",
-  "ref_var": "RFSTDTC",
-  "ref_dataset": "dm_raw",
-  "ref_column": "rfstdtc"
-}
-```
-
-### seq
-
-Generate sequential integers (`--SEQ`) per subject.
-
-```json
-{
-  "by": ["STUDYID", "USUBJID"],
-  "order_by": ["AESTDTC", "AEDECOD"],
-  "ties": "dense"
-}
-```
-
-### epoch
-
-Assign EPOCH based on study day and the epoch\_map in config.
-
-```json
-{"dtc_var": "AESTDTC", "ref_var": "RFSTDTC"}
-```
-
-### visit
-
-Map study day to VISIT name using the visit\_map in config.
-
-```json
-{"dy_var": "VSDY"}
-```
-
-### visitnum
-
-Map VISIT name to VISITNUM using the visit\_map in config.
-
-```json
-{"visit_var": "VISIT"}
-```
-
-### baseline\_flag
-
-Set `"Y"` for baseline visit rows, `NA` otherwise.
-
-```json
-{
-  "visit_var": "VISIT",
-  "baseline_visit": "BASELINE",
-  "by": ["USUBJID", "VSTESTCD"]
-}
-```
-
-### coalesce
-
-Use the first non-missing value from multiple sources.
-
-```json
-{"sources": ["dsdecod_raw", "dsterm"]}
-```
-
-### case\_when
-
-Apply sequential conditions (first match wins).
-
-```json
-{
-  "conditions": {
-    "grepl('CONSENT|RANDOMIZ', dsterm, ignore.case = TRUE)": "PROTOCOL MILESTONE",
-    "TRUE": "DISPOSITION EVENT"
-  },
-  "default": "DISPOSITION EVENT"
-}
-```
-
-Conditions are valid R expressions evaluated against the working dataset.
-
-### if\_else
-
-Simple two-way conditional.
-
-```json
-{
-  "condition": "DSCAT == 'DISPOSITION EVENT'",
-  "true_value": "STUDY TREATMENT",
-  "false_value": "INFORMED CONSENT",
-  "missing_value": "NA"
-}
-```
-
-### concat
-
-Concatenate columns with a separator.
-
-```json
-{"sources": ["STUDYID", "dsid"], "sep": "-"}
-```
-
-### occurrence
-
-Flag presence/absence of a value.
-
-```json
-{
-  "source_var": "qsorres",
-  "present_value": "NA",
-  "absent_value": "NOT DONE"
-}
-```
-
-Use `"NA"` (the string) to set the value to R's `NA` when present.  This is
-common for SDTM `--STAT` variables which are blank when done and `"NOT DONE"`
-when not done.
-
-### status
-
-Derive completion status from a result variable.
-
-```json
-{
-  "result_var": "QSORRES",
-  "done_value": "",
-  "not_done_value": "NOT DONE"
-}
-```
-
-### duration
-
-Calculate ISO 8601 duration between two DTC variables.
-
-```json
-{"start_dtc": "CMSTDTC", "end_dtc": "CMENDTC", "units": "auto"}
-```
-
-### join
-
-Join data from another dataset.
-
-```json
-{
-  "dataset": "dm_raw",
-  "column": "arm",
-  "by": {"usubjid": "usubjid"}
-}
-```
+| Rule type | METHOD value | Purpose | Example params |
+|-----------|-------------|---------|----------------|
+| `constant` | (auto for STUDYID/DOMAIN) | Fixed value | `{"value": "STUDY-XYZ"}` |
+| `direct_map` | (auto for most vars) | Copy + transform | `{"dataset": "ae_raw", "column": "aeterm"}` |
+| `ct_assign` | (auto when CODELIST\_ID set) | CT coded value | `{"column": "aesev_raw", "codelist_id": "SEV"}` |
+| `ct_decode` | | CT decode lookup | `{"column": "QSTESTCD", "codelist_id": "QSTEST"}` |
+| `iso_dtc` | | ISO 8601 date/time | `{"date_col": {...}, "time_col": {...}}` |
+| `dy` | `DY` | Study day | `{"dtc_var": "AESTDTC", "ref_var": "RFSTDTC"}` |
+| `seq` | `SEQ` | Sequence number | `{"by": ["USUBJID"], "order_by": ["AESTDTC"]}` |
+| `epoch` | `EPOCH` | Epoch assignment | `{"dtc_var": "AESTDTC", "ref_var": "RFSTDTC"}` |
+| `visit` | | Visit from study day | `{"dy_var": "VSDY"}` |
+| `visitnum` | | VISITNUM from VISIT | `{"visit_var": "VISIT"}` |
+| `baseline_flag` | | Baseline flag | `{"visit_var": "VISIT", "baseline_visit": "BASELINE"}` |
+| `coalesce` | | First non-missing | `{"sources": ["col1", "col2"]}` |
+| `case_when` | | Multi-condition | `{"conditions": {...}, "default": "..."}` |
+| `if_else` | | Two-way conditional | `{"condition": "...", "true_value": "..."}` |
+| `concat` | `USUBJID` | Concatenate | `{"sources": ["STUDYID", "id"], "sep": "-"}` |
+| `duration` | `DURATION` | ISO duration | `{"start_dtc": "CMSTDTC", "end_dtc": "CMENDTC"}` |
 
 ---
 
 ## Function Reference
 
-### Module A — S3 Classes & Constructors (`mod_a_primitives.R`)
+### High-Level
 
 | Function | Description |
 |----------|-------------|
-| `new_sdtm_config(studyid, timezone, ref_start_rule, visit_map, ...)` | Create study configuration |
-| `new_meta_bundle(target_meta, source_meta, ct_lib, value_level_meta)` | Bundle metadata objects |
-| `new_rule_set(rules, dependency_info, rule_types, compile_log)` | Create a rule\_set (usually via `compile_rules()`) |
-| `new_build_context(domain, config, meta_bundle, rule_set, ...)` | Create a build context |
-| `new_validation_report(domain, title)` | Initialize a validation report |
-| `add_finding(report, rule_id, severity, domain, variable, ...)` | Add a finding to a validation report |
-| `new_log_sink(log_level, file, context_fields)` | Create a log sink |
-| `print.sdtm_config(x)` | Print config summary |
-| `print.meta_bundle(x)` | Print bundle summary |
-| `print.rule_set(x)` | Print rule\_set summary |
-| `print.build_context(x)` | Print context summary |
-| `print.validation_report(x)` | Print validation report |
-| `print.log_sink(x)` | Print log sink info |
+| `run_study(config_path, ...)` | **One call does everything**: read, build, export, generate programs |
+| `get_template_config(copy_to)` | Copy the template config.yaml to your study folder |
+| `check_end_to_end()` | End-to-end verification on built-in dummy data |
 
-### Module B — Metadata Ingestion (`mod_b_metadata.R`)
+### Metadata
 
 | Function | Description |
 |----------|-------------|
-| `read_target_meta(path, sheet, domain, colmap, encoding)` | Read target\_meta from CSV or Excel |
-| `read_source_meta(path, sheet, colmap, encoding)` | Read source\_meta from CSV or Excel |
-| `read_ct_library(path, sheet, colmap, version, sponsor_extension)` | Read CT codelist from CSV or Excel |
-| `validate_target_meta(target_meta, strict)` | Validate target\_meta structure |
-| `validate_source_meta(source_meta, strict)` | Validate source\_meta structure |
-| `validate_ct_library(ct_lib)` | Validate CT codelist structure |
-| `normalize_target_meta(target_meta, config)` | Normalize column names/types |
-| `normalize_source_meta(source_meta, config)` | Normalize column names/types |
-| `expand_value_level_meta(target_meta, value_level_meta)` | Expand value-level metadata |
-| `apply_study_overrides(target_meta, config)` | Apply sponsor overrides |
-| `resolve_domain_model(domain, target_meta, config, ig_version)` | Resolve domain model |
+| `read_study_metadata_excel(path)` | Read Study\_Metadata.xlsx |
+| `read_study_ct_excel(path)` | Read Study\_CT.xlsx |
+| `validate_study_metadata(study_meta, ct_lib)` | Cross-sheet validation |
+| `load_raw_datasets(dir, ...)` | Load all raw data files from a directory |
+| `infer_source_meta(raw_data)` | Auto-infer source metadata from raw data |
 
-### Module C — Rule Compilation (`mod_c_rules.R`)
+### Core Pipeline
 
 | Function | Description |
 |----------|-------------|
-| `compile_rules(target_meta, source_meta, ct_lib, dsl, strict)` | **Compile metadata into a rule\_set** — the main entry point for rule compilation |
-| `parse_rule_json(rule_json, var)` | Parse a single JSON rule\_params string |
-| `parse_rule_dsl(rule_text, var)` | Parse a DSL rule expression |
-| `validate_rules(rule_set, source_meta, ct_lib)` | Validate compiled rules against metadata |
-| `enrich_rules_with_ct(rule_set, ct_lib)` | Enrich rules with CT information |
-| `infer_rule_dependencies(rule_set)` | Infer dependencies not explicitly declared |
-| `canonicalize_rules(rule_set)` | Normalize rule structures |
+| `compile_rules(target_meta, ct_lib)` | Compile metadata into rule\_set |
+| `build_domain(domain, target_meta, raw_data, config, rule_set, ...)` | Build one SDTM domain |
+| `build_all_domains(target_meta, raw_data, config, rule_set, ...)` | Build all domains |
+| `make_dummy_study(seed)` | Generate dummy study for testing |
 
-### Module D — Dependency & Ordering (`mod_d_dependency.R`)
+### Export & Code Generation
 
 | Function | Description |
 |----------|-------------|
-| `build_dependency_graph(rule_set, domain, allow_cycles, late_bind_vars)` | Build derivation dependency graph |
-| `topo_sort_rules(graph)` | Topological sort of derivation rules |
-| `detect_cycles(graph)` | Detect circular dependencies |
-| `resolve_late_binding(graph, cycles, late_bind_vars)` | Resolve late-binding cycles |
-| `plan_build_steps(domain, dep_graph, rule_set, source_meta)` | Plan derivation execution steps |
-
-### Module E — Raw Data Access (`mod_e_data_access.R`)
-
-| Function | Description |
-|----------|-------------|
-| `load_raw_data(paths, formats, encoding, db_con, db_tables)` | Load raw data from files or database |
-| `standardize_names(data, dataset_name, source_meta, ...)` | Standardize column names |
-| `standardize_types(data, source_meta, dataset_name, ...)` | Coerce column types per source\_meta |
-| `apply_missing_conventions(data, config, blank_to_na, ...)` | Apply missing value conventions |
-| `derive_core_keys(data, config, subjid_col, sep)` | Derive USUBJID and core key variables |
-| `get_subject_level(raw_data, config, dm_dataset, key_vars)` | Extract subject-level DM data |
-
-### Module F — Joins & Record Assembly (`mod_f_joins.R`)
-
-| Function | Description |
-|----------|-------------|
-| `safe_join(x, y, by, type, cardinality, on_violation, ...)` | Safe join with cardinality checks |
-| `resolve_keys(data, domain, target_meta, config)` | Resolve natural key columns |
-| `deduplicate_by_rule(data, keys, strategy, order_by, ...)` | Deduplicate rows |
-| `bind_sources(..., source_names, fill_missing)` | Bind multiple source datasets |
-| `add_provenance_cols(data, source_name, rule_id)` | Add provenance tracking columns |
-| `split_records(data, col, sep, trim, id_cols, ...)` | Split multi-valued columns into rows |
-| `expand_checkbox(data, cols, map, id_cols, ...)` | Expand checkbox columns |
-| `expand_visits(data, visit_map, by, filter_fn)` | Expand visit schedule |
-
-### Module G1 — Mapping & Transform (`mod_g1_derive_map.R`)
-
-| Function | Description |
-|----------|-------------|
-| `map_direct(data, target_var, source_var, transform, type, blank_to_na)` | Direct column mapping |
-| `derive_constant(data, target_var, value, when, type)` | Set a constant value |
-| `derive_coalesce(data, target_var, sources, blank_to_na)` | First non-missing from list |
-| `derive_if_else(data, target_var, condition, true_value, false_value, missing_value)` | Two-way conditional |
-| `derive_case_when(data, target_var, conditions, default)` | Multi-way conditional (first match wins) |
-| `derive_regex_extract(data, target_var, source_var, pattern, group, transform)` | Extract via regex |
-| `derive_regex_replace(data, target_var, source_var, pattern, replacement, all)` | Replace via regex |
-| `derive_concat(data, target_var, sources, sep, na_rm, trim)` | Concatenate columns |
-| `derive_trim_pad(data, target_var, source_var, width, side, pad)` | Trim or pad strings |
-| `derive_numeric_round(data, target_var, source_var, digits)` | Round numeric values |
-| `derive_unit_standardize(data, target_var, source_var, unit_map)` | Standardize units |
-
-### Module G2 — Controlled Terminology (`mod_g2_derive_ct.R`)
-
-| Function | Description |
-|----------|-------------|
-| `assign_ct(data, target_var, source_var, codelist_id, ct_lib, ...)` | Assign CT coded value |
-| `decode_ct(data, target_var, source_var, codelist_id, ct_lib, ...)` | Decode CT to display value |
-| `map_yes_no(data, target_var, source_var, yes_values, no_values, na_policy)` | Map Y/N values |
-| `map_unknown(data, target_var, source_var, unknown_tokens, sdtm_value)` | Map unknown values |
-| `validate_ct_values(data, var, codelist_id, ct_lib, check_type, ...)` | Validate against CT |
-
-### Module G3 — Dates & Times (`mod_g3_derive_dates.R`)
-
-| Function | Description |
-|----------|-------------|
-| `parse_partial_date(x, formats, partial, unknown_tokens, day_first)` | Parse partial dates |
-| `combine_date_time(date, time, seconds, tz)` | Combine date + time |
-| `format_iso_dtc(parsed, time, keep_partial, impute)` | Format as ISO 8601 DTC |
-| `derive_dy(data, target_var, dtc_var, ref_var, impute_policy)` | Calculate study day |
-| `derive_epoch(data, target_var, dtc_var, epoch_map, ref_var, by)` | Assign EPOCH |
-| `derive_duration(data, target_var, start_dtc, end_dtc, units)` | Calculate duration |
-| `apply_imputation_policy(parsed, policy)` | Apply date imputation |
-
-### Module G4 — Visits & Timing (`mod_g4_derive_visits.R`)
-
-| Function | Description |
-|----------|-------------|
-| `derive_visit(data, target_var, visit_map, dy_var, by)` | Derive VISIT from study day |
-| `derive_visitnum(data, target_var, visit_map, visit_var)` | Derive VISITNUM from VISIT |
-| `derive_visitdy(data, target_var, visit_var, dy_var)` | Derive VISITDY |
-| `derive_tpt(data, target_var, source_var, tpt_map)` | Derive timepoint |
-| `derive_elapsed_time(data, target_var, start_var, end_var, units)` | Calculate elapsed time |
-| `derive_rel_time(data, target_var, dtc_var, ref_dtc_var)` | Calculate relative time |
-
-### Module G5 — Identifiers & Sequences (`mod_g5_derive_ids.R`)
-
-| Function | Description |
-|----------|-------------|
-| `derive_usubjid(data, studyid, subjid_col, sep, validate_existing)` | Derive USUBJID |
-| `derive_domain_keys(data, domain, config, idvar, idvarval_col)` | Derive domain key variables |
-| `derive_seq(data, target_var, by, order_by, ties, start_at)` | Generate --SEQ |
-| `derive_spid(data, target_var, source_cols, sep, prefix)` | Derive SPID |
-| `derive_grpid(data, target_var, group_by, method)` | Derive GRPID |
-
-### Module G6 — Flags & Status (`mod_g6_derive_flags.R`)
-
-| Function | Description |
-|----------|-------------|
-| `derive_baseline_flag(data, target_var, by, baseline_visit, visit_var)` | Derive baseline flag |
-| `derive_lastobs_flag(data, target_var, by, order_var)` | Derive last-observation flag |
-| `derive_occurrence(data, target_var, source_var, present_value, absent_value)` | Flag presence/absence |
-| `derive_status(data, target_var, result_var, done_value, not_done_value)` | Derive completion status |
-| `derive_reason(data, target_var, source_var, stat_var)` | Derive reason variable |
-
-### Module H — Domain Builders (`mod_h_builders.R`)
-
-| Function | Description |
-|----------|-------------|
-| `build_domain(domain, target_meta, source_meta, raw_data, config, rule_set, dm_data, sv_data, ...)` | **Main entry point** — build a complete SDTM domain |
-| `build_domain_from_sources(domain, rule_set, raw_data, source_meta, config)` | Build domain from multiple sources |
-| `apply_domain_rules(data, domain_rules, context, stop_on_error)` | Apply derivation rules |
-| `derive_variable(data, var, rule, context)` | **Dispatcher** — routes to the correct derivation function by `rule_type` |
-| `finalize_domain(data, domain, target_meta, config, ...)` | Select/order/label/type columns, enforce lengths |
-| `derive_domain_defaults(data, domain, config)` | Set domain defaults |
-| `build_supp(domain_data, domain, target_meta, vars_to_supp, ...)` | Build SUPP-- dataset |
-| `build_relrec(relationship_specs, domain_data, config)` | Build RELREC rows |
-| `build_dm_plugin(target_meta, source_meta, raw_data, config, rule_set)` | DM-specific builder |
-| `build_ta_tv_te_ts_plugins(domains, target_meta, config, rule_set, ...)` | Trial-design domain plugins |
-| `build_sv_plugin(target_meta, source_meta, raw_data, config, rule_set)` | SV domain plugin |
-
-### Module I — Validation (`mod_i_validation.R`)
-
-| Function | Description |
-|----------|-------------|
-| `validate_domain_structure(data, target_meta, domain, config, ct_lib, checks)` | Run all validation checks |
-| `validate_required_vars(data, target_meta, domain, report)` | Check Req variables present |
-| `validate_keys_unique(data, target_meta, domain, report)` | Check key uniqueness |
-| `validate_iso8601(data, target_meta, domain, report)` | Check ISO 8601 format |
-| `validate_lengths_types_labels(data, target_meta, domain, report)` | Check lengths, types, labels |
-| `validate_ct_conformance(data, target_meta, domain, ct_lib, report)` | Check CT conformance |
-| `validate_value_level(data, vlm_meta, domain, report)` | Check value-level metadata |
-| `validate_cross_domain(domain_data, config)` | Cross-domain consistency |
-| `summarize_validation_report(report, verbose)` | Summarize a report |
-| `emit_log_messages(report, sink)` | Emit report to log |
-| `validate_domain_value(data, domain, report)` | Check DOMAIN column |
-| `validate_studyid_constant(data, domain, report)` | Check STUDYID constant |
-| `validate_no_allna_reqexp(data, target_meta, domain, report)` | Check no all-NA required vars |
-| `validate_seq_integrity(data, domain, report)` | Check --SEQ integrity |
-| `validate_no_duplicate_rows(data, domain, report)` | Check for duplicate rows |
-
-### Module J — Code Generation (`mod_j_codegen.R`)
-
-| Function | Description |
-|----------|-------------|
-| `gen_domain_script(domain, rule_set, target_meta, source_meta, config, style, include_comments, output_path)` | Generate a standalone R script for a domain |
-| `gen_shared_utils_script(config, output_path)` | Generate shared utility functions script |
-| `gen_qmd_domain(domain, rule_set, target_meta, build_result, output_path)` | Generate Quarto document for a domain |
-| `gen_project_scaffold(output_dir, config, domains)` | Generate full project scaffold |
-| `render_rule_comments(rule)` | Render comments for a rule |
-| `serialize_rules_to_yaml(rule_set, output_path)` | Export rules as YAML |
-| `serialize_rules_to_json(rule_set, output_path)` | Export rules as JSON |
-
-### Module K — Export (`mod_k_export.R`)
-
-| Function | Description |
-|----------|-------------|
-| `export_xpt(data, domain, output_dir, target_meta, max_label_length, version)` | Export to SAS XPT v5 |
-| `export_rds_csv(data, domain, output_dir, formats)` | Export to RDS and/or CSV |
-| `write_define_support(domains, target_meta, config, output_path)` | Write define.xml support CSV |
-| `write_codelist_support(ct_lib, output_path)` | Write codelist support CSV |
-| `write_value_level_support(vlm, output_path)` | Write VLM support CSV |
-| `write_origin_support(target_meta, output_path)` | Write origin support CSV |
-
-### Module L — Utilities (`mod_l_utils.R`)
-
-| Function | Description |
-|----------|-------------|
-| `log_info(message, ..., module, domain, .sink)` | Log info message |
-| `log_warn(message, ..., module, domain, .sink)` | Log warning |
-| `log_error(message, ..., module, domain, .sink)` | Log error |
-| `stop_with_context(message, domain, variable, rule_id, data, call)` | Error with context |
-| `warn_with_context(message, domain, variable, rule_id, data, call)` | Warning with context |
-| `assert_cols(data, cols, context)` | Assert columns exist |
-| `assert_types(data, type_map, context)` | Assert column types |
-| `snapshot_dataset(data, label, outdir, domain, step)` | Save a snapshot for debugging |
-
-### Top-Level Functions
-
-| Function | Description |
-|----------|-------------|
-| `make_dummy_study(seed, n_subjects, bad_case, starter_kit_dir)` | Generate a complete dummy study with 10 raw datasets + metadata |
-| `check_end_to_end(verbose, return_data, starter_kit_dir, output_dir)` | Run end-to-end pipeline verification on all 10 domains |
+| `export_domain(data, domain, output_dir, formats, ...)` | Export to XPT v8 (default), RDS, CSV, or RDA |
+| `gen_domain_script(domain, rule_set, target_meta, config, ...)` | Generate R script |
+| `gen_qmd_domain(...)` | Generate Quarto document |
 
 ---
 
 ## Adding a New Domain
 
-To add a new SDTM domain (e.g., **FA**), you need to edit three metadata
-files.  **No code changes to the package are required** — the metadata drives
-everything.
+1. **Study\_Metadata.xlsx → Domains sheet**: add a row with Select=Y, DOMAIN, CLASS, etc.
+2. **Study\_Metadata.xlsx → Variables sheet**: add rows for each variable in the domain
+3. **Study\_CT.xlsx** (if needed): add codelists for the domain
+4. Place the raw data file in `raw/` (e.g., `xx_raw.sas7bdat`)
+5. Re-run `run_study("config.yaml")` — the new domain is picked up automatically
 
-### 1. Add raw data
-
-Either add a generator to `make_dummy_study()` or supply your own raw data as
-a named element in the `raw_data` list.
-
-### 2. Add source\_meta rows
-
-In `source_meta.csv`, describe each raw column:
-
-```csv
-fa_raw,usubjid,character,Unique Subject Identifier,Y,
-fa_raw,fatestcd,character,Assessment Test Short Name,N,e.g. TUMSTATE
-fa_raw,faorres,character,Result or Finding in Original Units,N,
-fa_raw,fadat,character,Date of Assessment,N,
-```
-
-### 3. Add target\_meta rows
-
-In `target_meta.csv`, define each SDTM variable with its derivation rule:
-
-```csv
-FA,STUDYID,char,20,Study Identifier,Identifier,Req,,1,Y,N,constant,"{""value"":""STUDY-XYZ""}",
-FA,DOMAIN,char,2,Domain Abbreviation,Identifier,Req,,2,Y,N,constant,"{""value"":""FA""}",
-FA,USUBJID,char,40,Unique Subject Identifier,Identifier,Req,,3,Y,N,direct_map,"{""dataset"":""fa_raw"",""column"":""usubjid""}",
-FA,FASEQ,num,8,Sequence Number,Identifier,Req,,4,Y,N,seq,"{""by"":[""STUDYID"",""USUBJID""],""order_by"":[""FADTC"",""FATESTCD""],""ties"":""dense""}",FADTC;FATESTCD
-FA,FATESTCD,char,8,Assessment Short Name,Topic,Req,,5,Y,N,direct_map,"{""dataset"":""fa_raw"",""column"":""fatestcd"",""transform"":""toupper""}",
-FA,FATEST,char,40,Assessment Test Name,Qualifier,Req,FATEST,6,N,N,ct_decode,"{""column"":""FATESTCD"",""codelist_id"":""FATEST""}",FATESTCD
-FA,FAORRES,char,200,Result in Original Units,Result,Exp,,7,N,N,direct_map,"{""dataset"":""fa_raw"",""column"":""faorres""}",
-FA,FADTC,char,19,Date/Time of Assessment,Timing,Exp,,8,N,N,iso_dtc,"{""date_col"":{""dataset"":""fa_raw"",""column"":""fadat""}}",
-FA,FADY,num,8,Study Day of Assessment,Timing,Perm,,9,N,N,dy,"{""dtc_var"":""FADTC"",""ref_var"":""RFSTDTC""}",FADTC
-FA,EPOCH,char,20,Epoch,Timing,Perm,,10,N,N,epoch,"{""dtc_var"":""FADTC"",""ref_var"":""RFSTDTC""}",FADTC
-```
-
-### 4. Add CT rows (if needed)
-
-If the domain uses controlled terminology not yet in `ct_codelist.csv`:
-
-```csv
-FATEST,Assessment Test Name,TUMSTATE,TUMSTATE,Tumor State,N,FA decode
-```
-
-### 5. Build
-
-```r
-fa <- build_domain("FA", target_meta, source_meta, raw_data, config, rule_set,
-                   dm_data = dm$data)
-```
+No R code changes required.
 
 ---
 
 ## Validation
 
-`build_domain()` automatically validates each built domain.  The validation
-report contains findings from these checks:
+`build_domain()` automatically validates each built domain, checking:
 
-| Check | Description |
-|-------|-------------|
-| Required variables | All `core = "Req"` variables must exist and have data |
-| Key uniqueness | No duplicate keys |
-| ISO 8601 format | DTC variables are valid ISO 8601 |
-| Lengths & types | Character lengths respected, types correct |
-| CT conformance | Coded values match the codelist |
-| DOMAIN column | DOMAIN = domain code on every row |
-| STUDYID constant | Single STUDYID value per domain |
-| SEQ integrity | --SEQ is sequential per subject |
-| No duplicate rows | Full row uniqueness |
-| No all-NA Req/Exp | Required/Expected variables have some data |
+- Required variables present
+- Key uniqueness (no duplicate records for the same keys)
+- ISO 8601 date format (`--DTC` variables)
+- Character lengths and numeric types match metadata
+- Controlled terminology conformance
+- STUDYID and DOMAIN constants
+- SEQ integrity (unique, sequential)
+- No all-NA required/expected columns
+- Value-level metadata conformance
 
-```r
-# Access the validation report from build results
-report <- ae$report
-print(report)
-
-# Or run stand-alone validation
-report <- validate_domain_structure(ae$data, target_meta, "AE", config, ct_lib)
-summarize_validation_report(report)
-```
+Validation results are in `result$report` for each domain.
 
 ---
 
-## Code Generation
+## Export Formats
 
-Generate human-readable R scripts that reproduce the domain derivation:
+Each domain can be exported in multiple formats:
 
-```r
-# Single domain script
-gen_domain_script("AE", rule_set, target_meta, source_meta, config,
-                  output_path = "programs/ae.R")
+| Format | Function | Extension | Description |
+|--------|----------|-----------|-------------|
+| XPT | `export_domain(..., formats = "xpt")` | `.xpt` | SAS transport v8 (default, for regulatory submission) |
+| RDA | `export_domain(..., formats = "rda")` | `.rda` | R binary (preserves attributes, labels) |
+| RDS | `export_domain(..., formats = "rds")` | `.rds` | R single-object binary |
+| CSV | `export_domain(..., formats = "csv")` | `.csv` | Plain text |
 
-# Quarto document with narrative
-gen_qmd_domain("AE", rule_set, target_meta, build_result = ae,
-               output_path = "docs/ae.qmd")
-
-# Full project scaffold
-gen_project_scaffold("output/sdtm_project/", config,
-                     domains = c("DM", "AE", "CM"))
-
-# Export rules as machine-readable formats
-serialize_rules_to_yaml(rule_set, "output/rules.yaml")
-serialize_rules_to_json(rule_set, "output/rules.json")
-```
-
----
-
-## Export
+`run_study()` exports **XPT + RDA** by default. Change with `export_formats`:
 
 ```r
-# SAS Transport v5 (.xpt)
-export_xpt(ae$data, "AE", "output/xpt/", target_meta = target_meta)
-
-# RDS + CSV
-export_rds_csv(ae$data, "AE", "output/", formats = c("rds", "csv"))
-
-# define.xml support files
-write_define_support(list(dm$data, ae$data), target_meta, config,
-                     "output/define_support.csv")
-write_codelist_support(ct_lib, "output/codelist_support.csv")
-write_origin_support(target_meta, "output/origin_support.csv")
+run_study("config.yaml", export_formats = c("xpt", "rda", "csv"))
 ```
-
----
-
-## Running the Demo
-
-### Option 1 — End-to-End Check (fastest)
-
-```r
-library(sdtmbuilder)
-result <- check_end_to_end(verbose = TRUE, return_data = TRUE)
-# Builds all 10 domains: DM, AE, CM, MH, PR, EX, VS, LB, DS, QS
-# Prints validation results for each domain
-```
-
-### Option 2 — Full Pipeline Script
-
-```r
-source(system.file("examples", "demo_full_pipeline.R", package = "sdtmbuilder"))
-```
-
-This script:
-
-1. Generates dummy data for 30 subjects across 10 raw datasets
-2. Compiles 146 derivation rules from metadata
-3. Builds all 10 SDTM domains
-4. Demonstrates SUPP datasets (SUPPAE)
-5. Runs validation on each domain
-6. Generates standalone R scripts for each domain
-7. Exports XPT files
-8. Prints a summary table
-
-### Option 3 — Interactive Step-by-Step
-
-```r
-library(sdtmbuilder)
-
-# Generate data
-study <- make_dummy_study(seed = 42)
-
-# Inspect metadata
-View(study$target_meta)  # all 146 variable definitions
-View(study$source_meta)  # raw data column descriptions
-View(study$ct_lib)       # controlled terminology
-
-# Compile rules
-rs <- compile_rules(study$target_meta, study$source_meta, study$ct_lib)
-print(rs)
-
-# Build DM
-dm <- build_domain("DM", study$target_meta, study$source_meta,
-                   study$raw_data, study$config, rs)
-head(dm$data)
-
-# Build AE (with SUPP)
-ae <- build_domain("AE", study$target_meta, study$source_meta,
-                   study$raw_data, study$config, rs, dm_data = dm$data)
-print(ae$report)    # validation
-head(ae$supp)       # SUPPAE
-
-# DS domain — demonstrates case_when, if_else, coalesce, concat
-ds <- build_domain("DS", study$target_meta, study$source_meta,
-                   study$raw_data, study$config, rs, dm_data = dm$data)
-table(ds$data$DSCAT)   # PROTOCOL MILESTONE vs DISPOSITION EVENT
-table(ds$data$DSSCAT)  # INFORMED CONSENT vs STUDY TREATMENT
-
-# QS domain — demonstrates ct_decode, occurrence, baseline_flag
-qs <- build_domain("QS", study$target_meta, study$source_meta,
-                   study$raw_data, study$config, rs, dm_data = dm$data)
-table(qs$data$QSTEST)  # decoded from QSTESTCD via codelist
-table(qs$data$QSSTAT, useNA = "always")  # NA (done) vs NOT DONE
-table(qs$data$QSBLFL, useNA = "always")  # Y for baseline visits
-
-# Generate a reproducible script for AE
-gen_domain_script("AE", rs, study$target_meta, study$source_meta,
-                  study$config, output_path = "ae_program.R")
-cat(readLines("ae_program.R"), sep = "\n")
-```
-
----
-
-## Domains Included
-
-The starter kit includes complete metadata and dummy data for **10 CDISC
-SDTM domains**:
-
-| Domain | Rows | Description | Rule Types Exercised |
-|--------|------|-------------|---------------------|
-| DM | 30 | Demographics | constant, direct\_map, ct\_assign |
-| AE | 64 | Adverse Events | constant, direct\_map, ct\_assign, iso\_dtc, dy, seq, epoch |
-| CM | 36 | Concomitant Medications | ct\_assign, iso\_dtc, dy, seq, epoch |
-| MH | 71 | Medical History | direct\_map, iso\_dtc, seq |
-| PR | 53 | Procedures | ct\_assign, iso\_dtc, dy, seq, epoch |
-| EX | 188 | Exposure | ct\_assign, iso\_dtc, dy, seq, epoch |
-| VS | 750 | Vital Signs | direct\_map, iso\_dtc, dy, visit, visitnum, baseline\_flag, seq, epoch |
-| LB | 600 | Lab Results | direct\_map, iso\_dtc, dy, visit, visitnum, baseline\_flag, seq, epoch |
-| DS | 90 | Disposition | **coalesce**, **case\_when**, **if\_else**, **concat**, iso\_dtc, dy, seq, epoch |
-| QS | 360 | Questionnaires | **ct\_decode**, **occurrence**, visit, visitnum, baseline\_flag, iso\_dtc, dy, seq, epoch |
-
-**16 out of 19** rule types are exercised in the starter kit.  The remaining
-three (`join`, `status`, `duration`) are fully implemented and unit-tested but
-not yet used in the 10-domain metadata.
 
 ---
 
@@ -1074,45 +649,27 @@ not yet used in the 10-domain metadata.
 
 ```r
 devtools::test()
-# Expected: FAIL 0 | WARN 0 | SKIP 0 | PASS 289
+# Expected: FAIL 0 | WARN 0 | SKIP 0 | PASS 263
 ```
 
 ---
 
 ## Troubleshooting
 
-### "Domain 'XX' not found in target\_meta"
-
-The domain abbreviation must match a `domain` value in target\_meta exactly
-(case-sensitive).
-
-### "No compiled rules for domain 'XX'"
-
-Run `compile_rules()` with target\_meta that includes rows for this domain.
-
-### "Source dataset 'xx\_raw' not found in raw\_data"
-
-The `dataset` value in `rule_params` JSON must match a key in the `raw_data`
-named list.
-
-### DY / VISIT / EPOCH columns are all NA
-
-The domain needs RFSTDTC from DM.  Pass `dm_data = dm$data` (or the full DM
-build result — it will be auto-extracted) when building non-DM domains.
-
-### Controlled terminology values not mapping
-
-Check that `codelist_id` in target\_meta matches a `codelist_id` in
-ct\_codelist.  Check `case_sensitive` — set to `"N"` for case-insensitive
-matching.
-
-### Excel files not loading
-
-Ensure the `readxl` package is installed (`install.packages("readxl")`).
-The metadata readers automatically detect `.xlsx` vs `.csv` by file extension.
+| Problem | Solution |
+|---------|----------|
+| `could not find function "run_study"` | Run `devtools::load_all()` or reinstall the package |
+| `could not find function "read_study_metadata_excel"` | Same — reload with `devtools::load_all()` |
+| "Domain 'XX' not found in target\_meta" | Check DOMAIN column in Variables sheet (case-sensitive) |
+| "No compiled rules for domain 'XX'" | Ensure target\_meta has rows with Select=Y for this domain |
+| DY / VISIT / EPOCH all NA | Pass `dm_data = dm$data` for non-DM domains (automatic in `build_all_domains`) |
+| CT values not mapping | Check `CODELIST_ID` matches between Variables and Study\_CT.xlsx |
+| Raw data column not found | Confirm column names in raw data match the lower-case variable names |
+| "File not found" for Excel | Check the paths in config.yaml or function arguments |
+| R programs not generated | Set `generate_programs = TRUE` (default), or check `export.generate_programs` in config.yaml |
 
 ---
 
 ## License
 
-MIT
+MIT License. Copyright (c) 2026 Chiara Cattani.

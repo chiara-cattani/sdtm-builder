@@ -12,3 +12,5 @@
 ^\.lintr$
 ^codecov\.yml$
 ^ROADMAP\.md$
+^\.venv$
+^tmpclaude.*$

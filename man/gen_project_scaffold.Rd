@@ -7,7 +7,7 @@
 gen_project_scaffold(output_dir, config, domains)
 }
 \arguments{
-\item{output_dir}{Character.}
+\item{output_dir}{Character. Root directory for the new project.}
 
 \item{config}{\code{sdtm_config}.}
 

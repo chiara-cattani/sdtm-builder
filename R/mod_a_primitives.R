@@ -72,8 +72,12 @@ new_sdtm_config <- function(studyid,
   checkmate::assert_choice(log_level, c("DEBUG", "INFO", "WARN", "ERROR"))
 
   if (is.list(ref_start_rule)) {
-    if (!all(c("var", "source") %in% names(ref_start_rule))) {
-      abort("`ref_start_rule` list must contain 'var' and 'source' elements.")
+    # Accept new format (sdtm_domain/sdtm_variable/raw_dataset/raw_variable)
+    # or legacy format (var/source)
+    has_new   <- any(c("sdtm_domain", "sdtm_variable", "sdtm_path", "raw_dataset", "raw_variable") %in% names(ref_start_rule))
+    has_legacy <- all(c("var", "source") %in% names(ref_start_rule))
+    if (!has_new && !has_legacy) {
+      abort("`ref_start_rule` list must contain 'sdtm_domain'/'sdtm_variable'/'sdtm_path'/'raw_dataset'/'raw_variable' or legacy 'var'/'source' elements.")
     }
   } else if (!is.function(ref_start_rule)) {
     abort("`ref_start_rule` must be a named list or a function.")
@@ -130,12 +134,14 @@ print.sdtm_config <- function(x, ...) {
 #' **Does NOT** read files—takes already-loaded and validated tibbles.
 #'
 #' @param target_meta Tibble. Validated target variable metadata
-#'   (output of [validate_target_meta()]).
-#' @param source_meta Tibble. Validated source column metadata
-#'   (output of [validate_source_meta()]).
+#'   (output of [validate_target_meta()] or [read_study_metadata_excel()]).
+#' @param source_meta Tibble or `NULL`. Validated source column metadata
+#'   (output of [infer_source_meta()] or manually curated).
 #' @param ct_lib Tibble or `NULL`. Controlled terminology library
-#'   (output of [read_ct_library()]).
+#'   (output of [read_study_ct_excel()]).
 #' @param value_level_meta Tibble or `NULL`. Value-level metadata.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata with build
+#'   order, keys, description, and structure (from [read_study_metadata_excel()]).
 #'
 #' @return S3 object of class `meta_bundle`.
 #'
@@ -150,20 +156,32 @@ print.sdtm_config <- function(x, ...) {
 #'
 #' @export
 new_meta_bundle <- function(target_meta,
-                            source_meta,
+                            source_meta = NULL,
                             ct_lib = NULL,
-                            value_level_meta = NULL) {
+                            value_level_meta = NULL,
+                            domain_meta = NULL) {
   checkmate::assert_tibble(target_meta, min.rows = 1L)
-  checkmate::assert_tibble(source_meta, min.rows = 1L)
+  if (!is.null(source_meta)) checkmate::assert_tibble(source_meta, min.rows = 1L)
+
+  # Validate domain_meta if provided
+  if (!is.null(domain_meta)) {
+    checkmate::assert_tibble(domain_meta, min.rows = 1L)
+    dm_required <- c("domain", "class", "class_order", "domain_level_order")
+    dm_miss <- setdiff(dm_required, names(domain_meta))
+    if (length(dm_miss)) {
+      abort(paste("domain_meta missing required columns:", paste(dm_miss, collapse = ", ")))
+    }
+  }
 
   target_domains <- unique(target_meta$domain)
-  source_datasets <- unique(source_meta$dataset)
+  source_datasets <- if (!is.null(source_meta)) unique(source_meta$dataset) else character()
 
   obj <- list(
     target_meta      = target_meta,
     source_meta      = source_meta,
     ct_lib           = ct_lib,
     value_level_meta = value_level_meta,
+    domain_meta      = domain_meta,
     target_domains   = target_domains,
     source_datasets  = source_datasets
   )
@@ -178,6 +196,15 @@ print.meta_bundle <- function(x, ...) {
   cli::cli_li("Target variables: {nrow(x$target_meta)}")
   cli::cli_li("Source datasets: {paste(x$source_datasets, collapse = ', ')}")
   cli::cli_li("CT library: {if (is.null(x$ct_lib)) 'none' else paste(nrow(x$ct_lib), 'terms')}")
+  if (!is.null(x$domain_meta)) {
+    build_order <- paste(x$domain_meta$domain, collapse = " -> ")
+    cli::cli_li("Domain build order ({nrow(x$domain_meta)} domains): {build_order}")
+    classes <- unique(x$domain_meta$class)
+    cli::cli_li("Domain classes: {paste(classes, collapse = ', ')}")
+  }
+  if (!is.null(x$value_level_meta)) {
+    cli::cli_li("Value-level metadata: {nrow(x$value_level_meta)} conditions")
+  }
   invisible(x)
 }
 

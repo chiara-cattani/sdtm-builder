@@ -3,8 +3,8 @@
 test_that("validate_domain_structure returns a validation_report", {
   skip_if_no_starter_kit()
 
-  rs <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
-  br <- build_domain("AE", dummy_meta, dummy_smeta, dummy_raw,
+  rs <- compile_rules(dummy_meta, ct_lib = dummy_ct)
+  br <- build_domain("AE", dummy_meta, dummy_raw,
                      dummy_cfg, rs, verbose = FALSE)
 
   rpt <- validate_domain_structure(br$data, dummy_meta, "AE", dummy_cfg)

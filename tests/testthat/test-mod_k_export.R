@@ -1,16 +1,16 @@
 # tests/testthat/test-mod_k_export.R
 
-test_that("export_xpt writes an XPT file", {
+test_that("export_domain writes an XPT file", {
   skip_if_no_starter_kit()
 
-  rs <- compile_rules(dummy_meta, dummy_smeta, dummy_ct)
-  br <- build_domain("AE", dummy_meta, dummy_smeta, dummy_raw,
+  rs <- compile_rules(dummy_meta, ct_lib = dummy_ct)
+  br <- build_domain("AE", dummy_meta, dummy_raw,
                      dummy_cfg, rs, verbose = FALSE)
 
   out_dir <- file.path(tempdir(), "xpt_test")
-  fpath <- export_xpt(br$data, "AE", out_dir)
+  export_domain(br$data, "AE", out_dir, formats = "xpt")
+  fpath <- file.path(out_dir, "XPT", "ae.xpt")
   expect_true(file.exists(fpath))
-  expect_true(grepl("ae\\.xpt$", fpath))
 
   # Read back to verify
   read_back <- haven::read_xpt(fpath)
@@ -18,15 +18,17 @@ test_that("export_xpt writes an XPT file", {
   unlink(out_dir, recursive = TRUE)
 })
 
-test_that("export_rds_csv writes both formats", {
+test_that("export_domain writes RDS and CSV", {
   df <- data.frame(STUDYID = "S", USUBJID = "U1", stringsAsFactors = FALSE)
   out_dir <- file.path(tempdir(), "rds_csv_test")
-  paths <- export_rds_csv(df, "DM", out_dir, formats = c("rds", "csv"))
+  export_domain(df, "DM", out_dir, formats = c("rds", "csv"))
 
-  expect_true(file.exists(paths$rds))
-  expect_true(file.exists(paths$csv))
+  rds_path <- file.path(out_dir, "RDA", "dm.rds")
+  csv_path <- file.path(out_dir, "CSV", "dm.csv")
+  expect_true(file.exists(rds_path))
+  expect_true(file.exists(csv_path))
 
-  rds_back <- readRDS(paths$rds)
+  rds_back <- readRDS(rds_path)
   expect_equal(nrow(rds_back), 1)
   unlink(out_dir, recursive = TRUE)
 })

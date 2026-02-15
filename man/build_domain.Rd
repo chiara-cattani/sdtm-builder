@@ -7,15 +7,18 @@
 build_domain(
   domain,
   target_meta,
-  source_meta,
   raw_data,
   config,
   rule_set,
+  source_meta = NULL,
   dm_data = NULL,
   sv_data = NULL,
   create_supp = NULL,
+  domain_meta = NULL,
+  value_level_meta = NULL,
   return_provenance = TRUE,
   validate = TRUE,
+  skip_existing = FALSE,
   verbose = TRUE
 )
 }
@@ -24,13 +27,13 @@ build_domain(
 
 \item{target_meta}{Tibble.}
 
-\item{source_meta}{Tibble.}
-
 \item{raw_data}{Named list of tibbles.}
 
 \item{config}{\code{sdtm_config}.}
 
 \item{rule_set}{\code{rule_set}.}
+
+\item{source_meta}{Tibble or \code{NULL}. Optional; not used at runtime.}
 
 \item{dm_data}{Tibble or \code{NULL}. DM data for RFSTDTC; also accepts
 a full \code{build_result} list (auto-extracts \verb{$data}).}
@@ -42,9 +45,18 @@ value from \code{config$create_supp} is used (itself defaulting to \code{TRUE}).
 Set \code{FALSE} to keep all variables in the main domain instead of
 splitting to SUPP--.}
 
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata from
+\code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}. If provided, used for sorting and labeling.}
+
+\item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata for
+per-condition validation.}
+
 \item{return_provenance}{Logical. Default \code{TRUE}.}
 
 \item{validate}{Logical. Default \code{TRUE}.}
+
+\item{skip_existing}{Logical. Default \code{FALSE}. If \code{TRUE}, skip building
+this domain when its output already exists.}
 
 \item{verbose}{Logical. Default \code{TRUE}.}
 }

@@ -5,7 +5,8 @@ test_that("make_dummy_study returns expected structure", {
   skip_if_no_starter_kit()
   study <- make_dummy_study(seed = 123, starter_kit_dir = starter_kit_path)
   expect_type(study, "list")
-  expect_named(study, c("raw_data", "target_meta", "source_meta", "ct_lib", "config"))
+  expect_named(study, c("raw_data", "target_meta", "source_meta",
+                        "ct_lib", "config", "domain_meta", "value_level_meta"))
 })
 
 test_that("raw_data contains all expected datasets", {
@@ -91,17 +92,19 @@ test_that("different seeds produce different data", {
 test_that("target_meta loads correctly", {
   skip_if_no_starter_kit()
   expect_s3_class(dummy_meta, "tbl_df")
-  expect_true(all(c("domain", "var", "type", "rule_type", "rule_params")
+  expect_true(all(c("domain", "var", "type", "rule_type")
                   %in% names(dummy_meta)))
   domains <- unique(dummy_meta$domain)
-  expect_true(all(c("AE", "CM", "MH", "PR", "DM", "EX", "VS", "LB") %in% domains))
+  # Excel starter kit has 4 core domains
+  expect_true(all(c("AE", "CM", "DM", "LB") %in% domains))
 })
 
 test_that("ct_lib loads correctly", {
   skip_if_no_starter_kit()
   expect_s3_class(dummy_ct, "tbl_df")
   expect_true("codelist_id" %in% names(dummy_ct))
-  expect_true("C66769" %in% dummy_ct$codelist_id)
+  # Study_CT.xlsx has YN codelist among others
+  expect_true("YN" %in% dummy_ct$codelist_id)
 })
 
 test_that("config is a valid sdtm_config", {
@@ -182,8 +185,9 @@ test_that("lb_raw has expected row count (30 subj x 4 visits x 5 tests)", {
   expect_true(all(expected_cols %in% names(lb)))
 })
 
-test_that("target_meta includes all 8 domains", {
+test_that("target_meta includes all starter kit domains", {
   skip_if_no_starter_kit()
   domains <- unique(dummy_meta$domain)
-  expect_true(all(c("AE", "CM", "MH", "PR", "DM", "EX", "VS", "LB") %in% domains))
+  # Excel starter kit has 4 core domains
+  expect_true(all(c("AE", "CM", "DM", "LB") %in% domains))
 })

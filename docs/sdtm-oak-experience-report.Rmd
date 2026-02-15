@@ -1,0 +1,1139 @@
+---
+title: "From sdtm.oak to sdtmbuilder: Lessons Learned and Capabilities Comparison"
+subtitle: "Experience Report from a Real Clinical Study (Example 2) and the Path to a Metadata-Driven SDTM Builder"
+author: "Chiara Cattani"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+    number_sections: true
+    css: null
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+# Executive Summary
+
+This document describes our experience building SDTM validation (QC) programs
+in R for a real clinical study (**Example 2**), using **sdtm.oak** as the
+primary mapping tool. It identifies the strengths of sdtm.oak, the
+practical pitfalls encountered, and the gaps that required custom code. It
+then presents **sdtmbuilder** --- an R package developed to address those gaps
+and deliver a complete, metadata-driven SDTM programming framework.
+
+**Key findings:**
+
+- **sdtm.oak** provided useful low-level building blocks for variable
+  mapping and controlled-terminology assignment, which we used across **19 of
+  23 QC programs**.
+- However, sdtm.oak covers only a small slice of the SDTM programming
+  workflow.  We had to write **16 custom utility functions** and significant
+  manual code to handle data import, structural transformations (pivots),
+  cross-domain joins, visit/timepoint derivations, domain finalization, and
+  export.
+- **sdtmbuilder** was designed to fill **every gap** identified during the
+  Example 2 experience. It provides **146 functions** organized into a
+  metadata-driven pipeline that automates the entire SDTM workflow from raw
+  data to validated XPT, including code generation and define.xml support.
+
+---
+
+# Part I --- The Example 2 Experience with sdtm.oak
+
+## What We Built
+
+For a real clinical study, we created a complete set of **23 SDTM QC
+(validation) programs** in R, covering domains from trial design (TI, TV) to
+clinical events (AE, CE, MH), findings (VS, QS, LB, FA), interventions (CM,
+EX, EC, PR, SU), special-purpose (DM, DS, SV, CO, DA, BE, ML, XS, IE), and
+relationships (RELREC).
+
+In addition to the domain-specific QC programs, we developed **16 reusable
+utility functions** for tasks that sdtm.oak did not cover:
+
+| Utility Function | Purpose |
+|:-----------------|:--------|
+| `copy_import()` | Read SAS datasets, normalize names/blanks, derive USUBJID, add Oak ID variables |
+| `copy_import_myfood24()` | Specialized importer for MyFood24 CSV/SAS dietary data |
+| `convert_blanks_to_na()` | S3 generic to convert blank strings to `NA` (character, list, data.frame) |
+| `merge_inputs()` | Full-join multiple domain data frames for DM assembly |
+| `assign_ct_with_na()` | Extended `assign_ct()` that treats literal `"NA"` text as mappable (not missing) |
+| `hardcode_no_ct()` / `hardcode_ct()` | Custom overrides of sdtm.oak versions with `coalesce()` fill-forward logic |
+| `derive_visit_vars()` | Map event IDs to VISIT/VISITNUM |
+| `derive_tpt_vars()` | Derive timepoint variables (--TPT, --TPTNUM, --TPTREF, --ELTM) from activity IDs |
+| `derive_lobxfl()` | Derive last-observation-before-exposure flag (--LOBXFL) |
+| `add_planned_actual_arm()` | Derive ARM/ARMCD/ACTARM/ACTARMCD from eligibility, enrollment, and exposure data |
+| `get_meddra_version()` | Extract dictionary version from `DictInstance` column (MedDRA) |
+| `get_whodrug_version()` | Extract dictionary version from `DictInstance` column (WHODrug) |
+| `sdtm_create_domain()` | Finalize domains: sort, enforce metadata, label, drop empty permissible variables, export (RDS/CSV/XPT) |
+| `create_sdtm_qc()` | Orchestrator: source all QC programs in correct order |
+| `create_all_qc()` | Entry-point wrapper: set working directory, call `create_sdtm_qc()` |
+
+## sdtm.oak Functions Used
+
+We leveraged **7 core sdtm.oak functions** across the study:
+
+| sdtm.oak Function | What It Does | Used In |
+|:-------------------|:-------------|:--------|
+| `assign_no_ct()` | Map a raw variable to an SDTM variable (no controlled terminology) | 15 domains |
+| `assign_ct()` | Map a raw variable with controlled terminology recoding | 12 domains |
+| `assign_datetime()` | Parse date/time columns into ISO 8601 `--DTC` variables | 10 domains |
+| `condition_add()` | Apply a conditional filter before mapping | 14 domains |
+| `hardcode_no_ct()` / `hardcode_ct()` | Set a target variable to a constant value (with/without CT) | Multiple (via our override) |
+| `derive_study_day()` | Derive study day (`--DY`) from `--DTC` and reference date | 17 domains |
+| `derive_seq()` | Derive sequence number (`--SEQ`) within groups | 17 domains |
+| `generate_oak_id_vars()` | Generate Oak internal tracking IDs | 6 domains |
+| `oak_id_vars()` | Return Oak ID variable names | All domains using `assign_*`/`hardcode_*` |
+
+**These functions accounted for the majority of simple 1:1 variable mappings**
+--- the "bread and butter" of SDTM programming.
+
+## Strengths of sdtm.oak {#strengths}
+
+### 1. Clean API for Simple Mappings
+
+For straightforward source-to-target variable assignments, sdtm.oak's
+`assign_no_ct()` and `assign_ct()` provide a clean, readable syntax:
+
+```r
+# Example: Mapping adverse event term (easy, readable, correct)
+ae1 <- assign_no_ct(
+  raw_dat = ae_raw,
+  raw_var = "aeterm",
+  tgt_var = "AETERM",
+  id_vars = oak_id_vars(...)
+)
+```
+
+### 2. Controlled-Terminology Awareness
+
+`assign_ct()` performs codelist lookup automatically, mapping source values to
+CDISC-standard coded values. This eliminates manual `case_when()` or `recode()`
+calls for CT-mapped variables.
+
+### 3. ISO 8601 Date Handling
+
+`assign_datetime()` handles the conversion of various date/time formats into
+ISO 8601 partial-date strings, which is a common and error-prone task in SDTM
+programming.
+
+### 4. Conditional Assignments
+
+`condition_add()` integrates naturally with the mapping functions, allowing
+conditional variable derivation without breaking the pipe:
+
+```r
+hardcode_ct(
+  raw_dat = condition_add(sae1, aesongo == "Y"),
+  raw_var = "...",
+  ...
+)
+```
+
+### 5. Sequence and Study Day Derivation
+
+`derive_seq()` and `derive_study_day()` provide correct implementations of
+these universal SDTM derivations, avoiding the need to re-implement the
+no-Day-0 convention.
+
+---
+
+## Pitfalls Encountered {#pitfalls}
+
+### 1. `derive_study_day()` Silently Overwrites Date Columns
+
+This was the single most pervasive pain point. In **12 of 17 domains** that
+use `derive_study_day()`, we had to apply the following workaround:
+
+```r
+# Workaround: save date, derive study day, restore date
+ds3 <- ds2 %>%
+  mutate(DSSTDTC_TMP = DSSTDTC) %>%
+  derive_study_day(
+    sdtm_in   = .,
+    tgdt       = "DSSTDTC",
+    refdt      = "RFSTDTC",
+    study_day_var = "DSSDY"
+  ) %>%
+  mutate(DSSTDTC = DSSTDTC_TMP) %>%
+  select(-DSSTDTC_TMP)
+```
+
+The function internally modifies the DTC column it references, forcing users
+to save and restore the value every time. This is fragile and produces
+unnecessary boilerplate.
+
+### 2. `hardcode_no_ct()` / `hardcode_ct()` Do Not Support Coalesce Logic
+
+sdtm.oak's hardcode functions overwrite the target variable unconditionally.
+When building a variable from **multiple conditional blocks** (e.g., chaining
+two `hardcode_ct()` calls on the same target with different conditions), the
+second call would overwrite values set by the first.
+
+We had to create custom overrides using `dplyr::coalesce()`:
+
+```r
+# Our override: preserves values from earlier conditional assignments
+hardcode_ct <- function(raw_dat, raw_var, tgt_var, tgt_val, ct_spec, ...) {
+  # ... map the value ...
+  result <- dplyr::mutate(result, !!tgt_var := coalesce(new_val, existing_val))
+}
+```
+
+### 3. `assign_ct()` Cannot Handle Literal `"NA"` Text Values
+
+When a CRF field legitimately contains `"NA"` (meaning "Not Applicable" or
+"Not Assessed"), sdtm.oak's `assign_ct()` treats it as a missing value rather
+than mapping it through the controlled terminology. We had to write
+`assign_ct_with_na()` to distinguish `"NA"` text from true R `NA`.
+
+### 4. No Error Recovery for Missing Source Files
+
+Oak's functions raise hard errors when source data is missing. Our
+`copy_import()` wrapper adds graceful fallback --- returning an empty dataset
+with the expected columns when a source file doesn't exist.
+
+---
+
+## What Was Missing --- Gaps Requiring Custom Code {#gaps}
+
+### Gap 1: No Data Import/Export Framework
+
+**sdtm.oak assumes data is already loaded** as R data frames. It provides no
+functions for reading SAS datasets, Excel files, or CSVs; no standardization
+of column names or types; and no export to XPT or other submission formats.
+
+*Custom code written:* `copy_import()`, `copy_import_myfood24()`,
+`convert_blanks_to_na()`, `sdtm_create_domain()` (export).
+
+### Gap 2: No Structural Transformations (Pivoting / Array Handling)
+
+Many CRF forms use **repeated-measures arrays** where multiple observations
+are stored as numbered columns (e.g., `EXYN1`, `EXYN2`, `st7p1`--`st7p8`,
+`qs01`--`qs07`). sdtm.oak works on a one-raw-column-to-one-SDTM-column basis
+and has **no pivot/reshape capability**.
+
+We had to manually write `pivot_longer()` transformations in **8 domains**:
+
+| Domain | Array Columns Pivoted | Records Created |
+|:-------|:----------------------|:----------------|
+| CE | 11 symptom columns → CETERM/CEOCCUR/CESEV | ~11×N rows |
+| EC | EXYN1/2, EXTIME1/2, EXDOSE1/2, EXREAS1/2 | 2×N rows |
+| EX | EXYN1/2, EXDOSE1/2 → daily sums → period aggregation | Complex multi-step |
+| FA | st7p1--8/sampyn1--8 (GIQ stool) + 37 nutrient columns (MyFood24) | Two separate pivots |
+| IE | ieintestcd1--N / ieextestcd1--N (failed criteria) | Variable-width |
+| ML | Diary stool collection with custom date parsing | dd/mm/yy → ISO 8601 |
+| QS | qs01--qs07 (questionnaire items) | 7×N rows |
+| RELREC | cmae1, cmmh2, prmh1, etc. (link columns) | Complex bidirectional |
+| SU | 6 substance types from separate column groups | 6×N rows |
+
+### Gap 3: No Cross-Domain Join Utilities
+
+SDTM programming frequently requires joining data across domains (e.g., DM
+reference dates used in every domain, AE←SAE for seriousness flags,
+FA↔LBS for link IDs). sdtm.oak provides **no join helpers** whatsoever.
+
+Cross-domain joins were required in at least **10 domains**: AE (SAE data),
+BE (GIQ stool check), DA (treatment reference), DM (6-way merge), DS (DM + IE
++ event dates), EC (EX periods), FA (LBS collection dates), IE (DM + TI),
+RELREC (all link sources), and every domain needing RFSTDTC from DM.
+
+### Gap 4: No Visit / Timepoint Derivation
+
+sdtm.oak has **no `derive_visit()`** or `derive_tpt()` functions. We wrote
+study-specific hardcoded mappings (`derive_visit_vars()` and
+`derive_tpt_vars()`) used in **9 domains**.
+
+### Gap 5: No Baseline or Last-Observation Flags
+
+sdtm.oak cannot derive `--BLFL` (baseline flag) or `--LOBXFL`
+(last-observation-before-exposure flag). Our `derive_lobxfl()` required
+joining with DM for RFXSTDTC, date parsing, and group-by-test flagging logic.
+
+### Gap 6: No ARM / Treatment Assignment Derivation
+
+DM's ARM/ACTARM derivation is one of the most complex study-specific
+derivations. Our `add_planned_actual_arm()` implements 4-way logic based on
+eligibility (IE), enrollment (EOS), and exposure (EX) data. sdtm.oak has no
+support for this.
+
+### Gap 7: No SUPP or RELREC Construction
+
+Supplemental Qualifier (SUPP--) and Related Records (RELREC) datasets are
+standard parts of every SDTM submission. sdtm.oak provides **no builders** for
+either.
+
+### Gap 8: No Domain Finalization / Metadata Enforcement
+
+After variable derivation, every SDTM domain must be finalized: variables
+selected and ordered per specification, labels assigned, permissible
+variables dropped when empty, and data exported in XPT format. sdtm.oak
+provides none of this. Our `sdtm_create_domain()` handled all finalization
+steps.
+
+### Gap 9: No Validation or Conformance Checking
+
+sdtm.oak performs **no post-build validation** --- no checks for required
+variables, key uniqueness, ISO 8601 conformance, CT conformance, or
+cross-domain consistency.
+
+### Gap 10: No Orchestration or Dependency Management
+
+Each domain must be built in the correct order (e.g., DM before all others,
+TI/TV before IE). sdtm.oak provides no orchestration. Our `create_sdtm_qc()`
+and `create_all_qc()` were manual orchestrators.
+
+---
+
+# Part II --- sdtmbuilder: Addressing Every Gap
+
+## Design Philosophy
+
+sdtmbuilder was designed with three guiding principles derived directly from
+the Example 2 experience:
+
+1. **Metadata-driven**: Derivation logic is specified in standardized
+   metadata (Excel + YAML), not in per-domain R scripts. One metadata file
+   drives all domains.
+2. **Complete pipeline**: From raw data ingestion to validated XPT export
+   and define.xml support --- no manual steps required.
+3. **Preserve what works**: The clean mapping concepts from sdtm.oak
+   (`assign`, `hardcode`, `condition`, `ct`) are preserved and improved.
+
+## What sdtm.oak Does Well and How We Preserved It
+
+| sdtm.oak Strength | sdtmbuilder Equivalent | Improvement |
+|:-------------------|:-----------------------|:------------|
+| `assign_no_ct()` --- simple mapping | `map_direct()` | Adds optional transform functions; metadata-driven |
+| `assign_ct()` --- CT-aware mapping | `assign_ct()` | Adds `unknown_policy`, extensibility awareness, handles `"NA"` text correctly |
+| `hardcode_no_ct()`/`hardcode_ct()` --- constants | `derive_constant()` | Native coalesce support; no overwrite issue |
+| `assign_datetime()` --- date parsing | `parse_partial_date()` + `format_iso_dtc()` | Separate parse/format steps; tracks precision explicitly; supports imputation policy |
+| `condition_add()` --- conditional logic | `derive_if_else()`, `derive_case_when()` | Full multi-branch conditionals in a single call |
+| `derive_study_day()` | `derive_dy()` | **Does not overwrite the DTC column** |
+| `derive_seq()` | `derive_seq()` | Adds dense-rank variant; metadata-driven grouping |
+
+## What sdtm.oak Was Missing and How We Filled It
+
+### Data Import & Standardization (replaced `copy_import()` and friends)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `load_raw_datasets()` | `copy_import()` | Multi-format batch loader (SAS, Excel, CSV, RDS, RDA, XPT) |
+| `standardize_names()` | Manual `tolower()` | Consistent lowercase + clean column names |
+| `standardize_types()` | Manual coercion | Strip haven labels, coerce factors |
+| `apply_missing_conventions()` | `convert_blanks_to_na()` | Blanks → NA, UNK token handling |
+| `derive_core_keys()` | Manual USUBJID derivation | Derive STUDYID + USUBJID from raw data with configurable rules |
+| `infer_source_meta()` | (not possible before) | Auto-detect column names and types from data files |
+
+### Structural Transformations (replaced manual `pivot_longer()`)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `split_records()` | Manual `pivot_longer()` for delimited values | Split delimited fields into multiple records |
+| `expand_checkbox()` | Manual checkbox → records logic | Expand checkbox columns into individual records |
+| `expand_visits()` | Manual visit expansion | Expand records across visit schedules |
+| `bind_sources()` | Manual `bind_rows()` assembly | Stack multiple source datasets with column alignment |
+| `preprocess_domain()` | (not possible before) | Metadata-driven source preprocessing with STACK/LEFT_JOIN merge |
+
+### Cross-Domain Data Access (replaced manual `left_join()`)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `safe_join()` | `left_join()` | Join with cardinality assertions (1:1, m:1, 1:m) --- catches silent fan-out |
+| `get_subject_level()` | Manual DM extraction | Extract one-row-per-subject data for cross-domain reference |
+| `build_domain_from_sources()` | Manual multi-source merge | Multi-source merge + build in one step |
+| `merge_inputs()` → `bind_sources()` | `merge_inputs()` | Column-aligned stacking with empty-dataset handling |
+
+### Visit & Timepoint Derivation (replaced `derive_visit_vars()`, `derive_tpt_vars()`)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `derive_visit()` | `derive_visit_vars()` | **Config-driven** visit mapping (day-window matching, not hardcoded) |
+| `derive_visitnum()` | Part of `derive_visit_vars()` | Lookup-based VISITNUM derivation |
+| `derive_visitdy()` | (not built before) | Derive planned study day of visit |
+| `derive_tpt()` | `derive_tpt_vars()` | Derive --TPT, --TPTNUM, --TPTREF, --ELTM from config |
+
+**Key improvement**: In Example 2, visit and timepoint mappings were
+**hardcoded** in the utility functions (study-specific). In sdtmbuilder,
+they are driven by the **`visit_map`** section of `config.yaml`, making them
+reusable across studies without code changes.
+
+### Flags & Status (replaced `derive_lobxfl()`, manual `--BLFL` logic)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `derive_lobxfl()` | `derive_lobxfl()` | Last observation before exposure, with DM join built-in |
+| `derive_baseline_flag()` | Manual baseline logic | Baseline flag (--BLFL) per subject/test at baseline visit |
+| `derive_lastobs_flag()` | (not built before) | Generic last-observation flag within groups |
+| `derive_occurrence()` | Manual `if_else(!is.na(...), "Y", NA)` | Occurrence derivation |
+| `derive_status()` | (not built before) | NOT DONE / NA status derivation |
+| `derive_seriousness()` | Manual AE seriousness flags | Derive AESER from multiple criterion columns |
+| `derive_ref_time_point()` | (not built before) | --STRTPT/--ENRTPT derivation with pattern/value modes |
+
+### Identifiers & Sequences (replaced manual `mutate()` logic)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `derive_usubjid()` | Manual `paste(STUDYID, SUBJID, sep = "-")` | Configurable separator, validation |
+| `derive_seq()` | `sdtm.oak::derive_seq()` | Dense-rank variant; metadata-driven grouping |
+| `derive_domain_keys()` | Manual hardcoding | Derive STUDYID, DOMAIN, IDVAR, IDVARVAL |
+| `derive_grpid()` / `derive_spid()` | (not built before) | Group and sponsor-defined identifiers |
+
+### Controlled-Terminology Handling (replaced `assign_ct_with_na()` and manual CT logic)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `assign_ct()` | `assign_ct()` + `assign_ct_with_na()` | Unified CT assignment with `unknown_policy` and extensibility |
+| `decode_ct()` | Manual reverse lookup | Coded value → decode text (reverse direction) |
+| `validate_ct_values()` | (not possible before) | Post-build validation of data values against CT |
+| `check_extensibility()` | (not possible before) | Flag data values that violate non-extensible codelist constraints |
+| `get_meddra_version()` / `get_whodrug_version()` | Same | Preserved from Example 2 |
+| `derive_dict_version()` | Manual `paste("MedDRA", ver)` | Standardized dictionary version string |
+
+### Date & Time Handling (replaced workaround patterns)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `parse_partial_date()` | `assign_datetime()` | Separate parsing with precision tracking |
+| `format_iso_dtc()` | Part of `assign_datetime()` | Standalone ISO 8601 formatting |
+| `combine_date_time()` | Part of `assign_datetime()` | Explicit date + time combination |
+| `derive_dy()` | `derive_study_day()` | **Does NOT overwrite DTC column**; correct no-Day-0 logic |
+| `derive_epoch()` | (not built before) | EPOCH assignment from study-day windows |
+| `derive_duration()` | (not built before) | ISO 8601 duration string (`PnD`) |
+| `apply_imputation_policy()` | (not handled before) | Systematic partial-date imputation per study policy |
+
+### SUPP & RELREC Construction (addressed Gap 7)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `build_supp()` | (not possible before) | Automated SUPP-- generation from domain data + metadata |
+| `build_relrec()` | Manual RELREC construction | Automated RELREC from relationship specifications |
+
+### Domain Finalization & Export (replaced `sdtm_create_domain()`)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `finalize_domain()` | `sdtm_create_domain()` | Metadata-driven: select, order, label, type, round, truncate, sort |
+| `export_domain()` | Part of `sdtm_create_domain()` | Multi-format: XPT v5/v8, RDS, CSV, RDA with metadata enforcement |
+| `write_define_support()` | (not possible before) | Define.xml support CSV generation |
+| `write_codelist_support()` | (not possible before) | CT library export for define.xml |
+| `write_value_level_support()` | (not possible before) | VLM support for define.xml |
+| `write_origin_support()` | (not possible before) | Variable origin mapping for define.xml |
+
+### Validation (addressed Gap 9)
+
+sdtmbuilder provides **16 validation functions** that sdtm.oak does not offer at all:
+
+- Required variable presence and non-missingness
+- Key uniqueness
+- ISO 8601 conformance
+- Controlled-terminology conformance (extensible-codelist aware)
+- Column types, labels, and lengths vs. metadata
+- Value-level metadata conformance
+- Cross-domain consistency (STUDYID, USUBJID)
+- Sequence integrity (positive integers, no gaps)
+- Duplicate row detection
+- Domain value correctness
+
+### Orchestration & Pipeline (addressed Gap 10)
+
+| sdtmbuilder Function | Replaces | Capability |
+|:----------------------|:---------|:-----------|
+| `run_study()` | `create_all_qc()` | One-call: config → metadata → rules → build → validate → export |
+| `build_all_domains()` | `create_sdtm_qc()` | Dependency-ordered multi-domain build |
+| `build_dependency_graph()` | (not possible before) | Automatic variable-level DAG construction |
+| `topo_sort_rules()` | (not possible before) | Topological sort for correct derivation order |
+| `compile_rules()` | (not possible before) | Metadata → executable rules compiler |
+
+### Code Generation (entirely new capability)
+
+| sdtmbuilder Function | Description |
+|:----------------------|:------------|
+| `gen_domain_script()` | Auto-generate standalone R scripts for each domain |
+| `gen_qmd_domain()` | Auto-generate Quarto `.qmd` reports with variable tables |
+| `gen_project_scaffold()` | Create project directory structure with templates |
+| `gen_shared_utils_script()` | Generate shared utility script with library loads |
+
+---
+
+# Part III --- Summary Comparison
+
+## By the Numbers
+
+| Aspect | sdtm.oak (Example 2) | sdtmbuilder |
+|:-------|:---------------------|:------------|
+| Core functions used / available | 7--9 | **146** |
+| Custom utility functions required | 16 | **0** (built-in) |
+| Domains with manual `pivot_longer()` | 8 | **0** (metadata-driven preprocessing) |
+| Domains with manual cross-domain joins | 10+ | **0** (safe_join + build_domain_from_sources) |
+| `derive_study_day()` TMP workaround needed | 12 domains | **Never** (derive_dy is clean) |
+| Validation checks | 0 | **16 automated checks** |
+| Supported export formats | XPT (manual) | XPT v5/v8, RDS, CSV, RDA |
+| Code generation | None | R scripts + Quarto reports |
+| Define.xml support | None | 4 support artifact generators |
+| Metadata-driven pipeline | No | **Yes** --- config.yaml + Study_Metadata.xlsx |
+
+## What We Kept from sdtm.oak
+
+The fundamental **concepts** that sdtm.oak introduced are preserved:
+
+1. **Declarative variable mapping** (source → target) --- now via `map_direct()` and metadata rules
+2. **Controlled-terminology awareness** --- now via improved `assign_ct()` with extensibility and `unknown_policy`
+3. **Conditional assignments** --- now via `derive_if_else()` and `derive_case_when()` (multi-branch)
+4. **ISO 8601 date handling** --- now via a cleaner parse → format pipeline
+5. **Study day derivation** --- now via `derive_dy()` without side effects
+6. **Sequence derivation** --- now via `derive_seq()` with metadata-driven grouping
+
+## What We Fixed
+
+| sdtm.oak Pitfall | sdtmbuilder Fix |
+|:-----------------|:----------------|
+| `derive_study_day()` overwrites DTC | `derive_dy()` is side-effect free |
+| `hardcode_*()` doesn't support coalesce | `derive_constant()` + rule chaining with native coalesce |
+| `assign_ct()` can't handle `"NA"` text | `assign_ct()` with `unknown_policy` parameter |
+| Hard errors on missing source files | `load_raw_datasets()` with graceful fallback |
+| No consistent logging | Structured logging (`log_info`, `log_warn`, `log_error`) with context |
+| No error context in failures | `stop_with_context()` / `warn_with_context()` with data snippets |
+
+## What We Added
+
+| Category | Functions Added | Example 2 Gap Addressed |
+|:---------|:---------------|:------------------------|
+| Data import & standardization | 6 functions | Gap 1: No import/export framework |
+| Structural transformations | 4 functions | Gap 2: No pivot/array support |
+| Cross-domain joins | 4 functions | Gap 3: No join utilities |
+| Visit/timepoint derivation | 4 functions (config-driven) | Gap 4: No visit functions |
+| Flags & status | 7 functions | Gap 5: No baseline/LOBXFL flags |
+| ARM derivation | Via DM plugin + `derive_case_when()` | Gap 6: No ARM logic |
+| SUPP/RELREC builders | 2 functions | Gap 7: No SUPP/RELREC |
+| Domain finalization & export | 6 functions + 4 define.xml writers | Gap 8: No finalization |
+| Validation | 16 functions | Gap 9: No validation |
+| Orchestration & dependency | 5 functions + `run_study()` | Gap 10: No orchestration |
+| Rule engine & metadata | 19 functions | **New**: metadata-driven pipeline |
+| Code generation | 4 functions | **New**: auto-generate R/Quarto programs |
+| Method parsing & DSL | 4 functions | **New**: METHOD column DSL |
+| Additional derivations | 15+ functions | Regex, concat, trim, round, unit, coalesce, etc. |
+
+---
+
+# Part IV --- Phased Development and Rollout Plan
+
+## Rationale for a Phased Approach
+
+Not all SDTM domains are equally complex.  A trial-design domain like **TV**
+(9 rows, no subjects, data comes from the protocol) is fundamentally different
+from **FA** (97 rows, 5 stacked blocks, pivoted from 2 raw files, with
+timepoint mapping, cross-domain DM join, and value-level metadata).
+
+This section classifies every domain currently built in the study-pilot by
+**difficulty**, quantifies the **metadata burden** the programmer must supply
+in `Study_Metadata.xlsx`, identifies **what sdtm.oak can and cannot do** for
+each tier, and explains **what sdtmbuilder unlocks** in each phase.  The goal
+is to give a concrete plan for which domains to tackle first during the
+package rollout and where the most value is delivered relative to development
+effort.
+
+## Difficulty Scoring Methodology
+
+Each domain receives a difficulty score from **1** (trivial) to **5**
+(very complex) based on five orthogonal complexity drivers:
+
+| Driver | Weight | What It Measures |
+|:-------|:------:|:-----------------|
+| **S — Sources** | × 1 | Number of raw datasets / Sources rows to configure |
+| **P — Preprocessing** | × 1.5 | Stacking, joining, pivoting, filtering before `build_domain()` |
+| **D — Derivation** | × 1 | Number of variables with METHOD rules / complex `case_when` / multi-branch logic |
+| **X — Cross-domain** | × 0.5 | Dependencies on other built domains (DM for RFSTDTC, AE for seriousness, etc.) |
+| **M — Metadata burden** | × 1 | Total rows the programmer must fill in Sources + Source Columns sheets |
+
+The formula is:
+
+$$\text{Score} = \text{S} + 1.5 \times \text{P} + \text{D} + 0.5 \times \text{X} + \text{M}$$
+
+with each driver scored 0--5 and the total normalized to a 1--5 scale.
+
+## Per-Domain Difficulty Assessment
+
+The following table summarizes all 22 domains built in the study-pilot,
+plus 3 additional domains from Example 2 (DA, SU, LB) that represent
+future work.  The phases below reflect a revised classification that
+groups domains by the **type of data assembly** required, rather than by
+difficulty score alone.
+
+```{r difficulty-table, echo=FALSE}
+library(knitr)
+
+diff <- data.frame(
+  Domain = c(
+    "TI", "TV",
+    "AE", "XS", "CM", "MH", "PR", "IE",
+    "SV", "ML", "QS", "VS", "BE", "APSC",
+    "CO", "SC", "DS", "CE", "EC", "EX", "FA",
+    "DM",
+    "RELREC",
+    "DA", "SU", "LB"
+  ),
+  Phase = c(
+    rep("1 — Config-driven trial design", 2),
+    rep("2 — Direct mapping (no Sources needed)", 6),
+    rep("3 — Single source + stacking", 6),
+    rep("4 — Multi-source stacking", 7),
+    "5 — Cross-domain joining",
+    "6 — RELREC",
+    rep("Future domains", 3)
+  ),
+  Score = c(
+    1.0, 1.0,
+    3.0, 2.0, 2.0, 2.0, 2.5, 4.0,
+    2.5, 2.5, 4.5, 4.0, 4.0, 3.0,
+    1.5, 3.0, 3.5, 4.0, 3.0, 3.0, 5.0,
+    3.5,
+    3.0,
+    4.0, 4.5, 5.0
+  ),
+  Sources_rows = c(
+    0, 0,
+    0, 0, 0, 0, 0, 2,
+    1, 1, 2, 5, 6, 4,
+    4, 3, 4, 3, 4, 4, 5,
+    3,
+    0,
+    NA, NA, NA
+  ),
+  SourceCols_rows = c(
+    0, 0,
+    0, 0, 0, 0, 0, 12,
+    2, 16, 8, 44, 90, 24,
+    16, 21, 20, 19, 37, 16, 51,
+    3,
+    0,
+    NA, NA, NA
+  ),
+  Variables = c(
+    8, 9,
+    84, 49, 61, 54, 68, 20,
+    18, 56, 47, 50, 49, 28,
+    16, 28, 18, 50, 69, 41, 44,
+    38,
+    10,
+    29, 53, 68
+  ),
+  Preprocessing = c(
+    "None", "None",
+    "None", "None", "None", "None", "None", "STACK × 2",
+    "STACK × 1 + FILTER", "STACK × 1", "STACK × 1 + POST", "STACK × 4 + POST", "STACK × 6", "STACK × 4",
+    "STACK × 4 + POST", "STACK × 3", "STACK × 4", "STACK × 2 + POST", "STACK × 3 + POST", "STACK × 3 + POST", "STACK × 5",
+    "LEFT_JOIN × 3",
+    "Config-driven",
+    "STACK × 2", "STACK × 6", "STACK + PIVOT"
+  ),
+  stringsAsFactors = FALSE
+)
+
+kable(diff,
+      col.names = c("Domain", "Phase", "Difficulty", "Sources", "Source Cols",
+                     "Variables", "Preprocessing"),
+      align = c("l", "l", "c", "c", "c", "c", "l"),
+      caption = "Domain difficulty scores and metadata burden for phased rollout")
+```
+
+## Phase 1 — Config-Driven Trial Design Domains
+
+### Domains: TI, TV
+
+These are the simplest domains in SDTM.  **TI** and **TV** contain no
+subject-level data at all — their content comes entirely from the protocol
+(I/E criteria and visit schedule) and is specified in `config.yaml`.  No
+raw data files are read, no Sources or Source Columns rows are needed.
+
+**What the programmer needs to provide:**
+
+- Only the `Variables` sheet (variable names, labels, types).  The data
+  itself is auto-generated from `ie_criteria` (TI) and `visit_map` (TV)
+  in `config.yaml`.
+
+**Can sdtm.oak handle these?**
+
+- **No** — sdtm.oak has no concept of config-driven data generation.
+  The programmer would have to manually create a tibble from the protocol
+  and then map it.  sdtm.oak's `assign_no_ct()` could map the columns,
+  but the scaffolding (reading config, generating rows) is entirely custom.
+
+**What sdtmbuilder unlocks:**
+
+- `expand_config_domains()` automatically generates TI and TV data from
+  `config.yaml` — zero code, zero Sources rows.  The programmer literally
+  only fills in the `Variables` sheet and runs `run_study()`.
+
+**Phase 1 summary: sdtmbuilder eliminates all custom code for trial design
+domains.  sdtm.oak provides no value here.**
+
+---
+
+## Phase 2 — Direct-Mapping Domains (No Sources Specification Needed)
+
+### Domains: AE, XS, CM, MH, PR, IE
+
+These domains are derived directly from a single implied raw dataset with
+mostly 1:1 variable mappings.  The programmer only fills in the `Variables`
+sheet — no Sources or Source Columns metadata is required (or minimal for
+IE).  Cross-domain DM access (for RFSTDTC) is the only dependency.
+
+**Metadata burden:**
+
+| Domain | Sources | Source Cols | Variables | Notes |
+|:-------|:-------:|:----------:|:---------:|:------|
+| AE | 0 | 0 | 84 | MedDRA coding + SAE merge; seriousness derivation |
+| XS | 0 | 0 | 49 | SAE-specific flags; all variables direct-mapped |
+| CM | 0 | 0 | 61 | WHODrug coding; dictionary fields + dates |
+| MH | 0 | 0 | 54 | MedDRA coding; pre-existing and ongoing conditions |
+| PR | 0 | 0 | 68 | MedDRA merge (handled internally) |
+| IE | 2 | 12 | 20 | 2 STACK blocks (inclusion + exclusion) from same raw file |
+
+AE, XS, CM, MH, and PR need **zero** Sources and Source Columns rows —
+only the `Variables` sheet with METHOD expressions like `direct(aetrt)`,
+`format_date(aestdat)`, `hardcode("AE")`.  IE requires 2 Sources rows
+to split inclusion and exclusion criteria from the same raw file, but the
+mapping logic itself remains straightforward.
+
+**Can sdtm.oak handle these?**
+
+- **Mostly yes** — this is sdtm.oak's sweet spot.  `assign_no_ct()`,
+  `assign_ct()`, `assign_datetime()`, `derive_seq()`, and
+  `derive_study_day()` cover the core variable mappings.
+- **Missing**: DM cross-domain join for RFSTDTC (must be manually coded),
+  domain finalization (variable ordering, labels, export), dictionary
+  version extraction, conditional derivations (e.g., CMENRTPT/CMENTPT).
+- **Pain point**: The `derive_study_day()` TMP workaround still applies.
+
+**What sdtmbuilder unlocks:**
+
+- The `Variables` sheet METHOD column drives all derivations — the programmer
+  specifies `direct(aetrt)` or `case_when(cmongo == "Y" ~ "ONGOING")` and
+  `build_domain()` handles execution.
+- `derive_dy()` replaces `derive_study_day()` without the TMP workaround.
+- `finalize_domain()` + `export_domain()` handle all post-derivation steps.
+- DM RFSTDTC access is automatic — `build_domain()` loads the built DM
+  dataset and joins it when `--DY` or `RFSTDTC` is needed.
+
+**Phase 2 summary: sdtm.oak handles the variable mappings but requires
+manual code for import, DM join, finalization, and export.  sdtmbuilder
+provides a fully declarative workflow via the `Variables` sheet with no
+R code needed.**
+
+---
+
+## Phase 3 — Single-Source Stacking Domains
+
+### Domains: SV, ML, QS, VS, BE, APSC
+
+These domains read from **one raw dataset** but need to create multiple
+SDTM record types by stacking blocks from it.  Each STACK block selects
+and maps a different subset of columns or rows from the same source file.
+Some include a POST step for deduplication or additional derivations.
+
+**Metadata burden:**
+
+| Domain | Source File | STACK Blocks | Source Cols | Variables | Notes |
+|:-------|:----------:|:------------:|:----------:|:---------:|:------|
+| SV | event_dates | 1 | 2 | 18 | FILTER on EventStatus + EventId |
+| ML | ml | 1 | 16 | 56 | Single block with 16 Source Column derivations |
+| QS | qs_asq | 1 + POST | 8 | 47 | Questionnaire pivot + post-processing |
+| VS | an | 4 + POST | 44 | 50 | 4 blocks (weight, height, blood, head circ.) |
+| BE | lbs | 6 | 90 | 49 | 6 blocks: 4 stool + 2 blood specimen types |
+| APSC | apsc | 4 | 24 | 28 | 4 blocks: 2 respondents × (education + employment) |
+
+**BE** stands out with **90 Source Columns rows** — each of its 6 stacked
+blocks (stool collection, stool storage, stool refrigeration, stool freezing,
+venous blood collection, capillary blood collection) maps ~15 raw columns to
+derived SDTM columns via hardcode/direct/case_when methods.
+
+**Can sdtm.oak handle these?**
+
+- **Variable mappings**: Yes, `assign_no_ct()` / `assign_ct()` work for 1:1
+  mappings after the data is assembled.
+- **Stacking**: **No** — sdtm.oak has no `bind_sources()` or preprocessing
+  engine.  The programmer must manually write `bind_rows()` with column
+  alignment for each block.  For BE, this means 6 separate code blocks,
+  each with different column groups, manually harmonized before binding.
+- **Visit/timepoint mapping**: **No** — sdtm.oak has no visit or timepoint
+  derivation functions; the programmer manually maps visit codes to VISIT,
+  VISITNUM, VISITDY.
+
+**What sdtmbuilder unlocks:**
+
+- The `Sources` sheet declares one row per STACK block.  The Source Columns
+  sheet defines per-block column derivations (`hardcode()`, `direct()`,
+  `case_when()`), so the stacked result has consistent column names before
+  entering `build_domain()`.
+- `MAP_VISIT: Y` or `MAP_VISIT: FILTER` triggers automatic visit mapping
+  from `visit_map` in `config.yaml`.
+- `MAP_TIMEPOINT: Y` triggers automatic timepoint mapping from
+  `timepoint_map`.
+
+**Phase 3 summary: The preprocessing engine handles all stacking and visit
+mapping automatically.  Without sdtmbuilder, each stacked block requires
+manual `bind_rows()` code with per-block column harmonization — 50–200 lines
+of R code per domain replaced by metadata rows.**
+
+---
+
+## Phase 4 — Multi-Source Stacking Domains
+
+### Domains: CO, SC, DS, CE, EC, EX, FA
+
+These domains combine data from **multiple distinct raw datasets** by
+stacking.  Some include POST steps for deduplication, filtering, or
+additional derivations after the initial stack.  The key difference from
+Phase 3 is that the raw data comes from **different source files**, each
+with its own structure and column names.
+
+**Metadata burden:**
+
+| Domain | Source Files | STACK Blocks | Source Cols | Variables | Notes |
+|:-------|:----------:|:------------:|:----------:|:---------:|:------|
+| CO | co, lbs, vstat | 3 + POST | 16 | 16 | Comments from 3 different CRFs |
+| SC | lbs, sc | 3 | 21 | 28 | Health status + gestational age + delivery mode |
+| DS | ic, ie, rand, eos | 4 | 20 | 18 | 4 milestone event sources |
+| CE | stool, giq | 2 + POST | 19 | 50 | Stool diary + GI questionnaire; timepoint mapping |
+| EC | ec, ex_diary, ex_int | 3 + POST | 37 | 69 | CRF + diary + intervention; timepoint mapping |
+| EX | ex, ex_diary, ex_int | 3 + POST | 16 | 41 | Same 3 sources as EC; exposure perspective |
+| FA | fa_stool, fa_occur | 5 | 51 | 44 | 3 stool blocks + 2 occurrence blocks; timepoint + VLM |
+
+**Can sdtm.oak handle these?**
+
+- **Variable mappings**: Yes, `assign_no_ct()` / `assign_ct()` work after
+  data assembly.
+- **Multi-source stacking**: **No** — the programmer must manually write
+  `bind_rows()` for each source, harmonizing column names across files.
+  For EC/EX, this means 3 separate read + transform + bind steps with
+  different raw column structures.
+- **POST processing**: **No** — deduplication, timepoint mapping, and
+  post-stack derivations require manual code.
+- **Timepoint mapping** (CE, EC, EX, FA): **No** — sdtm.oak has no
+  timepoint derivation; the programmer manually maps activity IDs to TPT,
+  TPTNUM, ELTM, TPTREF.
+- **Value-level metadata** (FA): **No** — FA's FAORRES derivation depends
+  on FATESTCD, requiring VLM-aware branching that sdtm.oak cannot express.
+
+**What sdtmbuilder unlocks:**
+
+- The `Sources` sheet declares `MERGE_TYPE: STACK` for each raw file block
+  and `MERGE_TYPE: POST` for post-processing steps.
+- `MAP_TIMEPOINT: Y` triggers automatic timepoint derivation from
+  `timepoint_map` in `config.yaml`.
+- The `Value Level` and `Where Clauses` sheets drive VLM-aware derivations
+  for findings domains like FA.
+- Source Columns ensure consistent derived column names across heterogeneous
+  source files before stacking.
+
+**Phase 4 summary: Multi-source domains require the most metadata rows
+(up to 51 Source Columns for FA), but this is a one-time cost vs.
+maintaining 100–350 lines of bespoke R code per domain.  sdtmbuilder's
+preprocessing engine replaces all data assembly with declarative metadata.**
+
+---
+
+## Phase 5 — Cross-Domain Joining
+
+### Domain: DM
+
+DM is the most complex domain structurally because it requires
+**joining** secondary datasets into the primary source, not just stacking.
+
+**Metadata burden:**
+
+| Domain | Source Files | JOIN Blocks | Source Cols | Variables | Key Complexity |
+|:-------|:----------:|:----------:|:----------:|:---------:|:---------------|
+| DM | ex, ae, rand | 3 LEFT_JOINs | 3 | 38 | RFSTDTC/RFXSTDTC from EX, DTHDTC from AE, ARM from randomization |
+
+DM merges 3 secondary sources via LEFT_JOIN to assemble timing variables
+(RFSTDTC, RFENDTC, RFXSTDTC, RFXENDTC, RFICDTC, DTHDTC) and treatment
+arm information (ARM, ARMCD, ACTARM, ACTARMCD).  Conditional multi-branch
+derivation determines DTHFL from the fatal AE and SAE death records.
+
+**Can sdtm.oak handle this?**
+
+- **Not adequately**.  sdtm.oak's simple mapping functions handle individual
+  columns but provide no assembly framework for multi-source joins.  In
+  Example 2, DM was the most manually-coded domain — requiring ~200 lines
+  of custom R code for the 3-way merge, conditional ARM derivation, and
+  6+ timing variable computations.
+
+**What sdtmbuilder unlocks:**
+
+- The `Sources` sheet declares `MERGE_TYPE: LEFT_JOIN` with
+  `JOIN_BY: subjectid` for each secondary source.  The preprocessing engine
+  handles all merges automatically.
+- `derive_dy()`, `derive_usubjid()`, and the Variables METHOD column handle
+  all timing and arm derivations declaratively.
+- The 3-tier DM lookup for RFSTDTC (config path → SDTM folder → raw
+  fallback) ensures correct study day derivation across all domains that
+  depend on DM.
+
+**Phase 5 summary: DM's cross-domain joins are the most complex assembly
+pattern in the study.  sdtmbuilder's `LEFT_JOIN` preprocessing replaces
+~200 lines of manual merge code with 3 Sources rows.**
+
+---
+
+## Phase 6 — RELREC
+
+### Domain: RELREC
+
+RELREC stands completely apart from the other domains.  It does not read
+raw data at all — instead, it defines **relationships between records in
+other built domains**.  RELREC is config-driven, reading the `relrec:`
+section of `config.yaml`.
+
+**What the programmer provides:**
+
+- The `relrec:` section in `config.yaml` defining relationship pairs:
+  `record` (link columns in raw data), `identity` (matching records across
+  domains), `seq_lookup` (sequence-based cross-references), and `domain`
+  (domain-level relationships).
+
+**Can sdtm.oak handle this?**
+
+- **No** — sdtm.oak has no RELREC builder.  The programmer must manually
+  create paired rows for each relationship, look up sequence numbers,
+  and assemble the RELREC structure.
+
+**What sdtmbuilder unlocks:**
+
+- `build_relrec()` reads the config and automatically generates paired
+  RELREC rows from link columns, identity relationships, and
+  sequence-lookup cross references.  Supports all 4 relationship types.
+
+**Phase 6 summary: RELREC is a unique meta-domain that benefits from
+full automation via `build_relrec()`.  No sdtm.oak equivalent exists.**
+
+---
+
+## Future Domains Not Yet in Study-Pilot
+
+### Domains: DA, SU, LB
+
+These domains were built in Example 2's QC programs but are not yet
+implemented in the study-pilot.  They represent the next frontier for
+sdtmbuilder.
+
+| Domain | Example 2 QC Lines | Key Complexity | sdtm.oak Sufficient? |
+|:-------|:------------------:|:---------------|:---------------------|
+| **DA** | 249 | 2× STACK (dispensed + returned); lot tracking via cross-source JOIN; visit/day derivation | No — stacking + join not supported |
+| **SU** | 351 (longest!) | 6× STACK — one block per substance type (alcohol, cigarettes, cigars, pipe, e-cig+nic, e-cig−nic); each with separate column groups | No — 6-way stack is entirely manual; 100+ lines of bind_rows code |
+| **LB** | Not implemented | 3 raw files (lbs, lbs_img, lbs_simg); wide-to-long pivot of analytes; normal range derivation; LBBLFL baseline flag; unit conversion | No — pivot + multi-source + baseline flag not supported |
+
+**What sdtmbuilder would unlock for these:**
+
+- **DA**: Declare 2 STACK blocks in Sources + Source Columns for
+  DATESTCD=DISPAMT and DATESTCD=RETAMT.  Add a LEFT_JOIN for lot tracking.
+  All derivations via the Variables METHOD column.
+- **SU**: Declare 6 STACK blocks — one per substance — each with its own
+  Source Columns mappings for SUTRT, SUCAT, SUDOSE, SUOCCUR.  This replaces
+  351 lines of manual R code with ~30 Sources/Source Columns rows.
+- **LB**: STACK 3 source files + PIVOT_PATTERN for analyte columns +
+  `derive_baseline_flag()` + `derive_lobxfl()`.  LB is the ultimate test
+  of the preprocessing engine's pivot capability.
+
+---
+
+## Phase Comparison Matrix
+
+```{r phase-matrix, echo=FALSE}
+library(knitr)
+
+pm <- data.frame(
+  Phase = c("1 — Config-driven", "2 — Direct mapping",
+            "3 — Single-source stacking", "4 — Multi-source stacking",
+            "5 — Cross-domain joining", "6 — RELREC"),
+  Domains = c(
+    "TI, TV",
+    "AE, XS, CM, MH, PR, IE",
+    "SV, ML, QS, VS, BE, APSC",
+    "CO, SC, DS, CE, EC, EX, FA",
+    "DM",
+    "RELREC"
+  ),
+  Score_Range = c("1.0", "2.0–4.0", "2.5–4.5", "1.5–5.0", "3.5", "3.0"),
+  sdtm_oak = c(
+    "Cannot handle. No config-driven generation.",
+    "Handles variable mappings only. Manual import, DM join, finalization, export.",
+    "Handles final column assignments. Manual stacking and visit mapping required.",
+    "Handles final assignments. Manual multi-source stacking, timepoint mapping, POST.",
+    "Fundamentally insufficient. Manual 3-way merge + conditional derivation.",
+    "No RELREC builder. Entirely manual."
+  ),
+  sdtmbuilder = c(
+    "Fully automated. Zero R code. Only Variables sheet needed.",
+    "Fully declarative. Variables METHOD column drives all derivations.",
+    "Sources sheet handles stacking/filtering. Source Columns define per-block mappings.",
+    "Preprocessing engine + Source Columns + MAP_TIMEPOINT + VLM handle all complexity.",
+    "LEFT_JOIN preprocessing replaces ~200 lines of merge code with 3 Sources rows.",
+    "build_relrec() generates all relationship pairs from config."
+  ),
+  Metadata_Effort = c(
+    "Minimal: ~17 Variables rows total",
+    "Low: ~336 Variables rows, 0–12 Source Cols",
+    "Medium: ~248 Variables, ~19 Sources, ~184 Source Cols",
+    "Medium–High: ~266 Variables, ~24 Sources, ~180 Source Cols",
+    "Low: 38 Variables, 3 Sources, 3 Source Cols",
+    "Config only: relrec: section in config.yaml"
+  ),
+  stringsAsFactors = FALSE
+)
+
+kable(pm,
+      col.names = c("Phase", "Domains", "Difficulty", "sdtm.oak Capability",
+                     "sdtmbuilder Capability", "Metadata Effort"),
+      caption = "Phase comparison: sdtm.oak vs. sdtmbuilder capability by domain tier")
+```
+
+## What Each Phase Unlocks
+
+### Phase 1 → Phase 2 Unlock
+
+Moving from config-driven to direct-mapping domains unlocks the **core
+derivation engine** — the `Variables` sheet METHOD column (`direct()`,
+`format_date()`, `hardcode()`, `case_when()`, `derive_dy()`, `derive_seq()`).
+This is the heart of sdtmbuilder and covers the same ground as sdtm.oak's
+`assign_no_ct()` / `assign_ct()` but in a metadata-driven, no-code fashion.
+
+**Functions exercised**: `build_domain()`, `compile_rules()`,
+`derive_variable()`, `derive_dy()`, `derive_seq()`, `derive_usubjid()`,
+`finalize_domain()`, `export_domain()`.
+
+### Phase 2 → Phase 3 Unlock
+
+Single-source stacking domains unlock the **preprocessing engine** — the
+Sources and Source Columns sheets, `preprocess_domain()`, `bind_sources()`,
+and the `MAP_VISIT` / `MAP_TIMEPOINT` automatic derivations.  Even though
+these domains read from one raw file, the STACK blocks demonstrate how
+sdtmbuilder creates multiple record types from a single source.
+
+**Functions exercised**: `preprocess_domain()`, `bind_sources()`,
+`derive_visit()`, `derive_tpt()`, `assign_ct()`.
+
+### Phase 3 → Phase 4 Unlock
+
+Multi-source stacking domains demonstrate that the preprocessing engine
+scales to **heterogeneous raw datasets** — each with different column
+structures — combined into a single SDTM domain.  POST steps, timepoint
+mapping, and value-level metadata add further automation layers.
+
+**Functions exercised**: All of the above, plus `expand_value_level_meta()`,
+`build_supp()`, `split_records()`.
+
+### Phase 4 → Phase 5 Unlock
+
+Cross-domain joining introduces the `LEFT_JOIN` merge type, demonstrating
+that sdtmbuilder can handle not just row-binding (stacking) but also
+column-binding (merging) across datasets.  DM is the canonical example.
+
+**Functions exercised**: All of the above, plus `safe_join()` and the
+3-tier DM lookup logic.
+
+### Phase 5 → Phase 6 Unlock
+
+RELREC validates the **config-driven meta-domain** pattern, showing that
+sdtmbuilder can generate structural relationship records without any raw
+data input — purely from config declarations.
+
+**Functions exercised**: `build_relrec()`, `expand_config_domains()`.
+
+### Generalizability (Future Domains)
+
+Future domains (DA, SU, LB) validate the **generalizability** of the
+framework.  If they can be built by adding only metadata rows (no new R
+functions), then sdtmbuilder has achieved its design goal of being a
+**study-agnostic, metadata-driven SDTM build system**.
+
+---
+
+## Key Insight: Metadata Cost vs. Code Cost
+
+The following table compares the effort required **per domain** for
+sdtm.oak vs. sdtmbuilder for representative domains from each phase:
+
+```{r effort-comparison, echo=FALSE}
+library(knitr)
+
+effort <- data.frame(
+  Domain = c("TV", "CM", "EC", "FA", "SU (Ex2)"),
+  Phase = c(1, 2, 3, 4, 5),
+  sdtm_oak_code = c(
+    "~30 lines (manual tibble + assign)",
+    "~80 lines (import + assign × 30 + DM join + export)",
+    "~150 lines (3× bind_rows + assign × 30 + TPT mapping + export)",
+    "~200 lines (5× pivot/stack + assign × 25 + TPT + VLM + export)",
+    "~350 lines (6× bind_rows + assign × 30 + visit mapping + export)"
+  ),
+  sdtmbuilder_meta = c(
+    "9 Variables rows + config.yaml visit_map",
+    "61 Variables rows (30 with METHOD)",
+    "69 Variables + 4 Sources + 37 Source Cols = 110 metadata rows",
+    "44 Variables + 5 Sources + 51 Source Cols = 100 metadata rows",
+    "53 Variables + 6 Sources + ~40 Source Cols ≈ 100 metadata rows (est.)"
+  ),
+  sdtmbuilder_code = c("0 lines", "0 lines", "0 lines", "0 lines", "0 lines"),
+  stringsAsFactors = FALSE
+)
+
+kable(effort,
+      col.names = c("Domain", "Phase", "sdtm.oak Custom R Code",
+                     "sdtmbuilder Metadata", "sdtmbuilder Custom R Code"),
+      caption = "Effort comparison: R code lines vs. metadata rows per domain")
+```
+
+**The takeaway**: sdtm.oak requires **30–350 lines of custom R code per
+domain**, scaling linearly with domain complexity.  sdtmbuilder requires
+**0 lines of R code** regardless of complexity — the effort shifts to filling
+in metadata rows, which are declarative, auditable, and reusable across
+studies.
+
+For a 22-domain study like the pilot, this means:
+
+- **sdtm.oak path**: ~2,500 lines of custom R code across 22 programs,
+  plus 16 utility functions — approximately **4,000+ lines** of study-specific
+  code that must be written, reviewed, validated, and maintained.
+- **sdtmbuilder path**: ~900 Variables rows + ~50 Sources rows + ~350
+  Source Columns rows + `config.yaml` = **~1,300 metadata rows** in
+  standardized Excel sheets, plus **one `run_study()` call**.
+
+---
+
+# Conclusion
+
+Our experience programming SDTM domains in R for Example 2 demonstrated that
+**sdtm.oak provides a useful but narrow foundation** --- approximately 7--9
+low-level mapping functions that handle the simplest part of the SDTM
+workflow.  The real complexity lies in data import, structural
+transformations, cross-domain integration, visit/timepoint derivation,
+domain finalization, validation, and orchestration --- **none of which
+sdtm.oak addresses**.
+
+**sdtmbuilder** was built to provide a **complete, metadata-driven solution**
+that:
+
+- **Preserves** sdtm.oak's strengths (declarative mappings, CT awareness,
+  conditional logic)
+- **Fixes** its pitfalls (DTC overwriting, coalesce gaps, `"NA"` handling)
+- **Fills** all 10 identified gaps with 146 production-ready functions
+- **Adds** entirely new capabilities: metadata-driven pipeline orchestration,
+  rule compilation from Excel, dependency graph resolution, automated
+  validation, code generation, and define.xml support
+
+The result is a package that takes SDTM programming in R from a
+toolkit-with-assembly-required to a **turnkey, metadata-driven framework**
+that can be applied to new studies by updating metadata files rather than
+writing bespoke R code for each domain.

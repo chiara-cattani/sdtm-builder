@@ -4,7 +4,7 @@
 \alias{plan_build_steps}
 \title{Generate a domain-level build plan}
 \usage{
-plan_build_steps(domain, dep_graph, rule_set, source_meta)
+plan_build_steps(domain, dep_graph, rule_set)
 }
 \arguments{
 \item{domain}{Character.}
@@ -12,8 +12,6 @@ plan_build_steps(domain, dep_graph, rule_set, source_meta)
 \item{dep_graph}{Output of \code{build_dependency_graph}.}
 
 \item{rule_set}{\code{rule_set}.}
-
-\item{source_meta}{Tibble.}
 }
 \value{
 Tibble with build steps.

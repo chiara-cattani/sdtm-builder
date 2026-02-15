@@ -62,6 +62,48 @@ derive_constant <- function(data, target_var, value, when = NULL, type = NULL) {
   data
 }
 
+#' Derive SOURCEID from review_status lookup
+#'
+#' Looks up the CRF form name from a review_status-like dataset and sets
+#' SOURCEID = "CRF: <FormName>".
+#'
+#' @param data Tibble.
+#' @param target_var Character — target column name.
+#' @param form_id Character — the form code to look up (e.g. "AE").
+#' @param raw_data Named list of raw datasets.
+#' @param dataset Character — name of the review_status dataset in raw_data.
+#' @param id_col Character — column containing form IDs.
+#' @param name_col Character — column containing form names.
+#' @return Tibble.
+#' @export
+derive_sourceid <- function(data, target_var, form_id,
+                            raw_data = NULL,
+                            dataset = "review_status",
+                            id_col = "formid",
+                            name_col = "formname") {
+  form_name <- NA_character_
+  if (!is.null(raw_data) && dataset %in% names(raw_data)) {
+    rs <- raw_data[[dataset]]
+    nms <- tolower(names(rs))
+    names(rs) <- nms
+    id_col_lc   <- tolower(id_col)
+    name_col_lc <- tolower(name_col)
+    if (id_col_lc %in% nms && name_col_lc %in% nms) {
+      match_idx <- which(tolower(rs[[id_col_lc]]) == tolower(form_id))
+      if (length(match_idx) > 0L) {
+        form_name <- trimws(rs[[name_col_lc]][match_idx[1]])
+      }
+    }
+  }
+  val <- if (!is.na(form_name) && nchar(form_name) > 0L) {
+    paste("CRF:", form_name)
+  } else {
+    paste("CRF:", form_id)
+  }
+  data[[target_var]] <- val
+  data
+}
+
 #' Derive variable as first non-missing across sources
 #' @param data Tibble.
 #' @param target_var Character.
@@ -114,7 +156,27 @@ derive_case_when <- function(data, target_var, conditions, default = NA) {
     mask <- rlang::eval_tidy(rlang::parse_expr(cond_expr), data = data)
     mask[is.na(mask)] <- FALSE
     to_set <- mask & !matched
-    result[to_set] <- conditions[[cond_expr]]
+
+    val_expr <- conditions[[cond_expr]]
+    # If the value looks like an R expression (references a column or function),
+    # evaluate it against the data; else treat as literal string.
+    val <- tryCatch({
+      parsed <- rlang::parse_expr(val_expr)
+      evaluated <- rlang::eval_tidy(parsed, data = data)
+      # length-n vector  = row-wise expression result
+      # length-1 scalar  = constant expression (broadcast)
+      # other length     = mismatch, fall back to literal
+      if (length(evaluated) == n) {
+        as.character(evaluated)
+      } else if (length(evaluated) == 1L) {
+        rep(as.character(evaluated), n)
+      } else {
+        rep(as.character(val_expr), n)
+      }
+    }, error = function(e) {
+      rep(as.character(val_expr), n)
+    })
+    result[to_set] <- val[to_set]
     matched <- matched | mask
   }
   data[[target_var]] <- result

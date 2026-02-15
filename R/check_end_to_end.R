@@ -50,19 +50,66 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
 
   config      <- study$config
   target_meta <- study$target_meta
-  source_meta <- study$source_meta
   ct_lib      <- study$ct_lib
   raw_data    <- study$raw_data
+  domain_meta <- study$domain_meta
+  value_level_meta <- study$value_level_meta
 
   .log(glue::glue("  Loaded {length(raw_data)} source datasets"))
   for (nm in names(raw_data)) {
     .log(glue::glue("    {nm}: {nrow(raw_data[[nm]])} rows x {ncol(raw_data[[nm]])} cols"))
   }
 
+  # ------ Step 1b: Expand value-level metadata into target_meta ---------------
+  if (!is.null(value_level_meta) && nrow(value_level_meta) > 0L) {
+    .log(glue::glue("  Expanding {nrow(value_level_meta)} value-level rows into target_meta..."))
+    target_meta <- expand_value_level_meta(target_meta, value_level_meta)
+    .log(glue::glue("  target_meta now has {nrow(target_meta)} rows after VLM expansion"))
+  }
+
+  # ------ Step 1c: Validate cross-sheet consistency ---------------------------
+  validation_result <- validate_study_metadata(
+    study_meta = list(
+      target_meta      = target_meta,
+      domain_meta      = domain_meta,
+      value_level_meta = value_level_meta
+    ),
+    ct_lib = ct_lib
+  )
+  if (!validation_result$passed) {
+    .log("  WARNING: Study metadata cross-sheet validation found issues")
+  }
+
+  # ------ Step 1d: Pre-build validation (METHOD, params, columns) -------------
+  prebuild_issues <- tryCatch(
+    validate_prebuild(
+      study_meta = list(target_meta = target_meta,
+                        domain_meta = domain_meta,
+                        value_level_meta = value_level_meta),
+      ct_lib   = ct_lib,
+      raw_data = raw_data
+    ),
+    error = function(e) {
+      .log(paste("  WARN: Pre-build validation failed:", e$message))
+      tibble::tibble()
+    }
+  )
+  if (nrow(prebuild_issues) > 0L) {
+    errs <- sum(prebuild_issues$severity == "ERROR")
+    warns <- sum(prebuild_issues$severity == "WARN")
+    notes <- sum(prebuild_issues$severity == "NOTE")
+    .log(glue::glue("  Pre-build issues: {errs} error(s), {warns} warning(s), {notes} note(s)"))
+    for (i in seq_len(nrow(prebuild_issues))) {
+      .log(glue::glue("    [{prebuild_issues$severity[i]}] {prebuild_issues$domain[i]}.{prebuild_issues$variable[i]}: {prebuild_issues$message[i]}"))
+    }
+  } else {
+    .log("  Pre-build validation: all checks passed")
+  }
+
   # ------ Step 2: Compile rules ----------------------------------------------
   .log("Step 2: Compiling rules from metadata...")
   rule_set <- tryCatch(
-    compile_rules(target_meta, source_meta, ct_lib),
+    compile_rules(target_meta, ct_lib = ct_lib),
     error = function(e) {
       .log(paste("FATAL: Rule compilation failed:", e$message))
       return(NULL)
@@ -86,11 +133,12 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
   all_results <- tryCatch(
     build_all_domains(
       target_meta = target_meta,
-      source_meta = source_meta,
       raw_data    = raw_data,
       config      = config,
       rule_set    = rule_set,
       domains     = mvp_domains,
+      domain_meta = domain_meta,
+      value_level_meta = value_level_meta,
       verbose     = verbose
     ),
     error = function(e) {
@@ -124,7 +172,7 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
       n_warn <- sum(result$report$findings$severity == "WARNING")
 
       domain_summaries[[dom]] <- list(
-        status   = if (n_err == 0) "PASS" else "WARN",
+        status   = if (n_err == 0) "PASS" else "FAIL",
         nrow     = nrow(result$data),
         ncol     = ncol(result$data),
         errors   = n_err,
@@ -140,7 +188,8 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
     .log(glue::glue("Step 4: Exporting to {output_dir}..."))
     for (dom in names(built)) {
       tryCatch({
-        export_xpt(built[[dom]], dom, output_dir, target_meta)
+        export_domain(built[[dom]], dom, output_dir,
+                      formats = "xpt", target_meta = target_meta)
         .log(glue::glue("  Exported {dom}.xpt"))
       }, error = function(e) {
         .log(glue::glue("  Export error for {dom}: {e$message}"))

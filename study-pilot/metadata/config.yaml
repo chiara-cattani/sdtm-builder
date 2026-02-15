@@ -1,0 +1,430 @@
+# =============================================================================
+# sdtmbuilder configuration for STUDY-PILOT
+# =============================================================================
+
+studyid: "STUDY-PILOT"
+timezone: "UTC"
+
+# Reference start date for --DY derivation.
+# sdtm: the built domain + variable to use (primary, used when DM is already built)
+# raw:  the raw domain + variable to use as fallback (when DM hasn't been built yet)
+ref_start_date:
+  sdtm:
+    domain: "DM"
+    variable: "RFSTDTC"
+    # path: "path/to/dm.sas7bdat"  # optional: explicit path to DM SDTM dataset
+  raw:
+    dataset: "dm"
+    variable: "icdat"
+
+# Paths (relative to where run_study() is called, or absolute)
+paths:
+  metadata: "metadata/Study_Metadata.xlsx"
+  ct: "metadata/Study_CT.xlsx"
+  raw_data: "raw"
+  output: "sdtm/datasets"
+  programs: "sdtm/programs"
+
+# Export formats
+export:
+  formats:
+    - "xpt"
+    - "rda"
+  generate_programs: true
+
+# Controlled terminology
+ct:
+  files:
+    - "metadata/Study_CT.xlsx"
+
+# Study metadata
+metadata:
+  file: "metadata/Study_Metadata.xlsx"
+
+# Visit map
+# Maps EventId to VISIT, VISITNUM, VISITDY
+visit_source_var: "eventid"
+visit_map:
+  - code: "SCR"
+    visit: "Visit 0: Screening"
+    visitnum: 1
+    visitdy: 1
+    tvstrl: "Between Day -28 and Day 1"
+  - code: "V1"
+    visit: "Visit 1"
+    visitnum: 2
+    visitdy: 1
+    tvstrl: "Day 1"
+  - code: "V1_IMG"
+    visit: "Visit 1"
+    visitnum: 2
+    visitdy: 1
+  - code: "PW1"
+    visit: "Phone Call 1"
+    visitnum: 3
+    visitdy: 8
+    tvstrl: "Day 8 +/- 2 days"
+  - code: "PW5"
+    visit: "Phone Call 2"
+    visitnum: 4
+    visitdy: 36
+    tvstrl: "Day 36 +/- 3 days"
+  - code: "V2"
+    visit: "Visit 2"
+    visitnum: 5
+    visitdy: 71
+    tvstrl: "Day 71 +/- 5 days"
+  - code: "PW15"
+    visit: "Phone Call 3"
+    visitnum: 6
+    visitdy: 106
+    tvstrl: "Day 106 +/- 3 days"
+  - code: "PW20"
+    visit: "Phone Call 4"
+    visitnum: 7
+    visitdy: 140
+    tvstrl: "Day 140 +/- 3 days"
+  - code: "V3"
+    visit: "Visit 3"
+    visitnum: 8
+    visitdy: 141
+    tvstrl: "Day 141 +/- 5 days"
+  - code: "V3_IMG"
+    visit: "Visit 3"
+    visitnum: 8
+    visitdy: 141
+  - code: "PFU"
+    visit: "Phone Call 5: Follow-up"
+    visitnum: 9
+    visitdy: 155
+    tvstrl: "Day 155 +/- 7 days"
+
+# Epoch map (add when needed)
+# epoch_map: []
+
+# Planned time points
+# These are diary time points (ActivityID-based).  Days 1-7 within each
+# collection week; each week references a study milestone visit.
+# Used for domains that collect diary data (e.g. FA, QS with diary).
+tpt_source_var: "activityid"
+timepoint_map:
+  # Week after Visit 1 (Days 1-7)
+  - code: "D1W1_SPI"
+    tpt: "Day 1"
+    tptnum: 1
+    tptref: "Week after Visit 1"
+    eltm: "P1D"
+  - code: "D2W1_SPI"
+    tpt: "Day 2"
+    tptnum: 2
+    tptref: "Week after Visit 1"
+    eltm: "P2D"
+  - code: "D3W1_SPI"
+    tpt: "Day 3"
+    tptnum: 3
+    tptref: "Week after Visit 1"
+    eltm: "P3D"
+  - code: "D4W1_SPI"
+    tpt: "Day 4"
+    tptnum: 4
+    tptref: "Week after Visit 1"
+    eltm: "P4D"
+  - code: "D5W1_SPI"
+    tpt: "Day 5"
+    tptnum: 5
+    tptref: "Week after Visit 1"
+    eltm: "P5D"
+  - code: "D6W1_SPI"
+    tpt: "Day 6"
+    tptnum: 6
+    tptref: "Week after Visit 1"
+    eltm: "P6D"
+  - code: "D7W1_SPI"
+    tpt: "Day 7"
+    tptnum: 7
+    tptref: "Week after Visit 1"
+    eltm: "P7D"
+  # Week before Phone Call 2 (Days 1-7)
+  - code: "D1W5_SPI"
+    tpt: "Day 1"
+    tptnum: 1
+    tptref: "Week before Phone Call 2"
+    eltm: "P1D"
+  - code: "D2W5_SPI"
+    tpt: "Day 2"
+    tptnum: 2
+    tptref: "Week before Phone Call 2"
+    eltm: "P2D"
+  - code: "D3W5_SPI"
+    tpt: "Day 3"
+    tptnum: 3
+    tptref: "Week before Phone Call 2"
+    eltm: "P3D"
+  - code: "D4W5_SPI"
+    tpt: "Day 4"
+    tptnum: 4
+    tptref: "Week before Phone Call 2"
+    eltm: "P4D"
+  - code: "D5W5_SPI"
+    tpt: "Day 5"
+    tptnum: 5
+    tptref: "Week before Phone Call 2"
+    eltm: "P5D"
+  - code: "D6W5_SPI"
+    tpt: "Day 6"
+    tptnum: 6
+    tptref: "Week before Phone Call 2"
+    eltm: "P6D"
+  - code: "D7W5_SPI"
+    tpt: "Day 7"
+    tptnum: 7
+    tptref: "Week before Phone Call 2"
+    eltm: "P7D"
+  # Week before Visit 2 (Days 1-7)
+  - code: "D1W10_SPI"
+    tpt: "Day 1"
+    tptnum: 1
+    tptref: "Week before Visit 2"
+    eltm: "P1D"
+  - code: "D2W10_SPI"
+    tpt: "Day 2"
+    tptnum: 2
+    tptref: "Week before Visit 2"
+    eltm: "P2D"
+  - code: "D3W10_SPI"
+    tpt: "Day 3"
+    tptnum: 3
+    tptref: "Week before Visit 2"
+    eltm: "P3D"
+  - code: "D4W10_SPI"
+    tpt: "Day 4"
+    tptnum: 4
+    tptref: "Week before Visit 2"
+    eltm: "P4D"
+  - code: "D5W10_SPI"
+    tpt: "Day 5"
+    tptnum: 5
+    tptref: "Week before Visit 2"
+    eltm: "P5D"
+  - code: "D6W10_SPI"
+    tpt: "Day 6"
+    tptnum: 6
+    tptref: "Week before Visit 2"
+    eltm: "P6D"
+  - code: "D7W10_SPI"
+    tpt: "Day 7"
+    tptnum: 7
+    tptref: "Week before Visit 2"
+    eltm: "P7D"
+  # Week before Phone Call 3 (Days 1-7)
+  - code: "D1W15_SPI"
+    tpt: "Day 1"
+    tptnum: 1
+    tptref: "Week before Phone Call 3"
+    eltm: "P1D"
+  - code: "D2W15_SPI"
+    tpt: "Day 2"
+    tptnum: 2
+    tptref: "Week before Phone Call 3"
+    eltm: "P2D"
+  - code: "D3W15_SPI"
+    tpt: "Day 3"
+    tptnum: 3
+    tptref: "Week before Phone Call 3"
+    eltm: "P3D"
+  - code: "D4W15_SPI"
+    tpt: "Day 4"
+    tptnum: 4
+    tptref: "Week before Phone Call 3"
+    eltm: "P4D"
+  - code: "D5W15_SPI"
+    tpt: "Day 5"
+    tptnum: 5
+    tptref: "Week before Phone Call 3"
+    eltm: "P5D"
+  - code: "D6W15_SPI"
+    tpt: "Day 6"
+    tptnum: 6
+    tptref: "Week before Phone Call 3"
+    eltm: "P6D"
+  - code: "D7W15_SPI"
+    tpt: "Day 7"
+    tptnum: 7
+    tptref: "Week before Phone Call 3"
+    eltm: "P7D"
+  # Week before Visit 3 (Days 1-7)
+  - code: "D1W20_SPI"
+    tpt: "Day 1"
+    tptnum: 1
+    tptref: "Week before Visit 3"
+    eltm: "P1D"
+  - code: "D2W20_SPI"
+    tpt: "Day 2"
+    tptnum: 2
+    tptref: "Week before Visit 3"
+    eltm: "P2D"
+  - code: "D3W20_SPI"
+    tpt: "Day 3"
+    tptnum: 3
+    tptref: "Week before Visit 3"
+    eltm: "P3D"
+  - code: "D4W20_SPI"
+    tpt: "Day 4"
+    tptnum: 4
+    tptref: "Week before Visit 3"
+    eltm: "P4D"
+  - code: "D5W20_SPI"
+    tpt: "Day 5"
+    tptnum: 5
+    tptref: "Week before Visit 3"
+    eltm: "P5D"
+  - code: "D6W20_SPI"
+    tpt: "Day 6"
+    tptnum: 6
+    tptref: "Week before Visit 3"
+    eltm: "P6D"
+  - code: "D7W20_SPI"
+    tpt: "Day 7"
+    tptnum: 7
+    tptref: "Week before Visit 3"
+    eltm: "P7D"
+
+# Inclusion/Exclusion criteria (used by TI domain, validated against IE)
+ie_criteria:
+  tivers: "1.1"
+  criteria:
+    - ietestcd: "INCL01"
+      ietest: "Male or female subject aged >= 18 years at the time of signing informed consent"
+      iecat: "INCLUSION"
+    - ietestcd: "INCL02"
+      ietest: "Willing and able to provide written informed consent"
+      iecat: "INCLUSION"
+    - ietestcd: "INCL03"
+      ietest: "Body Mass Index (BMI) between 18.5 and 35.0 kg/m2 at screening"
+      iecat: "INCLUSION"
+    - ietestcd: "INCL04"
+      ietest: "Generally in good health as determined by the investigator"
+      iecat: "INCLUSION"
+    - ietestcd: "INCL05"
+      ietest: "Willing and able to comply with the study protocol and scheduled visits"
+      iecat: "INCLUSION"
+    - ietestcd: "INCL06"
+      ietest: "Female subjects of childbearing potential must agree to use adequate contraception"
+      iecat: "INCLUSION"
+    - ietestcd: "INCL07"
+      ietest: "Able to read and understand the language of the study materials"
+      iecat: "INCLUSION"
+    - ietestcd: "INCL08"
+      ietest: "Willing to maintain current dietary habits for the duration of the study"
+      iecat: "INCLUSION"
+    - ietestcd: "EXCL01"
+      ietest: "Known allergy or hypersensitivity to any component of the study product"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL02"
+      ietest: "Currently pregnant or lactating, or planning to become pregnant during the study"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL03"
+      ietest: "Participation in another clinical study within 30 days prior to screening"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL04"
+      ietest: "Use of antibiotics within 14 days prior to the first study visit"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL05"
+      ietest: "Diagnosis of any chronic gastrointestinal disease"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL06"
+      ietest: "History of major gastrointestinal surgery within 6 months of screening"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL07"
+      ietest: "Current use of immunosuppressive medications"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL08"
+      ietest: "Significant renal or hepatic impairment as judged by the investigator"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL09"
+      ietest: "Any condition that, in the opinion of the investigator, may compromise subject safety"
+      iecat: "EXCLUSION"
+    - ietestcd: "EXCL10"
+      ietest: "Inability to comply with the study requirements"
+      iecat: "EXCLUSION"
+
+# Policies
+policies:
+  unknown_ct: "WARN_AND_KEEP"
+  date_partial_allowed: true
+  imputation:
+    day: "first"
+    month: null
+    year: null
+  join_cardinality_default: "m:1"
+  blank_is_na: true
+  na_strings:
+    - "."
+    - "UNK"
+    - "NA"
+
+# SUPP domain generation: keep SUPP variables in SUPPAE
+create_supp: true
+
+# RELREC – Related Records
+# Defines cross-domain relationships used to build the RELREC dataset.
+# Types:
+#   record       – link columns in raw data (e.g., cmae1 in cm_whodrug)
+#   identity     – 1:1 SPID match across built domains (e.g., XS↔AE via XSSPID=AESPID)
+#   seq_lookup   – raw link column + built domain SEQ lookup (e.g., DS↔AE)
+#   domain       – static dataset-level relationship (no per-subject data)
+relrec:
+  - rdomain1: CM
+    rdomain2: AE
+    type: record
+    dataset: cm_whodrug
+    link_prefix: cmae
+    idvar1: CMSPID
+    idvar2: AESPID
+    idvar1_val_col: cmspid
+  - rdomain1: CM
+    rdomain2: MH
+    type: record
+    dataset: cm_whodrug
+    link_prefix: cmmh
+    idvar1: CMSPID
+    idvar2: MHSPID
+    idvar1_val_col: cmspid
+  - rdomain1: PR
+    rdomain2: AE
+    type: record
+    dataset: pr
+    link_prefix: prae
+    idvar1: PRSPID
+    idvar2: AESPID
+    idvar1_val_col: prspid
+  - rdomain1: PR
+    rdomain2: MH
+    type: record
+    dataset: pr
+    link_prefix: prmh
+    idvar1: PRSPID
+    idvar2: MHSPID
+    idvar1_val_col: prspid
+  - rdomain1: XS
+    rdomain2: AE
+    type: identity
+    idvar1: XSSPID
+    idvar2: AESPID
+  - rdomain1: DS
+    rdomain2: AE
+    type: seq_lookup
+    dataset: eos
+    link_col: etae1
+    idvar1: DSSEQ
+    idvar2: AESPID
+    filter_col: DSCAT
+    filter_val: DISPOSITION EVENT
+
+# Study day convention
+study_day:
+  convention: "no_day_zero"
+
+log_level: "INFO"
+
+sponsor_overrides: {}

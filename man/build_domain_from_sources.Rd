@@ -4,7 +4,7 @@
 \alias{build_domain_from_sources}
 \title{Build domain from multiple sources}
 \usage{
-build_domain_from_sources(domain, rule_set, raw_data, source_meta, config)
+build_domain_from_sources(domain, rule_set, raw_data, config)
 }
 \arguments{
 \item{domain}{Character.}
@@ -12,8 +12,6 @@ build_domain_from_sources(domain, rule_set, raw_data, source_meta, config)
 \item{rule_set}{\code{rule_set}.}
 
 \item{raw_data}{Named list of tibbles.}
-
-\item{source_meta}{Tibble.}
 
 \item{config}{\code{sdtm_config}.}
 }

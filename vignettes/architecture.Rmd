@@ -21,9 +21,9 @@ vignette: >
   ┌───────────────────────▼────────────────────────────┐
   │                 Metadata Layer (B + C)              │
   │                                                     │
-  │  read_target_meta()  →  validate_target_meta()      │
-  │  read_source_meta()  →  validate_source_meta()      │
-  │  read_ct_library()   →  validate_ct_library()       │
+  │  read_study_metadata_excel() →  validate_study_*()  │
+  │  read_study_ct_excel()       →  validate_ct_*()     │
+  │  infer_source_meta()         (auto from raw data)   │
   │  normalize_*()       →  expand_value_level_meta()   │
   │  apply_study_overrides() → resolve_domain_model()   │
   │                                                     │
@@ -35,11 +35,12 @@ vignette: >
     ┌──────────▼──────────┐   ┌────────▼───────────────┐
     │   Data Access (E)    │   │ Dependency System (D)  │
     │                      │   │                         │
-    │ load_raw_data()      │   │ build_dependency_graph()│
+    │ load_raw_datasets()  │   │ build_dependency_graph()│
     │ standardize_names()  │   │ topo_sort_rules()       │
-    │ standardize_types()  │   │ detect_cycles()         │
-    │ apply_missing_conv() │   │ resolve_late_binding()  │
-    │ derive_core_keys()   │   │ plan_build_steps()      │
+    │ standardize_names()  │   │ detect_cycles()         │
+    │ standardize_types()  │   │ resolve_late_binding()  │
+    │ apply_missing_conv() │   │ plan_build_steps()      │
+    │ derive_core_keys()   │   │                         │
     │ get_subject_level()  │   │                         │
     └──────────┬──────────┘   └────────┬───────────────┘
                │                       │
@@ -67,11 +68,11 @@ vignette: >
                │   Domain Builders (H)     │
                │                           │
                │ build_domain()            │
+               │ build_all_domains()       │
                │ build_domain_from_sources │
                │ apply_domain_rules()      │
                │ derive_variable()         │
                │ finalize_domain()         │
-               │ derive_domain_defaults()  │
                │ build_supp()              │
                │ build_relrec()            │
                │                           │
@@ -98,8 +99,8 @@ vignette: >
      ┌─────────────────────▼────────────────────────┐
      │ Code Generation (J)  +  Export (K)            │
      │                                               │
-     │ gen_domain_script()   export_xpt()            │
-     │ gen_qmd_domain()      export_rds_csv()        │
+     │ gen_domain_script()   export_domain()          │
+     │ gen_qmd_domain()      write_define_support()   │
      │ gen_project_scaffold() write_define_support()  │
      │ serialize_rules_*()   write_codelist_support() │
      │                       write_value_level_*()    │
@@ -112,104 +113,87 @@ vignette: >
 ## Data Flow
 
 ```
-  ┌─────────┐    ┌─────────┐    ┌─────────┐
-  │ Target  │    │ Source  │    │ CT Lib  │
-  │ Meta    │    │ Meta    │    │         │
-  │ (.xlsx) │    │ (.xlsx) │    │ (.xlsx) │
-  └────┬────┘    └────┬────┘    └────┬────┘
-       │              │              │
-       ▼              ▼              ▼
-  read_target    read_source    read_ct_library
-  _meta()        _meta()        ()
-       │              │              │
-       ▼              ▼              ▼
-  validate →     validate →     validate →
-  normalize      normalize      (done)
-       │              │              │
-       └──────┬───────┘              │
-              ▼                      │
-       new_meta_bundle() ◄───────────┘
-              │
-              ▼
-       compile_rules()
-              │
-              ▼
-       new_rule_set()
-              │
-       ┌──────┴──────┐
-       ▼              ▼
-  build_dep_     load_raw
-  graph()        _data()
-       │              │
-       ▼              ▼
-  topo_sort     standardize
-  _rules()       _names/types()
-       │              │
-       └──────┬───────┘
-              ▼
-       build_domain()
-       ├─ build_domain_from_sources()
-       │   ├─ safe_join()
-       │   ├─ bind_sources()
-       │   └─ expand_checkbox() / split_records()
-       ├─ apply_domain_rules()
-       │   └─ derive_variable() × N
-       │       ├─ map_direct()
-       │       ├─ assign_ct() / decode_ct()
-       │       ├─ format_iso_dtc()
-       │       ├─ derive_dy()
-       │       ├─ derive_visit()
-       │       ├─ derive_seq()
-       │       └─ ... (other atomics)
-       ├─ finalize_domain()
-       │   ├─ enforce types/labels/lengths
-       │   ├─ sort by keys
-       │   └─ build_supp()
-       └─ validate_domain()
-              │
-              ▼
-       build_result
-       ├─ data (tibble)
-       ├─ supp (tibble)
-       ├─ relrec (tibble)
-       ├─ report (validation_report)
-       └─ provenance (tibble)
-              │
-       ┌──────┴──────┐
-       ▼              ▼
-  export_xpt()   gen_domain_script()
-  write_define   gen_qmd_domain()
-  _support()
+  ┌──────────────┐                 ┌─────────┐
+  │ Study_       │                 │ Study_  │
+  │ Metadata.xlsx│                 │ CT.xlsx │
+  └──────┬───────┘                 └────┬────┘
+         │                              │
+         ▼                              ▼
+  read_study_            read_study_
+  metadata_excel()       ct_excel()
+         │                              │
+         ▼                              │
+  validate_study_metadata() ◄───────────┘
+         │                              │
+         ▼                              ▼
+  target_meta +                    ct_lib
+  domain_meta +
+  value_level_meta
+         │                              │
+         └──────────┬───────────────────┘
+                    ▼
+             compile_rules()
+                    │
+                    ▼
+             new_rule_set()
+                    │
+             ┌──────┴──────┐
+             ▼              ▼
+        build_dep_     load_raw
+        graph()        _data()
+             │              │
+             ▼              ▼
+        topo_sort     standardize
+        _rules()       _names/types()
+             │              │
+             └──────┬───────┘
+                    ▼
+             build_domain()
+             ├─ build_domain_from_sources()
+             ├─ apply_domain_rules()
+             │   └─ derive_variable() × N
+             ├─ finalize_domain()
+             │   └─ build_supp()
+             └─ validate_domain()
+                    │
+                    ▼
+             build_result
+             ├─ data (tibble)
+             ├─ supp (tibble)
+             ├─ relrec (tibble)
+             ├─ report (validation_report)
+             └─ provenance (tibble)
+                    │
+             ┌──────┴──────┐
+             ▼              ▼
+        export_domain()   gen_domain_script()
+        write_define   gen_qmd_domain()
+        _support()
 ```
 
 ## Recommended Default Build Order
 
-For a complete study, domains should be built in this order:
-
 | Step | Phase | Action | Dependencies |
 |------|-------|--------|-------------|
-| 1 | Meta | `read_*_meta()` → `normalize_*()` → `validate_*()` | None |
+| 1 | Meta | `read_study_metadata_excel()` → `validate_*()` | None |
 | 2 | Meta | `compile_rules()` → `validate_rules()` | Step 1 |
 | 3 | Plan | `build_dependency_graph()` → `topo_sort_rules()` | Step 2 |
-| 4 | Data | `load_raw_data()` → `standardize_*()` | Step 1 |
+| 4 | Data | `load_raw_datasets()` → `standardize_*()` | Step 1 |
 | 5 | Build | Trial design: `build_ta_tv_te_ts_plugins()` | Steps 1-4 |
 | 6 | Build | **DM**: `build_dm_plugin()` | Steps 1-4 |
-| 7 | Build | **SV**: `build_sv_plugin()` | Step 6 (for RFSTDTC) |
-| 8 | Build | **SE**: Subject Elements (if used) | Step 6 |
-| 9 | Build | Events domains: AE, DS, MH, CE, ... | Steps 6-7 |
-| 10 | Build | Interventions: CM, EX, SU, EC, ... | Steps 6-7 |
-| 11 | Build | Findings: LB, VS, EG, PE, QS, FA, ... | Steps 6-7 |
-| 12 | Build | Special: RELREC, CO | Steps 9-11 |
-| 13 | QC | `validate_cross_domain()` | Steps 6-12 |
-| 14 | Export | `export_xpt()` + `write_define_support()` | Steps 6-12 |
-| 15 | CodeGen | `gen_domain_script()` / `gen_qmd_domain()` | Step 2 |
+| 7 | Build | **SV**: `build_sv_plugin()` | Step 6 |
+| 8 | Build | Events: AE, DS, MH, ... | Steps 6-7 |
+| 9 | Build | Interventions: CM, EX, ... | Steps 6-7 |
+| 10 | Build | Findings: LB, VS, ... | Steps 6-7 |
+| 11 | Export | `export_domain()` + `write_define_support()` | Steps 6-10 |
+| 12 | CodeGen | `gen_domain_script()` | Step 2 |
 
 Within each domain, variable derivation order follows the topological sort
-from `build_dependency_graph()`, but the general pattern is:
+from `build_dependency_graph()`:
 
 1. Constants (STUDYID, DOMAIN)
 2. Core keys (USUBJID)
-3. Direct mappings (--TERM, --CAT, --SCAT, ...)
+3. Direct mappings (--TERM, --CAT, ...)
 4. CT assignments (--TESTCD, --TEST, --SEV, ...)
 5. Date/time (--DTC)
 6. Study day (--DY)
@@ -218,25 +202,3 @@ from `build_dependency_graph()`, but the general pattern is:
 9. Flags (--BLFL, --STAT, --OCCUR)
 10. Sequence (--SEQ) — always last
 11. SUPP move + RELREC (post-finalization)
-
-## Circular Dependency Strategy
-
-```
-detect_cycles(graph)
-       │
-       ▼
-   cycles found? ──no──▶ proceed with topo_sort
-       │
-      yes
-       ▼
-   resolve_late_binding()
-       │
-       ▼
-   Phase 1 (base):     all non-cyclic variables
-   Phase 2 (derived):  late-bound variables (flags, status)
-   Phase 3 (finalize): variables depending on phase 2
-```
-
-**Example**: `LBSTAT` depends on `LBORRES`, but `LBORRES` derivation might
-check `LBSTAT` for "NOT DONE" → cycle.  Solution: derive `LBORRES` in
-phase 1, `LBSTAT` in phase 2 (late-bound).

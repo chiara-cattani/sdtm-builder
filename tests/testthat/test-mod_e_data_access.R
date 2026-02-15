@@ -1,10 +1,12 @@
 # tests/testthat/test-mod_e_data_access.R
 
-test_that("load_raw_data reads CSV", {
-  tmp <- tempfile(fileext = ".csv")
-  on.exit(unlink(tmp), add = TRUE)
-  write.csv(data.frame(a = 1:3, b = letters[1:3]), tmp, row.names = FALSE)
-  result <- load_raw_data(c(test = tmp))
+test_that("load_raw_datasets reads CSV from directory", {
+  tmpdir <- tempfile("test_raw_")
+  dir.create(tmpdir)
+  on.exit(unlink(tmpdir, recursive = TRUE), add = TRUE)
+  write.csv(data.frame(a = 1:3, b = letters[1:3]),
+            file.path(tmpdir, "test.csv"), row.names = FALSE)
+  result <- load_raw_datasets(tmpdir, verbose = FALSE)
   expect_true("test" %in% names(result))
   expect_equal(nrow(result$test), 3)
 })

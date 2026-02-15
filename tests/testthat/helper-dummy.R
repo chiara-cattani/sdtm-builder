@@ -22,12 +22,11 @@ if (starter_kit_path == "" || !dir.exists(starter_kit_path)) {
 # Generate clean dummy study
 # ---------------------------------------------------------------------------
 if (dir.exists(starter_kit_path) &&
-    file.exists(file.path(starter_kit_path, "target_meta.csv"))) {
+    file.exists(file.path(starter_kit_path, "Study_Metadata.xlsx"))) {
   dummy_study <- make_dummy_study(seed = 123,
                                   starter_kit_dir = starter_kit_path)
   dummy_cfg   <- dummy_study$config
   dummy_meta  <- dummy_study$target_meta
-  dummy_smeta <- dummy_study$source_meta
   dummy_ct    <- dummy_study$ct_lib
   dummy_raw   <- dummy_study$raw_data
 } else {
@@ -35,7 +34,6 @@ if (dir.exists(starter_kit_path) &&
   dummy_study <- NULL
   dummy_cfg   <- NULL
   dummy_meta  <- NULL
-  dummy_smeta <- NULL
   dummy_ct    <- NULL
   dummy_raw   <- NULL
 }

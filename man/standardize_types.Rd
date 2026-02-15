@@ -2,11 +2,10 @@
 % Please edit documentation in R/mod_e_data_access.R
 \name{standardize_types}
 \alias{standardize_types}
-\title{Coerce column types to match metadata expectations}
+\title{Coerce column types}
 \usage{
 standardize_types(
   data,
-  source_meta,
   dataset_name = NA_character_,
   coerce_factors = TRUE,
   strip_labels = TRUE
@@ -14,8 +13,6 @@ standardize_types(
 }
 \arguments{
 \item{data}{Tibble.}
-
-\item{source_meta}{Tibble.}
 
 \item{dataset_name}{Character.}
 
@@ -27,5 +24,5 @@ standardize_types(
 Tibble with corrected types.
 }
 \description{
-Coerce column types to match metadata expectations
+Converts factors to character and strips haven labels.
 }

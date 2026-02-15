@@ -1,30 +1,5 @@
 # tests/testthat/test-mod_b_metadata.R
 
-test_that("read_target_meta reads CSV file", {
-  skip_if_no_starter_kit()
-  path <- file.path(starter_kit_path, "target_meta.csv")
-  result <- read_target_meta(path)
-  expect_s3_class(result, "tbl_df")
-  expect_true("domain" %in% names(result))
-  expect_true(nrow(result) > 0)
-})
-
-test_that("read_source_meta reads CSV file", {
-  skip_if_no_starter_kit()
-  path <- file.path(starter_kit_path, "source_meta.csv")
-  result <- read_source_meta(path)
-  expect_s3_class(result, "tbl_df")
-  expect_true("dataset" %in% names(result))
-})
-
-test_that("read_ct_library reads CSV CT", {
-  skip_if_no_starter_kit()
-  path <- file.path(starter_kit_path, "ct_codelist.csv")
-  result <- read_ct_library(path)
-  expect_s3_class(result, "tbl_df")
-  expect_true("codelist_id" %in% names(result))
-})
-
 test_that("validate_target_meta passes with starter kit", {
   skip_if_no_starter_kit()
   expect_silent(validate_target_meta(dummy_meta))

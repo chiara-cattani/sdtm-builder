@@ -6,7 +6,7 @@
 \usage{
 compile_rules(
   target_meta,
-  source_meta,
+  source_meta = NULL,
   ct_lib = NULL,
   dsl = "json",
   strict = TRUE
@@ -15,7 +15,7 @@ compile_rules(
 \arguments{
 \item{target_meta}{Tibble (validated, normalized).}
 
-\item{source_meta}{Tibble (validated, normalized).}
+\item{source_meta}{Tibble or \code{NULL}. Optional; auto-inferred if needed.}
 
 \item{ct_lib}{Tibble or \code{NULL}.}
 

@@ -2,7 +2,7 @@
 % Please edit documentation in R/mod_j_codegen.R
 \name{render_rule_code}
 \alias{render_rule_code}
-\title{Render R code for a single rule}
+\title{Render R code for a single rule (legacy helper)}
 \usage{
 render_rule_code(var, rule, style = "tidyverse")
 }
@@ -17,6 +17,7 @@ render_rule_code(var, rule, style = "tidyverse")
 Character.
 }
 \description{
-Render R code for a single rule
+Kept for backward compatibility. New code should use the piped code
+generation via \code{\link[=gen_domain_script]{gen_domain_script()}}.
 }
 \keyword{internal}

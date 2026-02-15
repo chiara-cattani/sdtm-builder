@@ -9,12 +9,21 @@ expand_value_level_meta(target_meta, value_level_meta)
 \arguments{
 \item{target_meta}{Tibble. Target metadata with optional \code{value_level_id}.}
 
-\item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata to join.}
+\item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata to join.
+May contain columns: \code{value_level_id}, \code{condition}, \code{wc_varname},
+\code{wc_comparator}, \code{wc_value}, \code{vlm_type}, \code{codelist_id}, \code{length},
+\code{significant_digits}.}
 }
 \value{
 Expanded tibble.
 }
 \description{
 Joins value-level metadata rows into the target metadata when a
-\code{value_level_id} column is present.
+\code{value_level_id} column is present. Each VLM_ID + WHERE_CLAUSE_ID
+combination creates a separate condition branch (case_when style).
+}
+\details{
+When the value-level metadata contains \code{condition} and \code{wc_varname}
+columns (from \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}), these are parsed into
+R expressions suitable for \code{case_when} derivation rules.
 }

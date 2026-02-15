@@ -12,10 +12,12 @@
 #' Creates a named list containing:
 #' - `raw_data`: named list of tibbles (`dm_raw`, `ae_raw`, `cm_raw`, `mh_raw`,
 #'   `pr_raw`, `ex_raw`, `vs_raw`, `lb_raw`, `ds_raw`, `qs_raw`)
-#' - `target_meta`: tibble loaded from starter kit
-#' - `source_meta`: tibble loaded from starter kit
-#' - `ct_lib`: tibble loaded from starter kit
+#' - `target_meta`: tibble from Study_Metadata.xlsx (Variables sheet)
+#' - `ct_lib`: tibble from Study_CT.xlsx (Codelists + terms)
 #' - `config`: `sdtm_config` object
+#' - `domain_meta`: tibble from Study_Metadata.xlsx (Domains sheet)
+#' - `value_level_meta`: tibble or NULL from Study_Metadata.xlsx (Value Level sheet)
+#' - `source_meta`: tibble auto-inferred from raw_data (via [infer_source_meta()])
 #'
 #' All randomness is controlled by `seed`.  Calling `make_dummy_study(seed=123)`
 #' always produces identical output.
@@ -62,27 +64,39 @@ make_dummy_study <- function(seed = 123,
   }
 
   # ---------------------------------------------------------------------------
-  # Load metadata
+
+  # Load metadata from the new Excel-based system
   # ---------------------------------------------------------------------------
-  target_meta <- utils::read.csv(
-    file.path(starter_kit_dir, "target_meta.csv"),
-    stringsAsFactors = FALSE, na.strings = ""
-  )
-  source_meta <- utils::read.csv(
-    file.path(starter_kit_dir, "source_meta.csv"),
-    stringsAsFactors = FALSE, na.strings = ""
-  )
+  meta_xlsx <- file.path(starter_kit_dir, "metadata", "Study_Metadata.xlsx")
+  ct_xlsx   <- file.path(starter_kit_dir, "metadata", "Study_CT.xlsx")
 
-  ct_lib <- utils::read.csv(
-    file.path(starter_kit_dir, "ct_codelist.csv"),
-    stringsAsFactors = FALSE, na.strings = ""
-  )
-  cfg_yaml <- yaml::read_yaml(file.path(starter_kit_dir, "config.yaml"))
+  if (!file.exists(meta_xlsx)) {
+    # Fallback to old flat layout
+    meta_xlsx <- file.path(starter_kit_dir, "Study_Metadata.xlsx")
+  }
+  if (!file.exists(ct_xlsx)) {
+    ct_xlsx <- file.path(starter_kit_dir, "Study_CT.xlsx")
+  }
 
-  # Convert to tibbles
-  target_meta <- tibble::as_tibble(target_meta)
-  source_meta <- tibble::as_tibble(source_meta)
-  ct_lib      <- tibble::as_tibble(ct_lib)
+  if (!file.exists(meta_xlsx)) {
+    abort(glue::glue("Study_Metadata.xlsx not found in starter kit: {meta_xlsx}"))
+  }
+  if (!file.exists(ct_xlsx)) {
+    abort(glue::glue("Study_CT.xlsx not found in starter kit: {ct_xlsx}"))
+  }
+
+  study_meta  <- read_study_metadata_excel(meta_xlsx)
+  target_meta <- study_meta$target_meta
+  domain_meta <- study_meta$domain_meta
+  value_level_meta <- study_meta$value_level_meta
+
+  ct_lib <- read_study_ct_excel(ct_xlsx)
+
+  cfg_path <- file.path(starter_kit_dir, "metadata", "config.yaml")
+  if (!file.exists(cfg_path)) {
+    cfg_path <- file.path(starter_kit_dir, "config.yaml")  # fallback
+  }
+  cfg_yaml <- yaml::read_yaml(cfg_path)
 
   # ---------------------------------------------------------------------------
   # Build config object
@@ -140,13 +154,16 @@ make_dummy_study <- function(seed = 123,
     brthdtc = format(date_anchor - (365.25 * sample(25:75, n_subjects,
                                                      replace = TRUE)),
                      "%Y-%m-%d"),
-    age     = sample(25:75, n_subjects, replace = TRUE),
     sex     = sample(sexes, n_subjects, replace = TRUE, prob = c(0.5, 0.5)),
     race    = sample(races, n_subjects, replace = TRUE,
                      prob = c(0.6, 0.2, 0.15, 0.05)),
     armcd   = sample(arms, n_subjects, replace = TRUE, prob = c(0.5, 0.5)),
     arm     = NA_character_
   )
+  # Derive age from brthdtc so it's consistent with birth date
+  dm_raw$age <- as.integer(round(as.numeric(
+    difftime(as.Date(dm_raw$rfstdtc), as.Date(dm_raw$brthdtc), units = "days")
+  ) / 365.25))
   dm_raw$arm <- ifelse(dm_raw$armcd == "TREATMENT",
                        "Active Treatment 10mg",
                        "Placebo")
@@ -652,9 +669,15 @@ make_dummy_study <- function(seed = 123,
       ds_raw = ds_raw,
       qs_raw = qs_raw
     ),
-    target_meta = target_meta,
-    source_meta = source_meta,
-    ct_lib      = ct_lib,
-    config      = config
+    target_meta      = target_meta,
+    source_meta      = infer_source_meta(list(
+      dm_raw = dm_raw, ae_raw = ae_raw, cm_raw = cm_raw,
+      mh_raw = mh_raw, pr_raw = pr_raw, ex_raw = ex_raw,
+      vs_raw = vs_raw, lb_raw = lb_raw, ds_raw = ds_raw, qs_raw = qs_raw
+    )),
+    ct_lib           = ct_lib,
+    config           = config,
+    domain_meta      = domain_meta,
+    value_level_meta = value_level_meta
   )
 }

@@ -2,6 +2,9 @@
 # Module I: Domain-Level Validation
 # ==============================================================================
 
+#' @importFrom utils head
+NULL
+
 #' Validate a completed domain dataset
 #'
 #' Runs a battery of checks on a built domain and accumulates findings
@@ -12,18 +15,25 @@
 #' @param domain Character. Domain abbreviation.
 #' @param config `sdtm_config`.
 #' @param ct_lib Tibble or `NULL`.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata for
+#'   per-condition validation.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata providing
+#'   keys and structure information for validation.
 #' @param checks Character vector of check names to run, or `"all"`.
 #' @return `validation_report`.
 #' @export
 validate_domain_structure <- function(data, target_meta, domain, config,
-                                      ct_lib = NULL, checks = "all") {
+                                      ct_lib = NULL, value_level_meta = NULL,
+                                      domain_meta = NULL,
+                                      checks = "all") {
   rpt <- new_validation_report(domain = domain)
 
   if ("all" %in% checks || "required_vars" %in% checks) {
     rpt <- validate_required_vars(data, target_meta, domain, rpt)
   }
   if ("all" %in% checks || "keys_unique" %in% checks) {
-    rpt <- validate_keys_unique(data, target_meta, domain, rpt)
+    rpt <- validate_keys_unique(data, target_meta, domain, rpt,
+                                domain_meta = domain_meta)
   }
   if ("all" %in% checks || "iso8601" %in% checks) {
     rpt <- validate_iso8601(data, target_meta, domain, rpt)
@@ -33,6 +43,10 @@ validate_domain_structure <- function(data, target_meta, domain, config,
   }
   if ("all" %in% checks || "ct_conformance" %in% checks) {
     rpt <- validate_ct_conformance(data, target_meta, domain, ct_lib, rpt)
+  }
+  if ("all" %in% checks || "value_level" %in% checks) {
+    rpt <- validate_value_level(data, vlm_meta = value_level_meta,
+                                 domain = domain, report = rpt)
   }
   if ("all" %in% checks || "domain_value" %in% checks) {
     rpt <- validate_domain_value(data, domain, rpt)
@@ -62,8 +76,14 @@ validate_domain_structure <- function(data, target_meta, domain, config,
 #' @export
 validate_required_vars <- function(data, target_meta, domain, report) {
   dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
+  # Exclude SUPP-extracted variables: they are moved to SUPPxx and won't be in
+
+  # the main dataset, so checking them here would produce false positives.
+  supp_col <- if ("to_supp" %in% names(dom_meta)) dom_meta[["to_supp"]] else NA_character_
+  is_supp  <- !is.na(supp_col) & toupper(supp_col) == "YES"
   req_vars <- dom_meta$var[!is.na(dom_meta$core) &
-                           toupper(dom_meta$core) == "REQ"]
+                           toupper(dom_meta$core) == "REQ" &
+                           !is_supp]
 
   for (v in req_vars) {
     if (!v %in% names(data)) {
@@ -89,9 +109,12 @@ validate_required_vars <- function(data, target_meta, domain, report) {
 #' @param target_meta Tibble.
 #' @param domain Character.
 #' @param report `validation_report`.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata used as
+#'   fallback source for key variable definitions.
 #' @return Updated `validation_report`.
 #' @export
-validate_keys_unique <- function(data, target_meta, domain, report) {
+validate_keys_unique <- function(data, target_meta, domain, report,
+                                 domain_meta = NULL) {
   dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
 
   key_vars <- character()
@@ -101,6 +124,14 @@ validate_keys_unique <- function(data, target_meta, domain, report) {
       key_vars <- dom_meta$var[!is.na(key_flags) & key_flags]
     } else {
       key_vars <- dom_meta$var[!is.na(key_flags) & tolower(key_flags) == "true"]
+    }
+  }
+
+  # Fall back to domain_meta keys (e.g. "STUDYID, ARMCD, VISITNUM")
+  if (length(key_vars) == 0L && !is.null(domain_meta)) {
+    dm_info <- dplyr::filter(domain_meta, .data[["domain"]] == .env[["domain"]])
+    if (nrow(dm_info) > 0L && !is.na(dm_info$keys[1L])) {
+      key_vars <- trimws(strsplit(dm_info$keys[1L], ",\\s*")[[1L]])
     }
   }
 
@@ -193,12 +224,34 @@ validate_lengths_types_labels <- function(data, target_meta, domain, report) {
     if ("length" %in% names(dom_meta) && is.character(data[[v]])) {
       max_len <- dom_meta$length[i]
       if (!is.na(max_len) && is.numeric(max_len)) {
-        max_actual <- max(nchar(data[[v]][!is.na(data[[v]])]), na.rm = TRUE)
-        if (is.finite(max_actual) && max_actual > max_len) {
-          report <- add_finding(report, rule_id = "length_check",
-                                severity = "WARNING",
-                                message = glue::glue("{v}: max length {max_actual} exceeds defined {max_len}"),
-                                variable = v, domain = domain)
+        non_na_chars <- data[[v]][!is.na(data[[v]])]
+        if (length(non_na_chars) > 0L) {
+          max_actual <- max(nchar(non_na_chars))
+          if (max_actual > max_len) {
+            report <- add_finding(report, rule_id = "length_check",
+                                  severity = "WARNING",
+                                  message = glue::glue("{v}: max length {max_actual} exceeds defined {max_len}"),
+                                  variable = v, domain = domain)
+          }
+        }
+      }
+    }
+
+    # Significant digits check (numeric variables only)
+    if ("significant_digits" %in% names(dom_meta) && is.numeric(data[[v]])) {
+      sig_d <- dom_meta$significant_digits[i]
+      if (!is.na(sig_d) && is.numeric(sig_d)) {
+        sig_d <- as.integer(sig_d)
+        vals <- data[[v]][!is.na(data[[v]])]
+        if (length(vals) > 0L) {
+          rounded <- round(vals, digits = sig_d)
+          mismatched <- vals != rounded
+          if (any(mismatched)) {
+            report <- add_finding(report, rule_id = "sig_digits_check",
+                                  severity = "WARNING",
+                                  message = glue::glue("{v}: {sum(mismatched)} value(s) do not conform to significant_digits={sig_d}"),
+                                  variable = v, domain = domain)
+          }
         }
       }
     }
@@ -219,27 +272,41 @@ validate_ct_conformance <- function(data, target_meta, domain,
   if (is.null(ct_lib)) return(report)
 
   dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
-  ct_rules <- dom_meta[!is.na(dom_meta$rule_type) & dom_meta$rule_type == "ct_assign", ]
 
-  for (i in seq_len(nrow(ct_rules))) {
-    v <- ct_rules$var[i]
+  # Build extensibility lookup
+  ext_lookup <- list()
+  if ("is_extensible" %in% names(ct_lib)) {
+    ext_df <- dplyr::distinct(ct_lib[, c("codelist_id", "is_extensible"), drop = FALSE])
+    ext_lookup <- stats::setNames(ext_df$is_extensible, ext_df$codelist_id)
+  }
+
+  # Check all variables with a codelist_id (not just ct_assign rules)
+  ct_vars <- dom_meta[!is.na(dom_meta$codelist_id), ]
+
+  for (i in seq_len(nrow(ct_vars))) {
+    v <- ct_vars$var[i]
     if (!v %in% names(data)) next
 
-    # Parse rule_params for codelist_id
-    params <- tryCatch(jsonlite::fromJSON(ct_rules$rule_params[i]),
-                       error = function(e) list())
-    cl_id <- params$codelist_id
-    if (is.null(cl_id)) next
-
+    cl_id <- ct_vars$codelist_id[i]
     valid_values <- ct_lib$coded_value[ct_lib$codelist_id == cl_id]
     if (length(valid_values) == 0L) next
 
     data_vals <- unique(data[[v]][!is.na(data[[v]])])
     bad_vals <- data_vals[!data_vals %in% valid_values]
+
     if (length(bad_vals) > 0L) {
+      # Check if codelist is extensible — downgrade to NOTE if so
+      is_ext <- ext_lookup[[cl_id]]
+      if (!is.null(is_ext) && toupper(is_ext) == "YES") {
+        severity <- "NOTE"
+        msg_prefix <- "(extensible codelist)"
+      } else {
+        severity <- "WARNING"
+        msg_prefix <- ""
+      }
       report <- add_finding(report, rule_id = "ct_conformance",
-                            severity = "WARNING",
-                            message = glue::glue("{v}: {length(bad_vals)} value(s) not in codelist {cl_id}: {paste(head(bad_vals,3), collapse=', ')}"),
+                            severity = severity,
+                            message = glue::glue("{v}: {length(bad_vals)} value(s) not in codelist {cl_id} {msg_prefix}: {paste(head(bad_vals,3), collapse=', ')}"),
                             variable = v, domain = domain)
     }
   }
@@ -254,7 +321,80 @@ validate_ct_conformance <- function(data, target_meta, domain,
 #' @return Updated `validation_report`.
 #' @export
 validate_value_level <- function(data, vlm_meta = NULL, domain, report) {
-  # Placeholder for VLM checks
+  if (is.null(vlm_meta) || nrow(vlm_meta) == 0L) return(report)
+
+  # Filter VLM to this domain
+  dom_vlm <- dplyr::filter(vlm_meta, .data$domain == .env[["domain"]])
+  if (nrow(dom_vlm) == 0L) return(report)
+
+  for (i in seq_len(nrow(dom_vlm))) {
+    row <- dom_vlm[i, ]
+    vlm_id   <- row$value_level_id
+    cond_str <- if ("condition" %in% names(row)) row$condition else NA_character_
+
+    if (is.na(cond_str)) next
+
+    # Evaluate the WHERE condition to select matching rows
+    mask <- tryCatch(
+      rlang::eval_tidy(rlang::parse_expr(cond_str), data = data),
+      error = function(e) {
+        report <<- add_finding(report, rule_id = "vlm_condition",
+                               severity = "WARNING",
+                               message = glue::glue("VLM condition '{cond_str}' could not be evaluated: {e$message}"),
+                               domain = domain)
+        rep(FALSE, nrow(data))
+      }
+    )
+    mask[is.na(mask)] <- FALSE
+    n_match <- sum(mask)
+
+    if (n_match == 0L) {
+      report <- add_finding(report, rule_id = "vlm_coverage",
+                            severity = "NOTE",
+                            message = glue::glue("VLM condition '{cond_str}' matched 0 rows (VLM_ID={vlm_id})"),
+                            domain = domain)
+      next
+    }
+
+    # Check significant_digits conformance for matched rows
+    if ("significant_digits" %in% names(row) && !is.na(row$significant_digits)) {
+      target_var <- row$varname %||% NA_character_
+      if (!is.na(target_var) && target_var %in% names(data) && is.numeric(data[[target_var]])) {
+        sig_d <- as.integer(row$significant_digits)
+        vals <- data[[target_var]][mask]
+        vals <- vals[!is.na(vals)]
+        if (length(vals) > 0L) {
+          rounded <- round(vals, digits = sig_d)
+          mismatched <- vals != rounded
+          if (any(mismatched)) {
+            report <- add_finding(report, rule_id = "vlm_sig_digits",
+                                  severity = "WARNING",
+                                  message = glue::glue("{target_var} (VLM={vlm_id}): {sum(mismatched)} value(s) do not match significant_digits={sig_d}"),
+                                  variable = target_var, domain = domain)
+          }
+        }
+      }
+    }
+
+    # Check length conformance for matched rows
+    if ("length" %in% names(row) && !is.na(row$length)) {
+      target_var <- row$varname %||% NA_character_
+      if (!is.na(target_var) && target_var %in% names(data) && is.character(data[[target_var]])) {
+        max_len <- as.integer(row$length)
+        vals <- data[[target_var]][mask]
+        vals <- vals[!is.na(vals)]
+        if (length(vals) > 0L) {
+          too_long <- nchar(vals) > max_len
+          if (any(too_long)) {
+            report <- add_finding(report, rule_id = "vlm_length",
+                                  severity = "WARNING",
+                                  message = glue::glue("{target_var} (VLM={vlm_id}): {sum(too_long)} value(s) exceed length={max_len}"),
+                                  variable = target_var, domain = domain)
+          }
+        }
+      }
+    }
+  }
 
   report
 }
@@ -397,15 +537,17 @@ validate_studyid_constant <- function(data, domain, report) {
 #' @export
 validate_no_allna_reqexp <- function(data, target_meta, domain, report) {
   dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
-  reqexp <- dom_meta$var[!is.na(dom_meta$core) &
-                         toupper(dom_meta$core) %in% c("REQ", "EXP")]
+  reqexp <- unique(dom_meta$var[!is.na(dom_meta$core) &
+                         toupper(dom_meta$core) %in% c("REQ", "EXP")])
 
   for (v in reqexp) {
     if (!v %in% names(data)) next
     if (all(is.na(data[[v]]) | data[[v]] == "")) {
+      v_core <- toupper(dom_meta$core[dom_meta$var == v][1L])
+      sev <- if (v_core == "EXP") "WARNING" else "ERROR"
       report <- add_finding(report, rule_id = "no_allna_reqexp",
-                            severity = "ERROR",
-                            message = glue::glue("{v} (core={dom_meta$core[dom_meta$var == v]}) is entirely missing/blank"),
+                            severity = sev,
+                            message = glue::glue("{v} (core={v_core}) is entirely missing/blank"),
                             variable = v, domain = domain)
     }
   }

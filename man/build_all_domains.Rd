@@ -6,11 +6,15 @@
 \usage{
 build_all_domains(
   target_meta,
-  source_meta,
   raw_data,
   config,
   rule_set,
+  source_meta = NULL,
   domains = NULL,
+  domain_meta = NULL,
+  value_level_meta = NULL,
+  sources_meta = NULL,
+  source_cols_meta = NULL,
   create_supp = NULL,
   validate = TRUE,
   verbose = TRUE
@@ -19,16 +23,29 @@ build_all_domains(
 \arguments{
 \item{target_meta}{Tibble.}
 
-\item{source_meta}{Tibble.}
-
 \item{raw_data}{Named list of tibbles.}
 
 \item{config}{\code{sdtm_config}.}
 
 \item{rule_set}{\code{rule_set}.}
 
+\item{source_meta}{Tibble or \code{NULL}. Optional; not used at runtime.}
+
 \item{domains}{Character vector or \code{NULL}. If \code{NULL}, builds all domains
 in the rule\_set. Otherwise builds only the listed domains.}
+
+\item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata from
+\code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}. Controls build order and provides
+keys/description/structure for finalization.}
+
+\item{value_level_meta}{Tibble or \code{NULL}. Value-level metadata for
+per-condition validation.}
+
+\item{sources_meta}{Tibble or \code{NULL}. Domain-level preprocessing
+metadata from the "Sources" sheet. When provided, replaces manual hooks.}
+
+\item{source_cols_meta}{Tibble or \code{NULL}. Column-level preprocessing
+metadata from the "Source Columns" sheet.}
 
 \item{create_supp}{Logical or \code{NULL}. Default \code{NULL} (inherits from
 \code{config$create_supp}, itself defaulting to \code{TRUE}). Set \code{FALSE} to
@@ -45,4 +62,9 @@ Named list of \code{build_result} objects, keyed by domain.
 Automatically determines domain build order from metadata dependencies
 (DM is always built first, then domains that need DM data, etc.) and
 builds each domain sequentially, passing upstream results downstream.
+}
+\details{
+When \code{domain_meta} is supplied (from \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}), the
+build order follows the CLASS_ORDER and DOMAIN_LEVEL_ORDER from the
+Domains sheet, and domains are logged by CLASS grouping.
 }
