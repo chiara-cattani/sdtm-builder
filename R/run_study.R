@@ -34,8 +34,8 @@
 #' @param create_supp Logical or `NULL`. Default `NULL` (inherits from config).
 #' @param drop_empty_perm Logical or named list. Controls whether permissible
 #'   (PERM) variables that are entirely empty are dropped from exported datasets.
-#'   - `TRUE` (default): drop empty PERM variables for all domains.
-#'   - `FALSE`: keep all PERM variables even if empty.
+#'   - `TRUE`: drop empty PERM variables for all domains.
+#'   - `FALSE` (default): keep all PERM variables even if empty.
 #'   - Named list: set per-domain overrides. Use `".default"` for the study-level
 #'     default and domain names for exceptions, e.g.
 #'     `list(.default = TRUE, DM = FALSE, AE = FALSE)`.
@@ -104,7 +104,7 @@ run_study <- function(config_path = NULL,
                       generate_programs = TRUE,
                       domains = NULL,
                       create_supp = NULL,
-                      drop_empty_perm = TRUE,
+                      drop_empty_perm = FALSE,
                       validate = TRUE,
                       verbose = TRUE) {
 
@@ -334,10 +334,10 @@ run_study <- function(config_path = NULL,
 
     # Resolve drop_empty_perm for this domain:
     # - If drop_empty_perm is a named list, use domain-specific value if present,
-    #   otherwise use the ".default" entry or TRUE
+    #   otherwise use the ".default" entry or FALSE
     # - If drop_empty_perm is a scalar logical, use it for all domains
     if (is.list(drop_empty_perm)) {
-      dom_drop <- drop_empty_perm[[dom]] %||% drop_empty_perm[[".default"]] %||% TRUE
+      dom_drop <- drop_empty_perm[[dom]] %||% drop_empty_perm[[".default"]] %||% FALSE
     } else {
       dom_drop <- isTRUE(drop_empty_perm)
     }

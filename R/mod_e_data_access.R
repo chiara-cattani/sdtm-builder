@@ -88,7 +88,7 @@ load_raw_datasets <- function(dir, pattern = "\\.(sas7bdat|xlsx|xls|csv|rds|rda|
         sas7bdat = haven::read_sas(f),
         xpt      = haven::read_xpt(f),
         xlsx = , xls = readxl::read_excel(f),
-        csv      = readr::read_csv(f, show_col_types = FALSE),
+        csv      = suppressWarnings(readr::read_csv(f, show_col_types = FALSE)),
         rds      = readRDS(f),
         rda = , rdata = {
           env <- new.env(parent = emptyenv())
