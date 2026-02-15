@@ -32,6 +32,13 @@
 #' @param domains Character vector or `NULL`. If `NULL`, builds all domains
 #'   found in the metadata.
 #' @param create_supp Logical or `NULL`. Default `NULL` (inherits from config).
+#' @param drop_empty_perm Logical or named list. Controls whether permissible
+#'   (PERM) variables that are entirely empty are dropped from exported datasets.
+#'   - `TRUE` (default): drop empty PERM variables for all domains.
+#'   - `FALSE`: keep all PERM variables even if empty.
+#'   - Named list: set per-domain overrides. Use `".default"` for the study-level
+#'     default and domain names for exceptions, e.g.
+#'     `list(.default = TRUE, DM = FALSE, AE = FALSE)`.
 #' @param validate Logical. Default `TRUE`.
 #' @param verbose Logical. Default `TRUE`.
 #'
@@ -97,6 +104,7 @@ run_study <- function(config_path = NULL,
                       generate_programs = TRUE,
                       domains = NULL,
                       create_supp = NULL,
+                      drop_empty_perm = TRUE,
                       validate = TRUE,
                       verbose = TRUE) {
 
@@ -324,15 +332,26 @@ run_study <- function(config_path = NULL,
     dom_data <- results[[dom]]$data
     if (is.null(dom_data)) next
 
+    # Resolve drop_empty_perm for this domain:
+    # - If drop_empty_perm is a named list, use domain-specific value if present,
+    #   otherwise use the ".default" entry or TRUE
+    # - If drop_empty_perm is a scalar logical, use it for all domains
+    if (is.list(drop_empty_perm)) {
+      dom_drop <- drop_empty_perm[[dom]] %||% drop_empty_perm[[".default"]] %||% TRUE
+    } else {
+      dom_drop <- isTRUE(drop_empty_perm)
+    }
+
     # Export the main domain
     export_domain(
-      data        = dom_data,
-      domain      = dom,
-      output_dir  = output_dir,
-      formats     = export_formats,
-      xpt_version = 8L,
-      target_meta = target_meta,
-      domain_meta = domain_meta
+      data            = dom_data,
+      domain          = dom,
+      output_dir      = output_dir,
+      formats         = export_formats,
+      xpt_version     = 8L,
+      target_meta     = target_meta,
+      domain_meta     = domain_meta,
+      drop_empty_perm = dom_drop
     )
     exported[[dom]] <- TRUE
 
