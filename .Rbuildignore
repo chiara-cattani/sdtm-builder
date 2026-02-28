@@ -14,3 +14,6 @@
 ^ROADMAP\.md$
 ^\.venv$
 ^tmpclaude.*$
+^study-pilot$
+^example1$
+^example2$

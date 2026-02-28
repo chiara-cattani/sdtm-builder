@@ -5,9 +5,9 @@ name: R-CMD-check
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 permissions: read-all
 

@@ -15,6 +15,7 @@ run_study(
   generate_programs = TRUE,
   domains = NULL,
   create_supp = NULL,
+  drop_empty_perm = FALSE,
   validate = TRUE,
   verbose = TRUE
 )
@@ -43,6 +44,16 @@ domain into \code{programs_dir}.}
 found in the metadata.}
 
 \item{create_supp}{Logical or \code{NULL}. Default \code{NULL} (inherits from config).}
+
+\item{drop_empty_perm}{Logical or named list. Controls whether permissible
+(PERM) variables that are entirely empty are dropped from exported datasets.
+\itemize{
+\item \code{TRUE}: drop empty PERM variables for all domains.
+\item \code{FALSE} (default): keep all PERM variables even if empty.
+\item Named list: set per-domain overrides. Use \code{".default"} for the study-level
+default and domain names for exceptions, e.g.
+\code{list(.default = TRUE, DM = FALSE, AE = FALSE)}.
+}}
 
 \item{validate}{Logical. Default \code{TRUE}.}
 

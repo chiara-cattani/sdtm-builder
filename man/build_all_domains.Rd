@@ -32,7 +32,7 @@ build_all_domains(
 \item{source_meta}{Tibble or \code{NULL}. Optional; not used at runtime.}
 
 \item{domains}{Character vector or \code{NULL}. If \code{NULL}, builds all domains
-in the rule\_set. Otherwise builds only the listed domains.}
+in the \code{rule_set}. Otherwise builds only the listed domains.}
 
 \item{domain_meta}{Tibble or \code{NULL}. Domain-level metadata from
 \code{\link[=read_study_metadata_excel]{read_study_metadata_excel()}}. Controls build order and provides

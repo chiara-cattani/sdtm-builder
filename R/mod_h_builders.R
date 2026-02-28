@@ -86,7 +86,13 @@ build_domain <- function(domain, target_meta, raw_data,
   }
 
   if (!primary_ds %in% names(raw_data)) {
-    abort(glue::glue("Source dataset '{primary_ds}' not found in raw_data"))
+    # Try the common `<name>_raw` suffix convention before aborting
+    raw_variant <- paste0(primary_ds, "_raw")
+    if (raw_variant %in% names(raw_data)) {
+      primary_ds <- raw_variant
+    } else {
+      abort(glue::glue("Source dataset '{primary_ds}' not found in raw_data"))
+    }
   }
 
   # Start with primary dataset and normalize column names to lowercase
@@ -1724,7 +1730,7 @@ expand_config_domains <- function(raw_data, config, domains = NULL,
 #' @param rule_set `rule_set`.
 #' @param source_meta Tibble or `NULL`. Optional; not used at runtime.
 #' @param domains Character vector or `NULL`. If `NULL`, builds all domains
-#'   in the rule\_set. Otherwise builds only the listed domains.
+#'   in the `rule_set`. Otherwise builds only the listed domains.
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata from
 #'   [read_study_metadata_excel()]. Controls build order and provides
 #'   keys/description/structure for finalization.

@@ -98,7 +98,7 @@ Under the hood, six modules execute in sequence:
 │     validate_cross_domain()                                 │
 ├─────────────────────────────────────────────────────────────┤
 │  6. EXPORT          Write final datasets + support files    │
-│     export_domain()  → XPT, RDS, CSV, RDA                  │
+│     export_domain()  → XPT, RDS, CSV, RDA                   │
 │     write_define_support() / write_codelist_support()       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -175,7 +175,7 @@ without writing domain-specific R code.
 
 # Where We Are Today — Phase 1 and Phase 2 Ongoing
 
-We have successfully built and validated all **Phase 1** (trial design)
+We have successfully built all **Phase 1** (trial design)
 and **Phase 2** (direct-mapping) domains from our pilot study using
 sdtmbuilder's metadata-driven pipeline.
 
