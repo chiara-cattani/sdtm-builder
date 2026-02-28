@@ -225,7 +225,7 @@ variable assignments. The programmer only fills in the `Variables` sheet.
 |:---|:---|:---|
 | **Import** (E) | `load_raw_datasets()`, `standardize_names()`, `standardize_types()`, `apply_missing_conventions()`, `derive_core_keys()` | Read and normalise raw data |
 | **Metadata** (B) | `read_study_metadata_excel()`, `read_study_ct_excel()`, `validate_study_metadata()` | Load and validate the specification |
-| **Rules** (C) | `compile_rules()`, `enrich_rules_with_ct()` | Parse METHOD column into executable rules |
+| **Rules** (C) | `compile_rules()`, `enrich_rules_with_ct()` | Parse DERIVATION column into executable rules |
 | **Config domains** (H) | `expand_config_domains()` | Generate TI/TV from config |
 | **Build** (H) | `build_domain()`, `derive_variable()`, `finalize_domain()` | Execute rules and finalise |
 | **Derivations** (G1–G6) | `map_direct()`, `derive_constant()`, `assign_ct()`, `parse_partial_date()`, `format_iso_dtc()`, `derive_dy()`, `derive_seq()`, `derive_usubjid()`, `derive_dict_version()`, `derive_case_when()`, `derive_if_else()`, `derive_coalesce()`, `derive_seriousness()` | Individual variable derivations |
@@ -277,7 +277,7 @@ phases <- data.frame(
   ),
   What_the_Programmer_Provides = c(
     "config.yaml only (ie_criteria, visit_map)",
-    "Variables sheet (METHOD column)",
+    "Variables sheet (DERIVATION column)",
     "Variables + Sources + Source Columns (STACK blocks within one raw file)",
     "Variables + Sources + Source Columns (STACK blocks from different raw files)",
     "Variables + Sources + Source Columns (LEFT_JOIN blocks)",

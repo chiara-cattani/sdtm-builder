@@ -141,7 +141,7 @@ my_study/
 - If your raw file is named the same as the final SDTM domain (e.g., `dm.sas7bdat`),
   the auto-mapping convention `{domain}_raw` won't match.  You can either:
   - Rename files to `dm_raw.sas7bdat`, `ae_raw.sas7bdat`, etc. (recommended), **or**
-  - Set explicit `dataset` in the METHOD column of Study_Metadata.xlsx.
+  - Set explicit `dataset` in the DERIVATION column of Study_Metadata.xlsx.
 
 ### Step 1 — Get the Template config.yaml
 
@@ -197,11 +197,11 @@ The critical sheet is **Variables**. Each row defines one SDTM variable:
 | LENGTH | No | `200` | Max character length |
 | CORE | No | `Req` | `Req`, `Exp`, `Perm`, or `SUPP` |
 | CODELIST\_ID | No | `SEV` | Links to Study\_CT.xlsx |
-| METHOD | No | `SEQ` | Derivation method (see below) |
+| DERIVATION | No | `derive_seq(by = "USUBJID")` | Derivation rule (see below) |
 
-**METHOD column values:**
+**DERIVATION column values:**
 
-| METHOD | What it does |
+| DERIVATION | What it does |
 |--------|-------------|
 | *(empty/NA)* | Auto-assigned: `STUDYID`/`DOMAIN` → constant, others → direct\_map |
 | `SEQ` | Sequence number (AESEQ, CMSEQ, etc.) |
@@ -247,7 +247,7 @@ raw/
 ```
 
 Or, if your files are named `dm.sas7bdat`, `ae.sas7bdat` etc., you can
-override the dataset mapping in the METHOD column of Study\_Metadata.xlsx:
+override the dataset mapping in the DERIVATION column of Study\_Metadata.xlsx:
 
 ```json
 {"rule_type": "direct_map", "params": {"dataset": "dm", "column": "subjid"}}
@@ -457,7 +457,7 @@ for (dom in names(results)) {
 | — | `run_study.R` | **High-level orchestrator**: `run_study()`, `get_template_config()` |
 | A | `mod_a_primitives.R` | S3 classes: `sdtm_config`, `meta_bundle`, `rule_set`, `validation_report` |
 | B | `mod_b_metadata.R` | Read Study\_Metadata.xlsx & Study\_CT.xlsx, validate, normalize |
-| — | `method_mapping.R` | Function registry & METHOD column parsing |
+| — | `method_mapping.R` | Function registry & DERIVATION column parsing |
 | C | `mod_c_rules.R` | Parse rules, auto-assign rule\_type, compile rule\_set |
 | D | `mod_d_dependency.R` | Build dependency graph, topological sort |
 | E | `mod_e_data_access.R` | Load raw data, `load_raw_datasets()`, `infer_source_meta()` |
@@ -479,7 +479,7 @@ for (dom in names(results)) {
 |-------|-------------|---------|
 | Meta | Select, STUDY\_NAME | Study-level info |
 | Domains | Select, DOMAIN, CLASS, CLASS\_ORDER, DOMAIN\_LEVEL\_ORDER, KEYS | Domain definitions + build order |
-| Variables | Select, DOMAIN, VARNAME, VARLABEL, DATA\_TYPE, LENGTH, CODELIST\_ID, METHOD | Variable definitions + derivation rules |
+| Variables | Select, DOMAIN, VARNAME, VARLABEL, DATA\_TYPE, LENGTH, CODELIST\_ID, DERIVATION | Variable definitions + derivation rules |
 | Value Level | Select, DOMAIN, VARNAME, VLM\_ID, WHERE\_CLAUSE\_ID | Value-level metadata |
 | Where Clauses | WHERE\_CLAUSE\_ID, DOMAIN, VARNAME, COMPARATOR, VALUE | Conditions for VLM |
 | Method | (informational) | Derivation descriptions |
@@ -536,7 +536,7 @@ get_template_config(copy_to = "my_study/config.yaml")
 
 ## Rule Types Reference
 
-| Rule type | METHOD value | Purpose | Example params |
+| Rule type | DERIVATION value | Purpose | Example params |
 |-----------|-------------|---------|----------------|
 | `constant` | (auto for STUDYID/DOMAIN) | Fixed value | `{"value": "STUDY-XYZ"}` |
 | `direct_map` | (auto for most vars) | Copy + transform | `{"dataset": "ae_raw", "column": "aeterm"}` |

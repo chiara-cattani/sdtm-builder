@@ -521,7 +521,7 @@ The fundamental **concepts** that sdtm.oak introduced are preserved:
 | Orchestration & dependency | 5 functions + `run_study()` | Gap 10: No orchestration |
 | Rule engine & metadata | 19 functions | **New**: metadata-driven pipeline |
 | Code generation | 4 functions | **New**: auto-generate R/Quarto programs |
-| Method parsing & DSL | 4 functions | **New**: METHOD column DSL |
+| Method parsing & DSL | 4 functions | **New**: DERIVATION column DSL |
 | Additional derivations | 15+ functions | Regex, concat, trim, round, unit, coalesce, etc. |
 
 ---
@@ -718,7 +718,7 @@ mapping logic itself remains straightforward.
 
 **What sdtmbuilder unlocks:**
 
-- The `Variables` sheet METHOD column drives all derivations — the programmer
+- The `Variables` sheet DERIVATION column drives all derivations — the programmer
   specifies `direct(aetrt)` or `case_when(cmongo == "Y" ~ "ONGOING")` and
   `build_domain()` handles execution.
 - `derive_dy()` replaces `derive_study_day()` without the TMP workaround.
@@ -875,7 +875,7 @@ derivation determines DTHFL from the fatal AE and SAE death records.
 - The `Sources` sheet declares `MERGE_TYPE: LEFT_JOIN` with
   `JOIN_BY: subjectid` for each secondary source.  The preprocessing engine
   handles all merges automatically.
-- `derive_dy()`, `derive_usubjid()`, and the Variables METHOD column handle
+- `derive_dy()`, `derive_usubjid()`, and the Variables DERIVATION column handle
   all timing and arm derivations declaratively.
 - The 3-tier DM lookup for RFSTDTC (config path → SDTM folder → raw
   fallback) ensures correct study day derivation across all domains that
@@ -938,7 +938,7 @@ sdtmbuilder.
 
 - **DA**: Declare 2 STACK blocks in Sources + Source Columns for
   DATESTCD=DISPAMT and DATESTCD=RETAMT.  Add a LEFT_JOIN for lot tracking.
-  All derivations via the Variables METHOD column.
+  All derivations via the Variables DERIVATION column.
 - **SU**: Declare 6 STACK blocks — one per substance — each with its own
   Source Columns mappings for SUTRT, SUCAT, SUDOSE, SUOCCUR.  This replaces
   351 lines of manual R code with ~30 Sources/Source Columns rows.

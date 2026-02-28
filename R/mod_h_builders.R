@@ -701,7 +701,7 @@ derive_variable <- function(data, var, rule, context) {
     case_when = {
       conds   <- params$conditions
       default <- params$default %||% NA
-      # If conditions is a string (from METHOD column), evaluate it as R expression
+      # If conditions is a string (from DERIVATION column), evaluate it as R expression
       if (is.character(conds) && length(conds) == 1L &&
           grepl("^list\\(", conds)) {
         conds <- tryCatch(eval(parse(text = conds)), error = function(e) {

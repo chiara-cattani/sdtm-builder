@@ -1,7 +1,7 @@
 # ==============================================================================
 # Method-to-Rule-Type Mapping
 # ==============================================================================
-# The METHOD column in Study_Metadata.xlsx Variables sheet uses explicit
+# The DERIVATION column in Study_Metadata.xlsx Variables sheet uses explicit
 # function-call syntax:
 #
 #   derive_seq(by = "USUBJID")
@@ -150,17 +150,17 @@ RULE_TYPE_TO_FUNCTION <- stats::setNames(
 
 
 # ==============================================================================
-# parse_method_call(): Parse "fn(param = val, ...)" from METHOD column
+# parse_method_call(): Parse "fn(param = val, ...)" from DERIVATION column
 # ==============================================================================
 
-#' Parse a METHOD column value into function name + parameters
+#' Parse a DERIVATION column value into function name + parameters
 #'
 #' Supports three formats:
 #' 1. **Explicit call**: `derive_seq(by = "USUBJID", order_by = "AESTDTC")`
 #' 2. **Legacy keyword**: `SEQ`, `DY`, `STRESN` (auto-expanded with warning)
 #' 3. **Empty/NA**: returns `NULL` (auto-assigned by compile_rules)
 #'
-#' @param method_string Character. The METHOD value from Excel.
+#' @param method_string Character. The DERIVATION value from Excel.
 #' @param domain Character. Domain code (for convention-based defaults).
 #' @param var Character. Variable name (for convention-based defaults).
 #' @param meta_row Named list or tibble row with metadata columns.
@@ -421,7 +421,7 @@ parse_method_call <- function(method_string, domain = NA_character_,
 #'
 #' Merges codelist_id, significant_digits, type, length from the metadata row
 #' into the parsed params. Does NOT overwrite params already set by the user
-#' in the METHOD call.
+#' in the DERIVATION call.
 #'
 #' @param parsed Named list from [parse_method_call()].
 #' @param meta_row Tibble row with metadata columns.
@@ -469,15 +469,15 @@ enrich_params_from_metadata <- function(parsed, meta_row) {
 # Backwards compatibility: map_method_to_rule_type()
 # ==============================================================================
 
-#' Map METHOD values to internal rule types
+#' Map DERIVATION values to internal rule types
 #'
-#' Translates a vector of METHOD strings (from the Variables sheet) into
+#' Translates a vector of DERIVATION strings (from the Variables sheet) into
 #' the corresponding `rule_type` values used by [compile_rules()] and
 #' [derive_variable()].
 #'
 #' Supports both explicit function-call syntax (new) and legacy keywords.
 #'
-#' @param method_vector Character vector. METHOD values from the Variables sheet.
+#' @param method_vector Character vector. DERIVATION values from the Variables sheet.
 #' @return Character vector of the same length with mapped rule_type values.
 #'   `NA` for empty/unknown methods.
 #'
@@ -508,7 +508,7 @@ map_method_to_rule_type <- function(method_vector) {
 
 #' Reconstruct an explicit METHOD string from a rule type and parameters
 #'
-#' Useful for generating the METHOD column value when creating or exporting
+#' Useful for generating the DERIVATION column value when creating or exporting
 #' metadata.
 #'
 #' @param rule_type Character. Internal rule type.

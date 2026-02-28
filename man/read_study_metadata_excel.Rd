@@ -32,7 +32,9 @@ Parses \code{Study_Metadata.xlsx} containing sheets:
 \item \strong{Variables} — per-variable definitions with ordering, types, roles
 \item \strong{Value Level} — value-level metadata with WHERE clause references
 \item \strong{Where Clauses} — condition definitions for value-level metadata
-\item \strong{Method} — derivation method descriptions (informational)
+\item \strong{Method} — derivation method descriptions (informational).
+The Variables sheet uses a \strong{DERIVATION} column for derivation
+rules (the legacy METHOD column is kept empty for reference).
 }
 
 Each sheet uses a \code{Select} column (\code{"Y"}) to filter active rows.
@@ -49,7 +51,7 @@ Each sheet uses a \code{Select} column (\code{"Y"}) to filter active rows.
    ROLE \tab role \cr
    CORE \tab core \cr
    VLM_ID \tab value_level_id \cr
-   METHOD \tab rule_type (mapped) \cr
+   DERIVATION \tab method / rule_type \cr
    VAR_MODEL \tab var_model \cr
 }
 

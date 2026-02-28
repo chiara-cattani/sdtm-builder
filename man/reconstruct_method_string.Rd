@@ -15,6 +15,6 @@ reconstruct_method_string(rule_type, params = list())
 Character. Method call string like \code{derive_seq(by = "USUBJID")}.
 }
 \description{
-Useful for generating the METHOD column value when creating or exporting
+Useful for generating the DERIVATION column value when creating or exporting
 metadata.
 }

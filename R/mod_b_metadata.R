@@ -16,7 +16,9 @@
 #'   \item **Variables** — per-variable definitions with ordering, types, roles
 #'   \item **Value Level** — value-level metadata with WHERE clause references
 #'   \item **Where Clauses** — condition definitions for value-level metadata
-#'   \item **Method** — derivation method descriptions (informational)
+#'   \item **Method** — derivation method descriptions (informational).
+#'         The Variables sheet uses a **DERIVATION** column for derivation
+#'         rules (the legacy METHOD column is kept empty for reference).
 #' }
 #'
 #' Each sheet uses a `Select` column (`"Y"`) to filter active rows.
@@ -48,7 +50,7 @@
 #' | ROLE                 | role                 |
 #' | CORE                 | core                 |
 #' | VLM_ID               | value_level_id       |
-#' | METHOD               | rule_type (mapped)   |
+#' | DERIVATION           | method / rule_type   |
 #' | VAR_MODEL            | var_model            |
 #'
 #' ## Data Type Mappings
@@ -222,10 +224,16 @@ read_study_metadata_excel <- function(path) {
     TRUE ~ tolower(df$data_type)
   )
 
-  # Map METHOD → rule_type using fixed mapping
-  if ("method" %in% names(df)) {
+  # Map DERIVATION → method (internal) → rule_type
+  # Excel now uses DERIVATION for derivation rules; METHOD is kept empty.
+  # For backward compatibility, fall back to METHOD if DERIVATION is absent.
+  if ("derivation" %in% names(df)) {
+    df$method    <- df$derivation
+    df$rule_type <- map_method_to_rule_type(df$method)
+  } else if ("method" %in% names(df)) {
     df$rule_type <- map_method_to_rule_type(df$method)
   } else {
+    df$method    <- NA_character_
     df$rule_type <- NA_character_
   }
 
@@ -1053,10 +1061,10 @@ check_extensibility <- function(data, target_meta, ct_lib, domain) {
 #' Performs comprehensive checks on study metadata **before** domain building
 #' to catch common errors early with actionable messages:
 #'
-#' 1. **METHOD syntax** — every METHOD value can be parsed as a function call.
+#' 1. **DERIVATION syntax** — every DERIVATION value can be parsed as a function call.
 #' 2. **Unknown functions** — function names match the FUNCTION_REGISTRY.
 #' 3. **Required parameters** — required params for each function are present.
-#' 4. **Source column existence** — columns referenced in METHOD exist in raw data.
+#' 4. **Source column existence** — columns referenced in DERIVATION exist in raw data.
 #' 5. **Codelist availability** — CODELIST_IDs referenced by ct_assign/ct_decode
 #'    exist in the CT library.
 #' 6. **Circular dependencies** — DEPENDS_ON does not create cycles.
@@ -1133,7 +1141,7 @@ validate_prebuild <- function(study_meta, ct_lib = NULL, raw_data = NULL) {
     ct_ids <- unique(ct_lib$codelist_id)
   }
 
-  # Check each variable with a METHOD
+  # Check each variable with a DERIVATION rule
   for (i in seq_len(nrow(target_meta))) {
     method <- target_meta$method[i]
     if (is.na(method) || method == "") next
@@ -1141,11 +1149,11 @@ validate_prebuild <- function(study_meta, ct_lib = NULL, raw_data = NULL) {
     dom <- target_meta$domain[i]
     var <- target_meta$var[i]
 
-    # 1. Parse METHOD syntax
+    # 1. Parse DERIVATION syntax
     parsed <- tryCatch(parse_method_call(method), error = function(e) NULL)
     if (is.null(parsed)) {
       add_issue("ERROR", dom, var, "method_syntax",
-                paste0("Cannot parse METHOD: '", method, "'"))
+                paste0("Cannot parse DERIVATION: '", method, "'"))
       next
     }
 

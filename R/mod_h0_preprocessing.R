@@ -8,8 +8,8 @@
 # called per domain based on metadata declarations.
 #
 # Architecture mirrors the variable-level derivation system:
-#   Variable level:  Variables sheet -> METHOD -> FUNCTION_REGISTRY -> derive_variable()
-#   Domain level:    Sources sheet   -> METHOD -> source methods    -> preprocess_domain()
+#   Variable level:  Variables sheet -> DERIVATION -> FUNCTION_REGISTRY -> derive_variable()
+#   Domain level:    Sources sheet   -> METHOD      -> source methods    -> preprocess_domain()
 #
 # @keywords internal
 # ===========================================================================

@@ -22,10 +22,10 @@ A tibble of issues with columns: \code{severity}, \code{domain}, \code{variable}
 Performs comprehensive checks on study metadata \strong{before} domain building
 to catch common errors early with actionable messages:
 \enumerate{
-\item \strong{METHOD syntax} — every METHOD value can be parsed as a function call.
+\item \strong{DERIVATION syntax} — every DERIVATION value can be parsed as a function call.
 \item \strong{Unknown functions} — function names match the FUNCTION_REGISTRY.
 \item \strong{Required parameters} — required params for each function are present.
-\item \strong{Source column existence} — columns referenced in METHOD exist in raw data.
+\item \strong{Source column existence} — columns referenced in DERIVATION exist in raw data.
 \item \strong{Codelist availability} — CODELIST_IDs referenced by ct_assign/ct_decode
 exist in the CT library.
 \item \strong{Circular dependencies} — DEPENDS_ON does not create cycles.

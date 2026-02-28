@@ -2,19 +2,19 @@
 % Please edit documentation in R/method_mapping.R
 \name{map_method_to_rule_type}
 \alias{map_method_to_rule_type}
-\title{Map METHOD values to internal rule types}
+\title{Map DERIVATION values to internal rule types}
 \usage{
 map_method_to_rule_type(method_vector)
 }
 \arguments{
-\item{method_vector}{Character vector. METHOD values from the Variables sheet.}
+\item{method_vector}{Character vector. DERIVATION values from the Variables sheet.}
 }
 \value{
 Character vector of the same length with mapped rule_type values.
 \code{NA} for empty/unknown methods.
 }
 \description{
-Translates a vector of METHOD strings (from the Variables sheet) into
+Translates a vector of DERIVATION strings (from the Variables sheet) into
 the corresponding \code{rule_type} values used by \code{\link[=compile_rules]{compile_rules()}} and
 \code{\link[=derive_variable]{derive_variable()}}.
 }

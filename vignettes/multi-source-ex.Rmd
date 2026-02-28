@@ -91,7 +91,7 @@ head(result$data)
 ## Multiple Sources with Different Column Structures
 
 If the secondary source has different column names, map them in the rules via
-JSON in the METHOD column of `Study_Metadata.xlsx`:
+JSON in the DERIVATION column of `Study_Metadata.xlsx`:
 
 ```json
 {

@@ -33,13 +33,13 @@ ct   <- read_study_ct_excel("inst/extdata/Study_CT.xlsx")
 target_meta <- meta$target_meta
 ct_lib      <- ct$ct_lib
 
-# ── Compile rules (auto-assigns rule_type for METHOD=NA) ─
+# ── Compile rules (auto-assigns rule_type for DERIVATION=NA) ─
 rule_set <- compile_rules(target_meta, ct_lib = ct_lib)
 ```
 
-`compile_rules()` examines the `METHOD` column in `target_meta`:
+`compile_rules()` examines the `DERIVATION` column in `target_meta`:
 
-| METHOD value | Resulting `rule_type` | Parameters |
+| DERIVATION value | Resulting `rule_type` | Parameters |
 |---|---|---|
 | `NA` | `"direct_map"` | `dataset = "{domain}_raw"`, `column = "{var_lower}"` |
 | `"constant"` | `"constant"` | `value = ""` (override with VALUE column) |
@@ -50,13 +50,13 @@ rule_set <- compile_rules(target_meta, ct_lib = ct_lib)
 ## 2 Overriding a Rule via the Excel Metadata
 
 The easiest way to customize a rule is editing the **Variables** sheet in
-`Study_Metadata.xlsx`. Set the `METHOD` column to a JSON string:
+`Study_Metadata.xlsx`. Set the `DERIVATION` column to a function-call string:
 
-| DOMAIN | VARIABLE | METHOD |
+| DOMAIN | VARIABLE | DERIVATION |
 |--------|----------|--------|
 | AE | AESEV | `{"rule_type": "assign_ct", "params": {"codelist": "SEV", "dataset": "ae_raw", "column": "severity"}}` |
 
-When `compile_rules()` encounters a JSON string in METHOD, it parses it
+When `compile_rules()` encounters a JSON string in DERIVATION, it parses it
 directly as the rule definition.
 
 ## 3 Overriding a Rule Programmatically
@@ -156,8 +156,8 @@ head(result$data)
 
 - **Start simple**: let `compile_rules()` auto-assign defaults, then override
   only the variables that need special logic.
-- **Use JSON in METHOD**: for rules that can be expressed declaratively, JSON in
-  the Excel metadata is the most maintainable approach.
+- **Use function-call syntax in DERIVATION**: for rules that can be expressed declaratively,
+  the DERIVATION column in the Excel metadata is the most maintainable approach.
 - **Reserve `"custom"`**: for complex multi-variable derivations that need
   R function logic.
 - **Test incrementally**: build one domain at a time with `build_domain()` before

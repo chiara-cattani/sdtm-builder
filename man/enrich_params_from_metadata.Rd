@@ -17,5 +17,5 @@ Updated parsed list with enriched params.
 \description{
 Merges codelist_id, significant_digits, type, length from the metadata row
 into the parsed params. Does NOT overwrite params already set by the user
-in the METHOD call.
+in the DERIVATION call.
 }

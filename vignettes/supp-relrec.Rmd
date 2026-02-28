@@ -33,7 +33,7 @@ SUPPLB).
 In the **Variables** sheet, set `CORE = "SUPP"` for any variable that should
 be routed to the supplemental qualifier dataset:
 
-| DOMAIN | VARIABLE | LABEL | CORE | DATA_TYPE | METHOD |
+| DOMAIN | VARIABLE | LABEL | CORE | DATA_TYPE | DERIVATION |
 |--------|----------|-------|------|-----------|--------|
 | AE | AEACNOTH | Other Action Taken | SUPP | text | `{"rule_type": "direct_map", ...}` |
 

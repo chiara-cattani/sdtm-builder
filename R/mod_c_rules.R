@@ -72,7 +72,7 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
       rule_type <- base_row$rule_type
       if (is.na(rule_type) || rule_type == "") rule_type <- "direct_map"
 
-      # Parse base rule params — first from method column, then JSON fallback
+      # Parse base rule params — first from derivation/method column, then JSON fallback
       params <- list()
       method_str <- if ("method" %in% names(base_row)) base_row$method else NA
       if (!is.na(method_str) && nchar(trimws(method_str)) > 0) {
@@ -162,7 +162,7 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
       dom_lower <- tolower(dom)
 
       # =====================================================================
-      # Parse METHOD column: explicit call syntax, legacy keyword, or empty
+      # Parse DERIVATION column: explicit call syntax, legacy keyword, or empty
       # =====================================================================
       method_str <- if ("method" %in% names(row)) row$method else NA_character_
       parsed <- suppressWarnings(
@@ -176,9 +176,9 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         params    <- parsed$params
         fn_name   <- parsed$fn
         compile_log <- c(compile_log,
-                         glue::glue("{dom}.{var_name}: METHOD = {fn_name}({.format_params(params)})"))
+                         glue::glue("{dom}.{var_name}: DERIVATION = {fn_name}({.format_params(params)})"))
       } else {
-        # --- Auto-assign when METHOD is empty ---
+        # --- Auto-assign when DERIVATION is empty ---
         fn_name <- NULL
         if (var_name == "STUDYID") {
           rule_type <- "constant"
@@ -205,7 +205,7 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
             list()
           }
         )
-        # Merge: JSON params fill in gaps (don't overwrite explicit METHOD params)
+        # Merge: JSON params fill in gaps (don't overwrite explicit DERIVATION params)
         for (k in names(json_params)) {
           if (is.null(params[[k]])) params[[k]] <- json_params[[k]]
         }

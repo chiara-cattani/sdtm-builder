@@ -50,13 +50,13 @@ Defines every target variable and its derivation rule.
 | CORE | character | No | "Req", "Perm", "Exp", or "SUPP" |
 | CODELIST | character | No | Codelist code from Study_CT.xlsx (e.g., "SEV") |
 | ORIGIN | character | No | Variable origin: "CRF", "Derived", "Assigned", "Protocol" |
-| METHOD | character | No | Derivation rule — NA for auto-assign, or JSON string |
-| VALUE | character | No | Constant value (when METHOD implies constant) |
+| DERIVATION | character | No | Derivation rule — NA for auto-assign, or function-call string |
+| VALUE | character | No | Constant value (when DERIVATION implies constant) |
 | ORDER | integer | No | Display order within the domain |
 
-#### METHOD Auto-Assignment
+#### DERIVATION Auto-Assignment
 
-When `METHOD` is `NA`, `compile_rules()` applies these defaults:
+When `DERIVATION` is `NA`, `compile_rules()` applies these defaults:
 
 - **STUDYID** → `rule_type = "constant"` (from `config$studyid`)
 - **DOMAIN** → `rule_type = "constant"` (from the domain code)
@@ -79,7 +79,7 @@ Defines value-level metadata for variables that vary by test code or category.
 | LENGTH | integer | No | Override length |
 | CODELIST | character | No | Override codelist |
 | ORIGIN | character | No | Override origin |
-| METHOD | character | No | Override derivation method |
+| DERIVATION | character | No | Override derivation method |
 
 ### 1.4 StudyInfo Sheet (Optional)
 

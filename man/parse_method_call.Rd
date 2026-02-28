@@ -2,7 +2,7 @@
 % Please edit documentation in R/method_mapping.R
 \name{parse_method_call}
 \alias{parse_method_call}
-\title{Parse a METHOD column value into function name + parameters}
+\title{Parse a DERIVATION column value into function name + parameters}
 \usage{
 parse_method_call(
   method_string,
@@ -12,7 +12,7 @@ parse_method_call(
 )
 }
 \arguments{
-\item{method_string}{Character. The METHOD value from Excel.}
+\item{method_string}{Character. The DERIVATION value from Excel.}
 
 \item{domain}{Character. Domain code (for convention-based defaults).}
 

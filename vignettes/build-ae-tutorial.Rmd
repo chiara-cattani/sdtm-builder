@@ -93,7 +93,7 @@ vapply(rule_set$rules$AE, function(r) r$type, character(1))
 The rule compiler:
 
 1. Parses JSON parameters (when present)
-2. Auto-assigns rule\_type for variables without explicit METHOD
+2. Auto-assigns rule\_type for variables without explicit DERIVATION
 3. Resolves dependencies (e.g., AESEQ depends on AESTDTC)
 4. Enriches CT rules with codelist mappings
 
@@ -171,7 +171,7 @@ for (dom in names(rule_set$rules)) {
 
 - **Your own data**: Replace `make_dummy_study()` with your real raw datasets
 - **Add domains**: Add rows to the Variables sheet in Study\_Metadata.xlsx
-- **Custom rules**: Use the METHOD column or edit `rule_params` JSON
+- **Custom rules**: Use the DERIVATION column or edit `rule_params` JSON
 - **Controlled terminology**: Add rows to Study\_CT.xlsx Codelists\_terms sheet
 - **Validation**: Review validation reports before submission
 
