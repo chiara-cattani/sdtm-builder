@@ -131,7 +131,7 @@ Controlled terminology workbook with two sheets:
 
 ### Example
 
-```{r}
+```{r eval=FALSE}
 library(sdtmbuilder)
 
 ct <- read_study_ct_excel(

@@ -86,7 +86,13 @@ build_domain <- function(domain, target_meta, raw_data,
   }
 
   if (!primary_ds %in% names(raw_data)) {
-    abort(glue::glue("Source dataset '{primary_ds}' not found in raw_data"))
+    # Try the common `<name>_raw` suffix convention before aborting
+    raw_variant <- paste0(primary_ds, "_raw")
+    if (raw_variant %in% names(raw_data)) {
+      primary_ds <- raw_variant
+    } else {
+      abort(glue::glue("Source dataset '{primary_ds}' not found in raw_data"))
+    }
   }
 
   # Start with primary dataset and normalize column names to lowercase
