@@ -1730,7 +1730,7 @@ expand_config_domains <- function(raw_data, config, domains = NULL,
 #' @param rule_set `rule_set`.
 #' @param source_meta Tibble or `NULL`. Optional; not used at runtime.
 #' @param domains Character vector or `NULL`. If `NULL`, builds all domains
-#'   in the rule\_set. Otherwise builds only the listed domains.
+#'   in the `rule_set`. Otherwise builds only the listed domains.
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata from
 #'   [read_study_metadata_excel()]. Controls build order and provides
 #'   keys/description/structure for finalization.

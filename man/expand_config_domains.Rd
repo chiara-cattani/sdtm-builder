@@ -24,17 +24,20 @@ dataset — they come from the study configuration (protocol visit schedule,
 inclusion/exclusion criteria text, etc.).
 }
 \details{
-This function reads the \code{config_domains} section of \code{config.yaml} and,
-for each declared domain, creates a raw data tibble from the
-corresponding config section.
+Standard trial design domains (TV from \code{visit_map}, TI from
+\code{ie_criteria.criteria}) are handled automatically — no explicit
+\code{config_domains} section is needed.  If a \code{config_domains} entry is
+present in \code{config.yaml}, it overrides the built-in default for that
+domain and can also define additional config-driven domains.
 
 The resulting tibbles are injected into \code{raw_data} so that the standard
 rule engine (\code{\link[=build_domain]{build_domain()}}) can process them like any other domain.
 }
-\section{config.yaml format}{
+\section{config.yaml format (optional overrides)}{
 
 
-\if{html}{\out{<div class="sourceCode yaml">}}\preformatted{config_domains:
+\if{html}{\out{<div class="sourceCode yaml">}}\preformatted{# Only needed to override defaults or add new config-driven domains
+config_domains:
   TV:
     source: visit_map
     filter_field: tvstrl
@@ -43,14 +46,6 @@ rule engine (\code{\link[=build_domain]{build_domain()}}) can process them like 
       visit: visit
       visitdy: visitdy
       tvstrl: tvstrl
-  TI:
-    source: ie_criteria.criteria
-    columns:
-      ietestcd: ietestcd
-      ietest: ietest
-      iecat: iecat
-    extra:
-      tivers: ie_criteria.tivers
 }\if{html}{\out{</div>}}
 }
 

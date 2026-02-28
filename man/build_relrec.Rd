@@ -4,18 +4,55 @@
 \alias{build_relrec}
 \title{Build RELREC dataset}
 \usage{
-build_relrec(relationship_specs, domain_data, config)
+build_relrec(relationship_specs, raw_data, config, built_domains = NULL)
 }
 \arguments{
-\item{relationship_specs}{List.}
+\item{relationship_specs}{List of relationship specification lists.
+Each element must contain:
+\describe{
+\item{rdomain1}{Character. First domain (e.g. "CM").}
+\item{rdomain2}{Character. Second domain (e.g. "AE").}
+\item{idvar1}{Character. Identifier variable in domain 1 (e.g. "CMSPID").}
+\item{idvar2}{Character. Identifier variable in domain 2 (e.g. "AESPID").}
+\item{dataset}{Character. Raw dataset containing the link columns.}
+\item{link_prefix}{Character. Column prefix to search for link values
+(e.g. "cmae").  All columns matching \verb{^<link_prefix>[0-9]*$} are
+pivoted to extract cross-references.}
+\item{relid_prefix}{Character. Optional prefix for RELID
+(default: paste0(rdomain1, rdomain2)).}
+\item{type}{Character. Either \code{"record"} (default) or \code{"domain"}.}
+\item{reltype1}{Character. Optional RELTYPE for domain 1 row.}
+\item{reltype2}{Character. Optional RELTYPE for domain 2 row.}
+\item{idvar1_val_col}{Character. Optional column name to use as
+IDVARVAL for domain 1 (default: \verb{<rdomain1>spid} lowercased).}
+}}
 
-\item{domain_data}{Named list.}
+\item{raw_data}{Named list of raw data tibbles keyed by dataset name.}
 
-\item{config}{\code{sdtm_config}.}
+\item{config}{\code{sdtm_config} object (needs \verb{$studyid}).}
+
+\item{built_domains}{Optional named list of built SDTM domain tibbles
+(e.g., \code{list(DS = ds_tibble, XS = xs_tibble)}).
+Required only for \code{type = "identity"} or \code{type = "seq_lookup"} specs.}
 }
 \value{
-Tibble or \code{NULL}.
+A tibble with RELREC columns, or \code{NULL} if no relationships found.
 }
 \description{
-Build RELREC dataset
+Constructs the SDTM RELREC (Related Records) dataset from relationship
+specifications defined in \code{config.yaml}.  Each specification describes
+a pair of domains linked by cross-reference columns in the raw CRF data
+or by a domain-level structural relationship.
+}
+\details{
+Two types of relationships are supported:
+
+\describe{
+\item{record}{Subject-level links derived from raw data columns
+(e.g., \code{cmae1} in CM linking to an AE via \code{AESPID}).  One pair of
+RELREC rows is produced for each non-missing link value.}
+\item{domain}{Dataset-level structural relationships (e.g., EC ↔ EX
+via ECLNKGRP / EXLNKID).  A single pair of rows with empty USUBJID
+and IDVARVAL is produced.}
+}
 }
