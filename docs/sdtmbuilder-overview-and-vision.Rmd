@@ -1,0 +1,526 @@
+---
+title: "sdtmbuilder — Project Overview and Vision"
+subtitle: "A Metadata-Driven SDTM Framework: Where We Are, How It Compares to sdtm.oak, and Where We're Going"
+author: "Chiara Cattani"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cosmo
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+    number_sections: true
+    css: null
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+# What is sdtmbuilder?
+
+**sdtmbuilder** is an R package that automates the creation of SDTM datasets
+from raw clinical data. Instead of writing custom R scripts for every domain,
+the programmer fills in **standardised metadata tables** (an Excel workbook
+and a YAML config file), and the package handles the rest — from reading raw
+data to exporting validated XPT files.
+
+The package was born out of our hands-on experience programming 23 SDTM
+domains in R using **sdtm.oak**, the open-source CDISC SDTM mapping package.
+sdtm.oak gives you building blocks for 1-to-1 variable mappings, but
+everything else — importing data, assembling records from multiple sources,
+deriving visits and dates, finalising the dataset, exporting — must be coded
+by hand. sdtmbuilder fills those gaps and wraps the entire workflow in a
+single, metadata-driven pipeline.
+
+---
+
+# The Problem We Solved
+
+When we programmed a real clinical study with sdtm.oak, we found:
+
+- **sdtm.oak covers ~30% of the work** — simple variable assignments
+  (`assign_no_ct`, `assign_ct`, `assign_datetime`, `derive_study_day`,
+  `derive_seq`).
+- **The remaining ~70%** had to be coded manually: data import and
+  standardisation, stacking records from multiple raw sources, pivoting
+  array columns, cross-domain joins (e.g. getting reference dates from DM),
+  visit and timepoint derivation, domain finalisation (variable ordering,
+  labels, types), export to XPT, and validation.
+- We ended up writing **16 custom utility functions** and **~4,000 lines
+  of study-specific R code** on top of sdtm.oak.
+
+sdtmbuilder replaces all of that with a **metadata-driven framework**
+where the programmer's job is to describe *what* should happen (in metadata
+tables), not *how* to code it.
+
+---
+
+# How sdtmbuilder Works — The Pipeline at a Glance
+
+The entire workflow is triggered by a single call:
+
+```r
+out <- run_study(config_path = "metadata/config.yaml")
+```
+
+Under the hood, six modules execute in sequence:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. IMPORT          Load raw data (SAS, Excel, CSV, XPT)   │
+│     load_raw_datasets()                                     │
+│     standardize_names() / standardize_types()               │
+│     apply_missing_conventions()                             │
+├─────────────────────────────────────────────────────────────┤
+│  2. METADATA        Read Study_Metadata.xlsx + Study_CT.xlsx│
+│     read_study_metadata_excel()                             │
+│     read_study_ct_excel()                                   │
+│     validate_study_metadata()                               │
+├─────────────────────────────────────────────────────────────┤
+│  3. COMPILE         Turn metadata into executable rules     │
+│     compile_rules()                                         │
+│     build_dependency_graph()                                │
+├─────────────────────────────────────────────────────────────┤
+│  4. BUILD           Build each domain in dependency order   │
+│     build_all_domains() → build_domain()                    │
+│       ├── preprocess_domain()  (stack/join/filter sources)  │
+│       ├── derive_variable()    (apply each rule)            │
+│       └── finalize_domain()    (select, order, label, type) │
+├─────────────────────────────────────────────────────────────┤
+│  5. VALIDATE        Automated conformance checks            │
+│     validate_domain_structure()                             │
+│     validate_cross_domain()                                 │
+├─────────────────────────────────────────────────────────────┤
+│  6. EXPORT          Write final datasets + support files    │
+│     export_domain()  → XPT, RDS, CSV, RDA                  │
+│     write_define_support() / write_codelist_support()       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+For the simple (Phase 1–2) domains the programmer only needs to fill in
+the **Variables** sheet of `Study_Metadata.xlsx` and the study-level
+`config.yaml`. No R code is needed beyond the single `run_study()` call.
+
+---
+
+# sdtm.oak vs. sdtmbuilder — Function Comparison
+
+## What sdtm.oak Provides
+
+In our study we used **7 core sdtm.oak functions**:
+
+| sdtm.oak Function | Purpose | Domains Used |
+|:---|:---|:---|
+| `assign_no_ct()` | Map a raw column to SDTM (no CT) | 15 |
+| `assign_ct()` | Map with controlled-terminology recoding | 12 |
+| `assign_datetime()` | Parse dates → ISO 8601 | 10 |
+| `condition_add()` | Apply conditional filter before mapping | 14 |
+| `hardcode_no_ct()` / `hardcode_ct()` | Set a constant value (with/without CT) | many |
+| `derive_study_day()` | Derive --DY from --DTC and RFSTDTC | 17 |
+| `derive_seq()` | Derive --SEQ within groups | 17 |
+
+These functions are solid for straightforward 1-to-1 assignments.
+They represent sdtm.oak's sweet spot.
+
+## What We Fixed
+
+| sdtm.oak Issue | sdtmbuilder Fix |
+|:---|:---|
+| `derive_study_day()` silently **overwrites** the DTC column — needed a save/restore workaround in 12 domains | `derive_dy()` is side-effect free |
+| `hardcode_*()` **overwrites** the target unconditionally — cannot chain two conditional blocks | `derive_constant()` with native coalesce support |
+| `assign_ct()` treats literal `"NA"` text as missing instead of mapping it | `assign_ct()` with configurable `unknown_policy` |
+| Hard errors on missing source files | Graceful fallback with empty dataset |
+| No structured logging or error context | `log_info/warn/error` + `stop_with_context()` |
+
+## What We Added
+
+sdtmbuilder provides **146 functions** across 12 modules that cover every
+stage of the SDTM workflow. The table below highlights the main additions
+grouped by capability:
+
+| Capability | Key Functions | Gap Filled |
+|:---|:---|:---|
+| **Data import** | `load_raw_datasets()`, `standardize_names()`, `apply_missing_conventions()` | sdtm.oak has no import layer |
+| **Record assembly** | `preprocess_domain()`, `bind_sources()` | No stacking, pivoting, or source merging |
+| **Cross-domain joins** | `safe_join()`, `get_subject_level()` | No join utilities |
+| **Visit / timepoint** | `derive_visit()`, `derive_tpt()` — config-driven | No visit or timepoint derivation |
+| **Flags & status** | `derive_baseline_flag()`, `derive_lobxfl()`, `derive_occurrence()` | No flag derivations |
+| **Date handling** | `parse_partial_date()`, `format_iso_dtc()`, `derive_dy()`, `derive_epoch()` | DTC overwrite + no imputation policy |
+| **CT & dictionaries** | `assign_ct()` (improved), `decode_ct()`, `derive_dict_version()` | Cannot handle `"NA"` text |
+| **SUPP & RELREC** | `build_supp()`, `build_relrec()` | No builders for supplemental or relationship datasets |
+| **Finalisation** | `finalize_domain()`, `export_domain()` — multi-format | No finalization, labelling, or export |
+| **Validation** | 16 automated checks (keys, ISO 8601, CT conformance, types, etc.) | No validation at all |
+| **Orchestration** | `run_study()`, `build_all_domains()`, `compile_rules()` | No pipeline orchestration |
+| **Code generation** | `gen_domain_script()`, `gen_qmd_domain()` | Not available |
+
+## The Key Difference in Approach
+
+**sdtm.oak works at the variable level**: one function call maps one source
+column to one SDTM column. The programmer writes one R script per domain
+and manually handles everything else.
+
+**sdtmbuilder works at the dataset level**: the metadata describes the
+entire domain — which sources to read, how to assemble records, which
+variables to derive and how — and the engine processes it automatically.
+This is what makes it possible to support all phases of domain complexity
+without writing domain-specific R code.
+
+---
+
+# Where We Are Today — Phase 1 and Phase 2 Ongoing
+
+We have successfully built and validated all **Phase 1** (trial design)
+and **Phase 2** (direct-mapping) domains from our pilot study using
+sdtmbuilder's metadata-driven pipeline.
+
+## Phase 1 — Config-Driven Trial Design (TI, TV)
+
+These domains contain **no subject data** — their content comes from the
+protocol (I/E criteria and visit schedule) and is specified entirely in
+`config.yaml`.
+
+**How it works:**
+
+- The `ie_criteria` section of `config.yaml` defines all inclusion/exclusion
+  criteria. The `visit_map` section defines all planned visits.
+- `expand_config_domains()` generates the TI and TV data automatically
+  from these config entries.
+- The `Variables` sheet in `Study_Metadata.xlsx` defines variable names,
+  labels, and types. No Sources or Source Columns rows needed.
+- **Programmer effort**: fill in config + Variables sheet. Zero R code.
+- **sdtm.oak**: cannot handle this at all — no concept of config-driven
+  generation.
+
+## Phase 2 — Direct Mapping (AE, CM, MH, XS, PR, IE)
+
+These domains map from a single implied raw dataset with mostly 1-to-1
+variable assignments. The programmer only fills in the `Variables` sheet.
+
+**How it works:**
+
+- Each variable's `METHOD` column contains a derivation instruction:
+  `direct(aeterm)`, `format_date(aestdat)`, `hardcode("AE")`,
+  `case_when(cmongo == "Y" ~ "ONGOING")`, etc.
+- `compile_rules()` parses these into executable derivation rules.
+- `build_domain()` applies the rules in dependency order, automatically
+  joins DM for RFSTDTC when --DY is needed, and passes the result to
+  `finalize_domain()` and `export_domain()`.
+- **Programmer effort**: fill in Variables sheet with METHOD expressions.
+  Zero R code.
+- **sdtm.oak**: handles the core variable mappings, but needs manual code
+  for data import (~20 lines), DM join for RFSTDTC (~10 lines), domain
+  finalisation and export (~30 lines), plus the `derive_study_day()` TMP
+  workaround (~5 lines per domain). That is roughly **60–80 lines of
+  boilerplate R per domain**.
+
+### Modules Used in Phase 1–2
+
+| Module | Functions | Role |
+|:---|:---|:---|
+| **Import** (E) | `load_raw_datasets()`, `standardize_names()`, `standardize_types()`, `apply_missing_conventions()`, `derive_core_keys()` | Read and normalise raw data |
+| **Metadata** (B) | `read_study_metadata_excel()`, `read_study_ct_excel()`, `validate_study_metadata()` | Load and validate the specification |
+| **Rules** (C) | `compile_rules()`, `enrich_rules_with_ct()` | Parse METHOD column into executable rules |
+| **Config domains** (H) | `expand_config_domains()` | Generate TI/TV from config |
+| **Build** (H) | `build_domain()`, `derive_variable()`, `finalize_domain()` | Execute rules and finalise |
+| **Derivations** (G1–G6) | `map_direct()`, `derive_constant()`, `assign_ct()`, `parse_partial_date()`, `format_iso_dtc()`, `derive_dy()`, `derive_seq()`, `derive_usubjid()`, `derive_dict_version()`, `derive_case_when()`, `derive_if_else()`, `derive_coalesce()`, `derive_seriousness()` | Individual variable derivations |
+| **Validation** (I) | `validate_domain_structure()` (11 checks) | Post-build conformance |
+| **Export** (K) | `export_domain()` | Write XPT, RDS, CSV |
+| **Orchestration** | `run_study()`, `build_all_domains()` | Coordinate the full pipeline |
+
+---
+
+# The Vision — Six Phases of Increasing Complexity
+
+The roadmap is designed so that **each phase asks the programmer to provide
+a little more metadata**, matching increasing domain complexity. The guiding
+idea is:
+
+> **In the Sources sheet, you define the conditions that trigger a new
+> record. In the Source Columns sheet, you define the values each variable
+> takes for that specific block. If we can define these well — ideally
+> together with data managers — there will be far less back-and-forth
+> between them and programmers.**
+
+```{r phase-overview, echo=FALSE}
+library(knitr)
+
+phases <- data.frame(
+  Phase = c(
+    "Phase 1",
+    "Phase 2",
+    "Phase 3",
+    "Phase 4",
+    "Phase 5",
+    "Phase 6"
+  ),
+  Name = c(
+    "Config-driven trial design",
+    "Direct mapping",
+    "Single-source stacking",
+    "Multi-source stacking",
+    "Cross-domain joining",
+    "Relationship domains"
+  ),
+  Domains = c(
+    "TI, TV",
+    "AE, CM, MH, XS, PR, IE",
+    "VS, IE, SV, QS, ML, BE, APSC",
+    "CO, FA, CE, EC, EX, SU, SC",
+    "DM, DS",
+    "RELREC"
+  ),
+  What_the_Programmer_Provides = c(
+    "config.yaml only (ie_criteria, visit_map)",
+    "Variables sheet (METHOD column)",
+    "Variables + Sources + Source Columns (STACK blocks within one raw file)",
+    "Variables + Sources + Source Columns (STACK blocks from different raw files)",
+    "Variables + Sources + Source Columns (LEFT_JOIN blocks)",
+    "relrec: section in config.yaml"
+  ),
+  Status = c(
+    "Done",
+    "Done",
+    "Envisioned — engine ready, metadata format designed",
+    "Envisioned — engine ready, metadata format designed",
+    "Envisioned — engine ready, metadata format designed",
+    "Done"
+  ),
+  stringsAsFactors = FALSE
+)
+
+kable(phases,
+      col.names = c("Phase", "Name", "Domains", "Programmer Provides",
+                     "Status"),
+      caption = "Phased rollout — from simple to complex domains")
+```
+
+## Phase 1 — Config-Driven Trial Design (DONE)
+
+**Domains**: TI, TV
+
+**Complexity for the programmer**: Minimal — only `config.yaml`.  
+**What happens**: `expand_config_domains()` auto-generates data from the
+protocol definitions (visit schedule, I/E criteria). No spreadsheet rows
+beyond the Variables sheet.
+
+**sdtm.oak**: Cannot do this — no config-driven generation concept.
+
+## Phase 2 — Direct Mapping (DONE)
+
+**Domains**: AE, CM, MH, XS, PR, (IE partly)
+
+**Complexity for the programmer**: Low — fill in the Variables sheet with
+METHOD expressions like `direct(aeterm)`, `format_date(aestdat)`,
+`hardcode("AE")`. No Sources or Source Columns needed.  
+**What happens**: The engine reads the raw dataset implied by the domain
+name, applies the derivation rules, joins DM for reference dates, and
+exports.
+
+**sdtm.oak**: Handles the variable mappings but requires 60–80 lines of
+manual code per domain for import, DM join, finalisation, export.
+
+## Phase 3 — Single-Source Stacking (Envisioned)
+
+**Domains**: VS, IE, SV, QS, ML, BE, APSC
+
+**Complexity for the programmer**: Medium — add Sources rows (one per
+STACK block) and Source Columns rows (per-block variable derivations).  
+**What happens**: Different conditions on the same raw file produce
+different groups of records. For example, VS has 4 blocks (weight, height,
+systolic/diastolic blood pressure, head circumference), each reading
+different columns from the same raw dataset and stacking them into one
+SDTM domain.
+
+**The key idea**: Each Sources row represents a **condition that triggers
+new records** (e.g. "when the weight column is non-missing, create a VS
+record with VSTESTCD = WEIGHT"). Each Source Columns row defines **what
+value each variable takes for that block** (e.g. VSTEST = "Weight",
+VSORRESU = "kg"). The engine stacks all blocks, applies visit/timepoint
+mapping from config, and then proceeds with the standard derivation rules.
+
+**sdtm.oak**: Handles the final variable assignments after stacking, but
+the programmer must manually write `bind_rows()` with column alignment
+for each block — 50–200 lines of R code per domain.
+
+## Phase 4 — Multi-Source Stacking (Envisioned)
+
+**Domains**: CO, FA, CE, EC, EX, SU, SC
+
+**Complexity for the programmer**: Medium–High — same as Phase 3 but blocks
+come from **different raw files**, each with its own column structure.  
+**What happens**: Sources rows declare `MERGE_TYPE: STACK` with different
+`RAW_DATASET` values. Source Columns harmonise columns across files before
+stacking.
+
+**Example — SU**: Six substance types (alcohol, cigarettes, cigars, pipe,
+e-cig with nicotine, e-cig without nicotine) live in separate column groups
+across raw files. Six Sources rows, each with its own Source Columns mapping
+SUTRT, SUCAT, SUDOSE → same SDTM structure.
+
+**sdtm.oak**: No multi-source stacking at all. Our Example 2 SU program
+was 350 lines — the longest single QC script.
+
+## Phase 5 — Cross-Domain Joining (Envisioned)
+
+**Domains**: DM, DS
+
+**Complexity for the programmer**: Medium — add Sources rows with
+`MERGE_TYPE: LEFT_JOIN` and `JOIN_BY` keys.  
+**What happens**: The primary raw dataset is enriched with columns from
+secondary datasets by joining on subject ID or other keys. For DM this
+means pulling reference dates from EX, death information from AE, and
+arm assignment from the randomisation file — all declaratively.
+
+**sdtm.oak**: Fundamentally insufficient. DM was ~200 lines of manual
+merge and conditional logic in our study.
+
+## Phase 6 — Relationship Domains (DONE)
+
+**Domains**: RELREC
+
+**Complexity for the programmer**: Config only — the `relrec:` section of
+`config.yaml`.  
+**What happens**: `build_relrec()` reads relationship specifications
+(record links, identity matches, sequence lookups) and generates the
+paired RELREC rows automatically.
+
+**sdtm.oak**: No RELREC builder.
+
+---
+
+# Vision: Bridging Programmers and Data Managers
+
+A core part of the vision is to **reduce the back-and-forth between
+programmers and data managers** by having both work from the same
+metadata artefacts.
+
+Today, the typical SDTM programming workflow looks like this:
+
+```
+Data Manager                      Programmer
+  │                                   │
+  ├── designs CRF ──────────────────► │
+  │                                   ├── reads spec
+  │                                   ├── reads CRF annotated
+  │                                   ├── writes R/SAS code
+  │                                   ├── discovers data issue
+  │   ◄── asks clarification ────────┤
+  ├── explains ──────────────────────►│
+  │                                   ├── fixes code
+  │                                   ├── discovers another issue
+  │   ◄── asks again ────────────────┤
+  └── ...                             └── ...
+```
+
+With sdtmbuilder, the metadata tables act as a **shared contract**:
+
+```
+Data Manager + Programmer
+  │
+  ├── fill in Sources together:
+  │     "Which conditions trigger a new record?"
+  │     "Which raw file / column group does each block come from?"
+  │
+  ├── fill in Source Columns together:
+  │     "What value does each SDTM variable take for each block?"
+  │
+  ├── fill in Variables:
+  │     "What is the derivation rule for each variable?"
+  │
+  └── run_study() → validated XPT
+```
+
+Because the metadata is **declarative and auditable**, both sides can
+review it — the data manager sees which raw columns map where, the
+programmer sees that every variable has a defined rule. Ambiguities
+surface at the metadata stage, not after hundreds of lines of code have
+been written.
+
+---
+
+# Current Status and Next Steps
+
+```{r status-table, echo=FALSE}
+library(knitr)
+
+status <- data.frame(
+  Component = c(
+    "Import module",
+    "Metadata reader",
+    "Rule compiler",
+    "Build engine (direct mapping)",
+    "Preprocessing engine (stacking/joining)",
+    "Derivation functions (30+ rule types)",
+    "Validation (16 checks)",
+    "Export (XPT, RDS, CSV, RDA)",
+    "Code generation",
+    "Config-driven domains (TI, TV)",
+    "RELREC builder",
+    "SUPP builder",
+    "Phase 1 domains (TI, TV)",
+    "Phase 2 domains (AE, CM, MH, XS, PR, IE)",
+    "Phase 3 domains (VS, IE stacking, QS, ...)",
+    "Phase 4 domains (CO, FA, CE, ...)",
+    "Phase 5 domains (DM, DS)",
+    "Phase 6 (RELREC)"
+  ),
+  Status = c(
+    "Complete",
+    "Complete",
+    "Complete",
+    "Complete",
+    "Engine ready — metadata integration in progress",
+    "Complete",
+    "Complete",
+    "Complete",
+    "Complete",
+    "Complete",
+    "Complete",
+    "Complete",
+    "Done",
+    "Done",
+    "Engine ready — testing with study data in progress",
+    "Engine ready — testing with study data in progress",
+    "Engine ready — testing with study data in progress",
+    "Engine ready — testing with study data in progress"
+  ),
+  stringsAsFactors = FALSE
+)
+
+kable(status,
+      col.names = c("Component", "Status"),
+      caption = "Current implementation status")
+```
+
+### Immediate Next Steps
+
+1. **Phase 3 validation**: Run the preprocessing engine on all single-source
+   stacking domains (VS, QS, BE, etc.) with real study data and verify
+   output against the Example 2 QC results.
+2. **Phase 4–5 validation**: Extend to multi-source and cross-domain domains.
+3. **Metadata template**: Provide a pre-filled `Study_Metadata.xlsx`
+   template with guidance for data managers.
+4. **Config flexibility**: Allow metadata to come from mapping tables
+   provided by data managers (not only YAML), making Phase 1 even more
+   accessible.
+
+---
+
+# Summary
+
+| | sdtm.oak | sdtmbuilder |
+|:---|:---|:---|
+| **Scope** | Variable-level mapping (~7 functions) | Full pipeline — import to validated XPT (146 functions) |
+| **Approach** | One R script per domain with manual glue code | Metadata-driven — one `run_study()` call |
+| **Structural transforms** | None | STACK, LEFT_JOIN, PIVOT — declarative in metadata |
+| **Custom R code per domain** | 60–350 lines | 0 lines |
+| **Validation** | None | 16 automated checks |
+| **Reusability across studies** | Low — scripts are study-specific | High — update metadata, not code |
+| **Collaboration** | Programmer-only artefact (R code) | Shared artefact (Excel + YAML) readable by data managers |
+| **Current status** | Stable, limited scope | Phase 1–2 complete, Phase 3–5 engine ready |
