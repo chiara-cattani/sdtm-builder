@@ -5,6 +5,302 @@
 #' @importFrom utils head
 NULL
 
+# ==============================================================================
+# PHASE 1: PRE-VALIDATION (Metadata ↔ CT Structure)
+# ==============================================================================
+# Run BEFORE dataset creation to catch malformed metadata/CT early
+# ==============================================================================
+
+#' Pre-validation: Metadata and CT structure consistency
+#'
+#' Validates the structure and consistency of metadata and controlled
+#' terminology BEFORE dataset creation. Catches misconfigurations early.
+#'
+#' Checks include:
+#' - Domains in target_meta are valid and complete
+#' - Variables reference existing codelists (if specified)
+#' - Codelists have valid structure (required columns, no duplicates)
+#' - Value-level metadata references existing domain/variables
+#' - No orphaned codelist references
+#' - Codelist extensibility flags are properly set
+#'
+#' @param target_meta Tibble. Target metadata for all domains.
+#' @param ct_lib Tibble or `NULL`. Controlled terminology library.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata.
+#' @return `validation_report` with findings organized by category.
+#' @export
+validate_metadata_ct_structure <- function(target_meta,
+                                            ct_lib = NULL,
+                                            value_level_meta = NULL,
+                                            domain_meta = NULL) {
+  rpt <- new_validation_report(domain = "PRE-VALIDATION (Metadata & CT)")
+
+  # =========== 1. TARGET METADATA STRUCTURE ===========
+
+  if (is.null(target_meta) || nrow(target_meta) == 0L) {
+    report <- add_finding(rpt, rule_id = "metadata_empty",
+                          severity = "ERROR",
+                          message = "Target metadata is empty or NULL",
+                          domain = "PRE-VALIDATION")
+    return(rpt)
+  }
+
+  # Required columns
+  required_meta_cols <- c("domain", "var", "type", "label")
+  missing_cols <- setdiff(required_meta_cols, names(target_meta))
+  if (length(missing_cols) > 0L) {
+    rpt <- add_finding(rpt, rule_id = "metadata_missing_cols",
+                       severity = "ERROR",
+                       message = glue::glue(
+                         "Target metadata missing required columns: {paste(missing_cols, collapse=', ')}"
+                       ),
+                       domain = "PRE-VALIDATION")
+    return(rpt)
+  }
+
+  # 1a. Check for duplicate (domain, var) pairs
+  dup_check <- target_meta %>%
+    dplyr::group_by(.data$domain, .data$var) %>%
+    dplyr::mutate(n = dplyr::n()) %>%
+    dplyr::filter(.data$n > 1L) %>%
+    dplyr::distinct(.data$domain, .data$var, .data$n)
+
+  if (nrow(dup_check) > 0L) {
+    dup_list <- glue::glue_data(dup_check,
+                                 "{domain}/{var} ({n} times)")
+    rpt <- add_finding(rpt, rule_id = "metadata_duplicate_vars",
+                       severity = "ERROR",
+                       message = glue::glue(
+                         "Duplicate (domain, var) pairs in metadata: {paste(dup_list, collapse='; ')}"
+                       ),
+                       domain = "PRE-VALIDATION")
+  }
+
+  # 1b. Check for invalid core values
+  invalid_core <- target_meta %>%
+    dplyr::filter(!is.na(.data$core) &
+                  !toupper(.data$core) %in% c("REQ", "EXP", "PERM"))
+  if (nrow(invalid_core) > 0L) {
+    invalid_list <- glue::glue_data(invalid_core,
+                                      "{domain}/{var}={core}")
+    rpt <- add_finding(rpt, rule_id = "metadata_invalid_core",
+                       severity = "ERROR",
+                       message = glue::glue(
+                         "Invalid 'core' values (must be REQ/EXP/PERM): {paste(head(invalid_list, 5), collapse='; ')}"
+                       ),
+                       domain = "PRE-VALIDATION")
+  }
+
+  # 1c. Check for invalid type values
+  valid_types <- c("Char", "Num")
+  invalid_type <- target_meta %>%
+    dplyr::filter(!is.na(.data$type) &
+                  !.data$type %in% valid_types)
+  if (nrow(invalid_type) > 0L) {
+    invalid_list <- glue::glue_data(invalid_type,
+                                      "{domain}/{var}={type}")
+    rpt <- add_finding(rpt, rule_id = "metadata_invalid_type",
+                       severity = "ERROR",
+                       message = glue::glue(
+                         "Invalid 'type' values (must be 'Char' or 'Num'): {paste(head(invalid_list, 5), collapse='; ')}"
+                       ),
+                       domain = "PRE-VALIDATION")
+  }
+
+  # =========== 2. CODELIST STRUCTURE ===========
+
+  if (!is.null(ct_lib) && nrow(ct_lib) > 0L) {
+    # Required columns
+    required_ct_cols <- c("codelist_id", "coded_value")
+    missing_ct_cols <- setdiff(required_ct_cols, names(ct_lib))
+    if (length(missing_ct_cols) > 0L) {
+      rpt <- add_finding(rpt, rule_id = "ct_missing_cols",
+                         severity = "ERROR",
+                         message = glue::glue(
+                           "CT library missing required columns: {paste(missing_ct_cols, collapse=', ')}"
+                         ),
+                         domain = "PRE-VALIDATION")
+    } else {
+      # 2a. Check for duplicate (codelist_id, coded_value, is_selected) - each combo should appear once per select status
+      dup_ct <- ct_lib %>%
+        dplyr::group_by(.data$codelist_id, .data$coded_value,
+                        dplyr::across(dplyr::any_of("is_selected"))) %>%
+        dplyr::mutate(n = dplyr::n()) %>%
+        dplyr::filter(.data$n > 1L) %>%
+        dplyr::distinct(.data$codelist_id, .data$coded_value, .data$n)
+
+      if (nrow(dup_ct) > 0L) {
+        dup_list <- glue::glue_data(dup_ct,
+                                     "{codelist_id}/{coded_value} ({n} times)")
+        rpt <- add_finding(rpt, rule_id = "ct_duplicate_values",
+                           severity = "ERROR",
+                           message = glue::glue(
+                             "Duplicate values in CT: {paste(head(dup_list, 5), collapse='; ')}"
+                           ),
+                           domain = "PRE-VALIDATION")
+      }
+
+      # 2b. Check is_selected and is_extensible format
+      if ("is_selected" %in% names(ct_lib)) {
+        invalid_selected <- ct_lib %>%
+          dplyr::filter(!toupper(.data$is_selected) %in% c("Y", "N"))
+        if (nrow(invalid_selected) > 0L) {
+          rpt <- add_finding(rpt, rule_id = "ct_invalid_is_selected",
+                             severity = "ERROR",
+                             message = glue::glue(
+                               "{nrow(invalid_selected)} row(s) in CT have invalid is_selected values (must be Y/N)"
+                             ),
+                             domain = "PRE-VALIDATION")
+        }
+      }
+
+      if ("is_extensible" %in% names(ct_lib)) {
+        invalid_ext <- ct_lib %>%
+          dplyr::filter(!is.na(.data$is_extensible) &
+                        !toupper(.data$is_extensible) %in% c("Y", "YES", "N", "NO"))
+        if (nrow(invalid_ext) > 0L) {
+          rpt <- add_finding(rpt, rule_id = "ct_invalid_is_extensible",
+                             severity = "ERROR",
+                             message = glue::glue(
+                               "{nrow(invalid_ext)} row(s) in CT have invalid is_extensible values (must be Y/YES or N/NO)"
+                             ),
+                             domain = "PRE-VALIDATION")
+        }
+      }
+    }
+
+    # 2c. Check for codelists referenced in metadata but missing from ct_lib
+    meta_codelists <- unique(target_meta$codelist_id[!is.na(target_meta$codelist_id)])
+    ct_codelists <- unique(ct_lib$codelist_id)
+    missing_in_ct <- setdiff(meta_codelists, ct_codelists)
+
+    if (length(missing_in_ct) > 0L) {
+      # Find which variables reference missing codelists
+      missing_vars <- target_meta %>%
+        dplyr::filter(.data$codelist_id %in% missing_in_ct) %>%
+        dplyr::distinct(.data$domain, .data$var, .data$codelist_id)
+
+      missing_text <- glue::glue_data(missing_vars,
+                                       "{domain}/{var} → {codelist_id}")
+      rpt <- add_finding(rpt, rule_id = "ct_missing_codelists",
+                         severity = "ERROR",
+                         message = glue::glue(
+                           "{length(missing_in_ct)} codelist(s) referenced in metadata but NOT in CT: {paste(head(missing_text, 5), collapse='; ')}"
+                         ),
+                         domain = "PRE-VALIDATION")
+    }
+
+    # 2d. Check for orphaned codelists (in ct_lib but not referenced anywhere)
+    orphan_codelists <- setdiff(ct_codelists, meta_codelists)
+
+    if (length(orphan_codelists) > 0L) {
+      rpt <- add_finding(rpt, rule_id = "ct_orphaned_codelists",
+                         severity = "WARNING",
+                         message = glue::glue(
+                           "{length(orphan_codelists)} codelist(s) in CT but NOT referenced in metadata (unused): {paste(head(orphan_codelists, 5), collapse=', ')}"
+                         ),
+                         domain = "PRE-VALIDATION")
+    }
+  }
+
+  # =========== 3. VALUE-LEVEL METADATA STRUCTURE ===========
+
+  if (!is.null(value_level_meta) && nrow(value_level_meta) > 0L) {
+    required_vlm_cols <- c("domain", "variable")
+    missing_vlm_cols <- setdiff(required_vlm_cols, names(value_level_meta))
+    if (length(missing_vlm_cols) > 0L) {
+      rpt <- add_finding(rpt, rule_id = "vlm_missing_cols",
+                         severity = "ERROR",
+                         message = glue::glue(
+                           "Value-level metadata missing required columns: {paste(missing_vlm_cols, collapse=', ')}"
+                         ),
+                         domain = "PRE-VALIDATION")
+    } else {
+      # 3a. Check if referenced domains exist in target_meta
+      vlm_domains <- unique(value_level_meta$domain)
+      meta_domains <- unique(target_meta$domain)
+      missing_vlm_domains <- setdiff(vlm_domains, meta_domains)
+
+      if (length(missing_vlm_domains) > 0L) {
+        rpt <- add_finding(rpt, rule_id = "vlm_invalid_domain",
+                           severity = "ERROR",
+                           message = glue::glue(
+                             "Value-level metadata references non-existent domains: {paste(missing_vlm_domains, collapse=', ')}"
+                           ),
+                           domain = "PRE-VALIDATION")
+      }
+
+      # 3b. Check if referenced variables exist in target_meta for their domain
+      vlm_invalid_vars <- value_level_meta %>%
+        dplyr::anti_join(target_meta, by = c("domain", "variable" = "var"))
+
+      if (nrow(vlm_invalid_vars) > 0L) {
+        invalid_list <- glue::glue_data(vlm_invalid_vars,
+                                         "{domain}/{variable}")
+        rpt <- add_finding(rpt, rule_id = "vlm_invalid_variable",
+                           severity = "ERROR",
+                           message = glue::glue(
+                             "Value-level metadata references non-existent variables: {paste(head(invalid_list, 5), collapse='; ')}"
+                           ),
+                           domain = "PRE-VALIDATION")
+      }
+
+      # 3c. Check that where_var/where_value are not left without both
+      incomplete_where <- value_level_meta %>%
+        dplyr::filter((is.na(.data$where_var) & !is.na(.data$where_value)) |
+                      (!is.na(.data$where_var) & is.na(.data$where_value)))
+
+      if (nrow(incomplete_where) > 0L) {
+        incomplete_list <- glue::glue_data(incomplete_where,
+                                            "{domain}/{variable}")
+        rpt <- add_finding(rpt, rule_id = "vlm_incomplete_where",
+                           severity = "WARNING",
+                           message = glue::glue(
+                             "Value-level metadata has incomplete where clause (both where_var and where_value needed): {paste(head(incomplete_list, 5), collapse='; ')}"
+                           ),
+                           domain = "PRE-VALIDATION")
+      }
+    }
+  }
+
+  # =========== 4. DOMAIN-LEVEL METADATA STRUCTURE ===========
+
+  if (!is.null(domain_meta) && nrow(domain_meta) > 0L) {
+    # 4a. Check if domains in domain_meta exist in target_meta
+    domain_meta_domains <- unique(domain_meta$domain)
+    missing_domains <- setdiff(domain_meta_domains, meta_domains)
+
+    if (length(missing_domains) > 0L) {
+      rpt <- add_finding(rpt, rule_id = "domain_meta_invalid_domain",
+                         severity = "ERROR",
+                         message = glue::glue(
+                           "Domain metadata references non-existent domains: {paste(missing_domains, collapse=', ')}"
+                         ),
+                         domain = "PRE-VALIDATION")
+    }
+  }
+
+  # =========== 5. CROSS-STRUCTURAL CONSISTENCY ===========
+
+  # 5a. At least one REQ or EXP variable per domain
+  domain_cores <- target_meta %>%
+    dplyr::filter(!is.na(.data$core) & toupper(.data$core) %in% c("REQ", "EXP")) %>%
+    dplyr::distinct(.data$domain)
+
+  domains_no_req <- setdiff(meta_domains, domain_cores$domain)
+  if (length(domains_no_req) > 0L) {
+    rpt <- add_finding(rpt, rule_id = "metadata_no_req_vars",
+                       severity = "WARNING",
+                       message = glue::glue(
+                         "{length(domains_no_req)} domain(s) have NO required or expected variables: {paste(domains_no_req, collapse=', ')}"
+                       ),
+                       domain = "PRE-VALIDATION")
+  }
+
+  rpt
+}
+
 #' Validate a completed domain dataset
 #'
 #' Runs a battery of checks on a built domain and accumulates findings
@@ -701,10 +997,17 @@ validate_no_duplicate_rows <- function(data, domain, report) {
   report
 }
 
-#' Comprehensive consistency validation: metadata ↔ CT ↔ dataset
+# ==============================================================================
+# PHASE 2: FINAL VALIDATION (Metadata ↔ CT ↔ Dataset)
+# ==============================================================================
+# Run AFTER dataset creation to verify complete alignment before Define-XML
+# ==============================================================================
+
+#' Final validation: Metadata, CT, and dataset consistency
 #'
-#' Validates that selected metadata and CT match what's actually in the dataset.
-#' Identifies all inconsistencies to help prepare for Define-XML creation.
+#' Validates complete alignment between metadata, controlled terminology,
+#' and SDTM datasets AFTER creation. Ensures everything is ready for
+#' Define-XML file generation.
 #'
 #' Checks include:
 #' - Variables: extra in dataset, missing from dataset, not selected but in dataset
@@ -927,13 +1230,16 @@ validate_metadata_ct_dataset_consistency <- function(data, target_meta, domain,
   report
 }
 
-#' Generate a comprehensive consistency report for Define-XML preparation
+#' Print formatted report of consistency findings
 #'
-#' Creates a summary of metadata-CT-dataset consistency findings organized
-#' by severity and issue type. Perfect for final validation before Define-XML.
+#' Generates a beautifully formatted, actionable report of metadata-CT-dataset
+#' consistency findings. Organized by severity (ERROR/WARNING/NOTE) and
+#' issue type with specific values and recommended actions.
 #'
-#' @param report `validation_report`. The validation report to summarize.
-#' @return Invisible report (for piping). Prints formatted summary to console.
+#' Called automatically by [validate_and_report_dataset()].
+#'
+#' @param report `validation_report`. The validation report to print.
+#' @return Invisibly returns report (for piping).
 #' @export
 print_consistency_report <- function(report) {
   checkmate::assert_class(report, "validation_report")
@@ -1039,4 +1345,99 @@ print_consistency_report <- function(report) {
   }
 
   invisible(report)
+}
+
+# ==============================================================================
+# CONVENIENCE WRAPPERS FOR TWO-PHASE VALIDATION
+# ==============================================================================
+
+#' Quick validation of metadata and CT structure (Phase 1)
+#'
+#' Convenient wrapper for one-line pre-validation of metadata and CT.
+#' Prints report automatically for immediate feedback.
+#'
+#' **Use Case**: Run at the beginning of your project to catch metadata/CT
+#' issues before dataset creation.
+#'
+#' @param target_meta Tibble. Target metadata.
+#' @param ct_lib Tibble or `NULL`. Controlled terminology library.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata.
+#' @param domain_meta Tibble or `NULL`. Domain-level metadata.
+#' @param print_report Logical. Default `TRUE`. Print formatted report.
+#' @return Invisibly returns `validation_report` (silently if print_report=TRUE).
+#' @export
+#' @examples
+#' \dontrun{
+#'   # Run pre-validation on your metadata files
+#'   validate_and_report_metadata_ct(
+#'     target_meta = metadata$target_meta,
+#'     ct_lib = ct_spec,
+#'     value_level_meta = metadata$value_level_meta,
+#'     domain_meta = metadata$domain_meta
+#'   )
+#' }
+validate_and_report_metadata_ct <- function(target_meta,
+                                             ct_lib = NULL,
+                                             value_level_meta = NULL,
+                                             domain_meta = NULL,
+                                             print_report = TRUE) {
+  rpt <- validate_metadata_ct_structure(
+    target_meta = target_meta,
+    ct_lib = ct_lib,
+    value_level_meta = value_level_meta,
+    domain_meta = domain_meta
+  )
+
+  if (print_report) {
+    print(rpt)
+  }
+
+  invisible(rpt)
+}
+
+#' Quick validation of dataset consistency with metadata and CT (Phase 2)
+#'
+#' Convenient wrapper for one-line final validation of datasets against
+#' metadata and CT. Prints report automatically for immediate feedback.
+#'
+#' **Use Case**: Run after dataset creation (or with manually created datasets)
+#' to verify complete alignment before Define-XML generation.
+#'
+#' @param data Tibble. The SDTM domain dataset to validate.
+#' @param domain Character. Domain abbreviation (e.g., "AE", "DM").
+#' @param target_meta Tibble. Target metadata.
+#' @param ct_lib Tibble or `NULL`. Controlled terminology library.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata.
+#' @param print_report Logical. Default `TRUE`. Print formatted report.
+#' @return Invisibly returns `validation_report`.
+#' @export
+#' @examples
+#' \dontrun{
+#'   # Validate a built AE dataset
+#'   validate_and_report_dataset(
+#'     data = ae_built,
+#'     domain = "AE",
+#'     target_meta = metadata$target_meta,
+#'     ct_lib = ct_spec,
+#'     value_level_meta = metadata$value_level_meta
+#'   )
+#' }
+validate_and_report_dataset <- function(data, domain, target_meta,
+                                         ct_lib = NULL,
+                                         value_level_meta = NULL,
+                                         print_report = TRUE) {
+  rpt <- validate_metadata_ct_dataset_consistency(
+    data = data,
+    target_meta = target_meta,
+    domain = domain,
+    ct_lib = ct_lib,
+    value_level_meta = value_level_meta,
+    report = NULL
+  )
+
+  if (print_report) {
+    print_consistency_report(rpt)
+  }
+
+  invisible(rpt)
 }
