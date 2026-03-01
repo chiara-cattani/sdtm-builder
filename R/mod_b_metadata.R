@@ -635,19 +635,20 @@ read_study_ct_excel <- function(path) {
 
 #' Read and parse the Codelists_terms sheet
 #' @param path Path to Excel file.
-#' @return Tibble with flat CT terms: codelist_id, coded_value, input_value, decode, etc.
+#' @return Tibble with flat CT terms: codelist_id, coded_value, input_value, decode, etc.,
+#'   plus is_selected column indicating if the term was marked with select='Y'.
 #' @noRd
 .read_codelists_terms_sheet <- function(path) {
   df <- readxl::read_excel(path, sheet = "Codelists_terms")
   df <- tibble::as_tibble(df)
   names(df) <- tolower(names(df))
 
-  # Filter selected rows
+  # Track which rows are selected
+  is_selected <- "Y"
   if ("select" %in% names(df)) {
-    df <- dplyr::filter(df, toupper(.data$select) == "Y")
+    is_selected <- toupper(df$select) == "Y"
     df$select <- NULL
   }
-  if (nrow(df) == 0L) abort("Codelists_terms sheet has no rows with Select = 'Y'.")
 
   # Validate required columns
   required <- c("codelist_id", "submission_value")
@@ -675,10 +676,11 @@ read_study_ct_excel <- function(path) {
   df$submission_value  <- df$submission_value
   df$input_value       <- dplyr::coalesce(decode_clean, df$submission_value)
   df$case_sensitive    <- "N"
+  df$is_selected       <- ifelse(is_selected, "Y", "N")
 
   # Select and order output columns
   out_cols <- c("codelist_id", "codelist_name", "coded_value", "submission_value",
-                "input_value", "decode", "case_sensitive", "term_code")
+                "input_value", "decode", "case_sensitive", "term_code", "is_selected")
   out_cols <- intersect(out_cols, names(df))
   df[, out_cols, drop = FALSE]
 }

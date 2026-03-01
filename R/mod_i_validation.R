@@ -299,36 +299,89 @@ validate_ct_conformance <- function(data, target_meta, domain,
     if (!v %in% names(data)) next
 
     cl_id <- ct_vars$codelist_id[i]
-    
-    # Get all valid values: coded_value, submission_value, AND decode
-    cl <- ct_lib %>% dplyr::filter(.data$codelist_id == cl_id)
-    valid_values <- union(cl$coded_value, cl$submission_value)
-    if ("decode" %in% names(cl)) {
-      decode_vals <- cl$decode[!is.na(cl$decode) & trimws(cl$decode) != ""]
+
+    # Get full codelist (all records)
+    cl_all <- ct_lib %>% dplyr::filter(.data$codelist_id == cl_id)
+    if (nrow(cl_all) == 0L) next
+
+    # Split into selected vs unselected terms
+    is_selected_col <- "is_selected" %in% names(cl_all)
+    if (is_selected_col) {
+      cl_selected <- cl_all %>% dplyr::filter(toupper(.data$is_selected) == "Y")
+      cl_unselected <- cl_all %>% dplyr::filter(toupper(.data$is_selected) == "N")
+    } else {
+      # Fallback if is_selected column not present
+      cl_selected <- cl_all
+      cl_unselected <- cl_all[0L, , drop = FALSE]
+    }
+
+    # Get valid values from selected terms (primary validation)
+    valid_values <- union(cl_selected$coded_value, cl_selected$submission_value)
+    if ("decode" %in% names(cl_selected)) {
+      decode_vals <- cl_selected$decode[!is.na(cl_selected$decode) & trimws(cl_selected$decode) != ""]
       valid_values <- union(valid_values, decode_vals)
     }
-    
+
+    # Get all values in codelist (for detecting not-selected terms)
+    all_codelist_values <- union(cl_all$coded_value, cl_all$submission_value)
+    if ("decode" %in% names(cl_all)) {
+      decode_vals_all <- cl_all$decode[!is.na(cl_all$decode) & trimws(cl_all$decode) != ""]
+      all_codelist_values <- union(all_codelist_values, decode_vals_all)
+    }
+
     if (length(valid_values) == 0L) next
 
+    # Get data values
     data_vals <- unique(data[[v]][!is.na(data[[v]])])
+    if (length(data_vals) == 0L) next
+
     data_norm <- normalize_ct(data_vals)
     valid_norm <- normalize_ct(valid_values)
+    all_codelist_norm <- normalize_ct(all_codelist_values)
+
+    # Find bad values (not in selected terms)
     bad_vals <- data_vals[!data_norm %in% valid_norm]
 
     if (length(bad_vals) > 0L) {
-      # Check if codelist is extensible — downgrade to NOTE if so
-      is_ext <- ext_lookup[[cl_id]]
-      if (!is.null(is_ext) && toupper(is_ext) == "YES") {
-        severity <- "NOTE"
-        msg_prefix <- "(extensible codelist)"
-      } else {
-        severity <- "WARNING"
-        msg_prefix <- ""
+      # Determine which bad values are in the full codelist but not selected
+      bad_vals_norm <- normalize_ct(bad_vals)
+      in_codelist_not_selected <- bad_vals[bad_vals_norm %in% all_codelist_norm]
+      not_in_codelist <- bad_vals[!bad_vals_norm %in% all_codelist_norm]
+
+      # Report unselected values first (always a warning)
+      if (length(in_codelist_not_selected) > 0L) {
+        report <- add_finding(
+          report, rule_id = "ct_conformance",
+          severity = "WARNING",
+          message = glue::glue(
+            "{v}: {length(in_codelist_not_selected)} value(s) present in {cl_id} but not selected (select≠Y): {paste(head(in_codelist_not_selected, 3), collapse=', ')}"
+          ),
+          variable = v, domain = domain
+        )
       }
-      report <- add_finding(report, rule_id = "ct_conformance",
-                            severity = severity,
-                            message = glue::glue("{v}: {length(bad_vals)} value(s) not in codelist {cl_id} {msg_prefix}: {paste(head(bad_vals,3), collapse=', ')}"),
-                            variable = v, domain = domain)
+
+      # Report values not in codelist (severity depends on extensibility)
+      if (length(not_in_codelist) > 0L) {
+        is_ext <- ext_lookup[[cl_id]]
+        if (!is.null(is_ext) && toupper(is_ext) == "YES") {
+          # Extensible: warning (accept values not in codelist)
+          severity <- "WARNING"
+          msg_type <- "not in codelist (extensible)"
+        } else {
+          # Non-extensible: error
+          severity <- "ERROR"
+          msg_type <- "not in codelist (non-extensible)"
+        }
+
+        report <- add_finding(
+          report, rule_id = "ct_conformance",
+          severity = severity,
+          message = glue::glue(
+            "{v}: {length(not_in_codelist)} value(s) {msg_type} {cl_id}: {paste(head(not_in_codelist, 3), collapse=', ')}"
+          ),
+          variable = v, domain = domain
+        )
+      }
     }
   }
   report
