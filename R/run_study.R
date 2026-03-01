@@ -204,6 +204,50 @@ run_study <- function(config_path = NULL,
 
   .log("  target_meta: {nrow(target_meta)} variables across {length(unique(target_meta$domain))} domains")
 
+  # ---- Pre-Validation: Check metadata & CT structure before proceeding ------
+  .log("Step 2-PreVal: Validating metadata & CT structure...")
+  pre_val_report <- validate_metadata_ct_structure(
+    target_meta = target_meta,
+    ct_lib = ct_lib,
+    value_level_meta = value_level_meta,
+    domain_meta = domain_meta
+  )
+
+  # Check for critical errors
+  pre_val_errors <- pre_val_report$findings %>%
+    dplyr::filter(.data$severity == "ERROR")
+
+  if (nrow(pre_val_errors) > 0L) {
+    cli::cli_h2("⚠️  PRE-VALIDATION ERRORS FOUND")
+    cli::cli_alert_danger("Cannot proceed - critical metadata/CT issues must be fixed:")
+    cli::cli_br()
+    for (i in seq_len(nrow(pre_val_errors))) {
+      cli::cli_text("  ✗ {pre_val_errors$message[i]}")
+    }
+    cli::cli_br()
+    cli::cli_text("Please review and update your metadata/CT files, then run run_study() again.")
+    cli::cli_text("For detailed report, run:")
+    cli::cli_code("validate_and_report_metadata_ct(study_meta$target_meta, ct_lib, ...)")
+    stop("Pre-validation failed - cannot proceed", call. = FALSE)
+  }
+
+  # Show warnings/notes for informational purposes
+  pre_val_warnings <- pre_val_report$findings %>%
+    dplyr::filter(.data$severity == "WARNING")
+
+  if (nrow(pre_val_warnings) > 0L) {
+    cli::cli_alert_warning("Pre-validation warnings ({nrow(pre_val_warnings)}):")
+    for (i in seq_len(min(3, nrow(pre_val_warnings)))) {
+      cli::cli_text("  ⚠ {pre_val_warnings$message[i]}")
+    }
+    if (nrow(pre_val_warnings) > 3L) {
+      cli::cli_text("  ... and {nrow(pre_val_warnings) - 3} more warning(s)")
+    }
+    cli::cli_br()
+  }
+
+  .log("Pre-validation complete: All critical issues resolved ✓")
+
   # ---- 3a. Early rule compilation (before data loading) ---------------------
   # This allows us to understand which source datasets are truly needed
   .log("Step 2a: Compiling rules (for smart data loading)...")
