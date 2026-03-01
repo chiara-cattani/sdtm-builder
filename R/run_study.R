@@ -29,6 +29,9 @@
 #' @param output_dir Character or `NULL`. Directory for exported datasets.
 #' @param programs_dir Character or `NULL`. Directory for generated R programs.
 #' @param export_formats Character vector. Default `c("xpt", "rda")`.
+#' @param xpt_version Integer. SAS transport version: `5` (v5 legacy) or
+#'   `8` (v8, default). Inherited from `config.yaml` `export.xpt_version`
+#'   when not set explicitly.
 #' @param generate_programs Logical. Default `TRUE`. Write an R script per
 #'   domain into `programs_dir`.
 #' @param domains Character vector or `NULL`. If `NULL`, builds all domains
@@ -107,6 +110,7 @@ run_study <- function(config_path = NULL,
                       output_dir = NULL,
                       programs_dir = NULL,
                       export_formats = c("xpt", "rda"),
+                      xpt_version = 8L,
                       generate_programs = TRUE,
                       domains = NULL,
                       create_supp = NULL,
@@ -155,6 +159,9 @@ run_study <- function(config_path = NULL,
   # Resolve export_formats and generate_programs: explicit arg wins, else config.yaml
   if (missing(export_formats) && !is.null(cfg_yaml$export$formats)) {
     export_formats <- cfg_yaml$export$formats
+  }
+  if (missing(xpt_version) && !is.null(cfg_yaml$export$xpt_version)) {
+    xpt_version <- as.integer(cfg_yaml$export$xpt_version)
   }
   if (missing(generate_programs) && !is.null(cfg_yaml$export$generate_programs)) {
     generate_programs <- cfg_yaml$export$generate_programs
@@ -365,7 +372,7 @@ run_study <- function(config_path = NULL,
       domain          = dom,
       output_dir      = output_dir,
       formats         = export_formats,
-      xpt_version     = 8L,
+      xpt_version     = xpt_version,
       target_meta     = target_meta,
       domain_meta     = domain_meta,
       drop_empty_perm = dom_drop
@@ -380,7 +387,7 @@ run_study <- function(config_path = NULL,
         domain     = supp_dom,
         output_dir = output_dir,
         formats    = export_formats,
-        xpt_version = 8L
+        xpt_version = xpt_version
       )
     }
   }
@@ -392,7 +399,7 @@ run_study <- function(config_path = NULL,
       domain      = "RELREC",
       output_dir  = output_dir,
       formats     = export_formats,
-      xpt_version = 8L
+      xpt_version = xpt_version
     )
     exported[["RELREC"]] <- TRUE
     .log("  Exported RELREC ({nrow(relrec_data)} rows)")

@@ -1,91 +1,51 @@
 # ******************************************************************************
-# Run study-pilot pipeline — DM + AE + PR + MH + CM + TV + TI + IE + SV + XS + DS + SC + BE + CE + CO + EC + EX + VS + QS + FA + RELREC
+# Run study-pilot pipeline
 # ******************************************************************************
-
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 library(sdtmbuilder)
-# During development, use devtools::load_all("..") to pick up source changes
 devtools::load_all("..")
 
-# Set working directory to study-pilot (adjust path if needed)
-# setwd("study-pilot")
-
 out <- run_study(
-  config_path       = "metadata/config.yaml",
-  domains           = c("DM", "AE", "PR", "MH", "CM", "TV", "TI", "IE", "SV", "XS", "DS", "SC", "BE", "CE", "CO", "EC", "EX", "VS", "QS", "FA", "ML", "APSC"),
-  create_supp       = FALSE,
+
+  # -- Config ------------------------------------------------------------------
+  # Path to the YAML config file. NULL = auto-discover config.yaml or
+  # metadata/config.yaml in the working directory.
+  config_path       = NULL,
+
+  # -- Paths (override config.yaml if set) -------------------------------------
+  # metadata_path = Path to Study_Metadata.xlsx
+  # ct_path       = Path to Study_CT.xlsx
+  # raw_dir       = Directory with raw datasets (.sas7bdat / .csv / .xpt)
+  # output_dir    = Where to write exported XPT/RDA files
+  # programs_dir  = Where to write generated R programs
+  metadata_path     = NULL,
+  ct_path           = NULL,
+  raw_dir           = NULL,
+  output_dir        = NULL,
+  programs_dir      = NULL,
+
+  # -- Export ------------------------------------------------------------------
+  # export_formats = Output file types: "xpt" (SAS transport) and/or "rda" (R binary)
+  # xpt_version    = SAS transport version: 8 (v8, default) or 5 (v5 legacy)
+  # generate_programs = TRUE to write an R script per domain
+  export_formats    = c("xpt", "rda"),
+  xpt_version       = 8L,
   generate_programs = TRUE,
+
+  # -- Domains -----------------------------------------------------------------
+  # Which domains to build. NULL = build all found in metadata.
+  domains           = c("DM", "AE", "PR", "MH", "CM", "TV", "TI", "IE", "SV",
+                        "XS", "DS", "SC", "BE", "CE", "CO", "EC", "EX", "VS",
+                        "QS", "FA", "ML", "APSC"),
+
+  # -- Options -----------------------------------------------------------------
+  # create_supp    = TRUE to generate SUPP-- datasets; FALSE to skip
+  # drop_empty_perm= TRUE to drop PERM variables that are entirely empty;
+  #                  FALSE to keep all; or a named list for per-domain overrides
+  # validate       = TRUE to run validation checks after building
+  # verbose        = TRUE for progress messages in the console
+  create_supp       = FALSE,
+  drop_empty_perm   = FALSE,
+  validate          = TRUE,
   verbose           = TRUE
 )
-
-# Inspect DM
-cat("\n--- DM ---\n")
-str(out$results$DM$data, max.level = 1)
-
-# Inspect AE
-cat("\n--- AE ---\n")
-str(out$results$AE$data, max.level = 1)
-
-# Inspect PR
-cat("\n--- PR ---\n")
-str(out$results$PR$data, max.level = 1)
-
-# Inspect MH
-cat("\n--- MH ---\n")
-str(out$results$MH$data, max.level = 1)
-
-# Inspect CM
-cat("\n--- CM ---\n")
-str(out$results$CM$data, max.level = 1)
-
-# Inspect TV
-cat("\n--- TV ---\n")
-str(out$results$TV$data, max.level = 1)
-
-# Inspect TI
-cat("\n--- TI ---\n")
-str(out$results$TI$data, max.level = 1)
-
-# Inspect IE
-cat("\n--- IE ---\n")
-str(out$results$IE$data, max.level = 1)
-
-# Inspect XS
-cat("\n--- XS ---\n")
-str(out$results$XS$data, max.level = 1)
-
-# Inspect DS
-cat("\n--- DS ---\n")
-str(out$results$DS$data, max.level = 1)
-
-# Inspect SC
-cat("\n--- SC ---\n")
-str(out$results$SC$data, max.level = 1)
-
-# Inspect BE
-cat("\n--- BE ---\n")
-str(out$results$BE$data, max.level = 1)
-
-# Inspect CE
-cat("\n--- CE ---\n")
-str(out$results$CE$data, max.level = 1)
-
-# Inspect VS
-cat("\n--- VS ---\n")
-str(out$results$VS$data, max.level = 1)
-
-# Inspect QS
-cat("\n--- QS ---\n")
-str(out$results$QS$data, max.level = 1)
-
-# Inspect FA
-cat("\n--- FA ---\n")
-str(out$results$FA$data, max.level = 1)
-
-# Inspect RELREC
-cat("\n--- RELREC ---\n")
-if (!is.null(out$relrec) && nrow(out$relrec) > 0L) {
-  cat("  Rows: ", nrow(out$relrec), "\n")
-  print(out$relrec)
-} else {
-  cat("  No RELREC data generated.\n")
-}

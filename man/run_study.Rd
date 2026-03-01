@@ -12,6 +12,7 @@ run_study(
   output_dir = NULL,
   programs_dir = NULL,
   export_formats = c("xpt", "rda"),
+  xpt_version = 8L,
   generate_programs = TRUE,
   domains = NULL,
   create_supp = NULL,
@@ -38,6 +39,10 @@ If provided, \code{metadata_path}, \code{ct_path}, \code{raw_dir}, \code{output_
 \item{programs_dir}{Character or \code{NULL}. Directory for generated R programs.}
 
 \item{export_formats}{Character vector. Default \code{c("xpt", "rda")}.}
+
+\item{xpt_version}{Integer. SAS transport version: \code{5} (v5 legacy) or
+\code{8} (v8, default). Inherited from \code{config.yaml} \code{export.xpt_version}
+when not set explicitly.}
 
 \item{generate_programs}{Logical. Default \code{TRUE}. Write an R script per
 domain into \code{programs_dir}.}

@@ -1,39 +1,117 @@
 # =============================================================================
-# sdtmbuilder configuration for STUDY-PILOT
+# sdtmbuilder — Study Configuration for STUDY-PILOT
+# =============================================================================
+# This file controls all preferences, paths, and mappings used by run_study().
+# Section 1: Study identity & global preferences (edit once at study start)
+# Section 2: Study-specific mappings (visits, timepoints, criteria, relrec)
 # =============================================================================
 
-studyid: "STUDY-PILOT"
-timezone: "UTC"
 
-# Reference start date for --DY derivation.
-# sdtm: the built domain + variable to use (primary, used when DM is already built)
-# raw:  the raw domain + variable to use as fallback (when DM hasn't been built yet)
+# *****************************************************************************
+# SECTION 1 — STUDY PREFERENCES
+# *****************************************************************************
+# Set these at the beginning of the study. They rarely change once defined.
+# *****************************************************************************
+
+# --- 1.1  Study identity ------------------------------------------------------
+studyid: "STUDY-PILOT"                  # Unique study identifier
+timezone: "UTC"                          # Timezone for date/time conversions
+                                         #   e.g. "UTC", "US/Eastern", "Europe/Berlin"
+
+# --- 1.2  Paths ---------------------------------------------------------------
+# Relative to where run_study() is called (typically the study root), or absolute.
+paths:
+  metadata: "metadata/Study_Metadata.xlsx"   # Study_Metadata.xlsx location
+  ct: "metadata/Study_CT.xlsx"               # Study_CT.xlsx location
+  raw_data: "raw"                            # Directory containing raw datasets
+  output: "sdtm/datasets"                    # Export directory for XPT/RDA files
+  programs: "sdtm/programs"                  # Directory for generated R programs
+
+# --- 1.3  Export options -------------------------------------------------------
+export:
+  formats:                               # Which output formats to produce
+    - "xpt"                              #   "xpt" = SAS transport file
+    - "rda"                              #   "rda" = R binary (.rda)
+  xpt_version: 8                         # SAS transport version
+                                         #   8 = SAS Transport v8 (default, recommended)
+                                         #   5 = SAS Transport v5 (legacy CDISC)
+  generate_programs: true                # true  = write an R program per domain
+                                         # false = datasets only, no scripts
+
+# --- 1.4  Study day convention ------------------------------------------------
+study_day:
+  convention: "no_day_zero"              # "no_day_zero" = CDISC standard
+                                         #   Day before RFSTDTC is -1, day of RFSTDTC is 1
+                                         #   (no Day 0 exists)
+
+# --- 1.5  Logging -------------------------------------------------------------
+log_level: "INFO"                        # Verbosity of console messages
+                                         #   "DEBUG" = everything (very verbose)
+                                         #   "INFO"  = normal progress messages (default)
+                                         #   "WARN"  = only warnings and errors
+                                         #   "ERROR" = only errors
+
+# --- 1.6  Policies ------------------------------------------------------------
+# Rules governing how the engine handles edge cases during derivation.
+policies:
+  unknown_ct: "WARN_AND_KEEP"            # What to do when a value is not in the CT
+                                         #   "WARN_AND_KEEP" = keep original, log warning (default)
+                                         #   "WARN_AND_DROP" = set to NA, log warning
+                                         #   "ERROR"         = stop with an error
+  date_partial_allowed: true             # true  = allow partial ISO dates (e.g. "2025-01")
+                                         # false = require complete dates
+  imputation:                            # Date imputation when partial dates are allowed
+    day: "first"                         #   "first" = impute to 1st of the month (default)
+                                         #   "last"  = impute to last day of the month
+                                         #   "mid"   = impute to the 15th
+                                         #   null    = no imputation
+    month: null                          #   "first" / "last" / "mid" / null
+    year: null                           #   "first" / "last" / "mid" / null
+  join_cardinality_default: "m:1"        # Default join cardinality for merge rules
+                                         #   "m:1"  = many-to-one (default, most common)
+                                         #   "1:1"  = one-to-one
+                                         #   "1:m"  = one-to-many
+                                         #   "m:m"  = many-to-many
+  blank_is_na: true                      # true  = treat blank strings as NA (default)
+                                         # false = blanks are kept as ""
+  na_strings:                            # Additional strings treated as NA when reading raw data
+    - "."
+    - "UNK"
+    - "NA"
+
+# --- 1.7  SUPP domain generation ----------------------------------------------
+create_supp: true                        # true  = generate SUPP-- datasets (e.g. SUPPAE)
+                                         # false = no supplemental qualifier datasets
+
+# --- 1.8  Sponsor overrides ---------------------------------------------------
+# Key-value pairs that override default behavior for specific derivations.
+# Leave empty {} if none are needed.
+sponsor_overrides: {}
+
+# --- 1.9  Reference start date ------------------------------------------------
+# How to find RFSTDTC (reference start date) for --DY and epoch derivations.
+# sdtm: reads from the built DM domain (primary, used once DM is built)
+# raw:  fallback raw variable (used when DM hasn't been built yet)
 ref_start_date:
   sdtm:
     domain: "DM"
     variable: "RFSTDTC"
-    # path: "path/to/dm.sas7bdat"  # optional: explicit path to DM SDTM dataset
+    # path: "path/to/dm.sas7bdat"        # (optional) explicit path to DM SDTM dataset
   raw:
     dataset: "dm"
     variable: "icdat"
 
-# Paths (relative to where run_study() is called, or absolute)
-paths:
-  metadata: "metadata/Study_Metadata.xlsx"
-  ct: "metadata/Study_CT.xlsx"
-  raw_data: "raw"
-  output: "sdtm/datasets"
-  programs: "sdtm/programs"
 
-# Export formats
-export:
-  formats:
-    - "xpt"
-    - "rda"
-  generate_programs: true
+# *****************************************************************************
+# SECTION 2 — STUDY MAPPINGS
+# *****************************************************************************
+# Define study-specific visit schedules, timepoints, criteria, and
+# related records below. These are study-dependent and typically longer.
+# *****************************************************************************
 
-# Visit map
-# Maps EventId to VISIT, VISITNUM, VISITDY
+# --- 2.1  Visit map -----------------------------------------------------------
+# Maps the raw visit identifier to VISIT, VISITNUM, VISITDY, and
+# optionally TVSTRL (planned visit window text for TV domain).
 visit_source_var: "eventid"
 visit_map:
   - code: "SCR"
@@ -90,13 +168,20 @@ visit_map:
     visitdy: 155
     tvstrl: "Day 155 +/- 7 days"
 
-# Epoch map (add when needed)
-# epoch_map: []
+# --- 2.2  Epoch map (optional) ------------------------------------------------
+# Study-day windows for epoch assignment. Use null for open-ended bounds.
+# Uncomment and fill in when needed.
+# epoch_map:
+#   - epoch: "SCREENING"
+#     start_day: null
+#     end_day: -1
+#   - epoch: "TREATMENT"
+#     start_day: 1
+#     end_day: null
 
-# Planned time points
-# These are diary time points (ActivityID-based).  Days 1-7 within each
-# collection week; each week references a study milestone visit.
-# Used for domains that collect diary data (e.g. FA, QS with diary).
+# --- 2.3  Timepoint map -------------------------------------------------------
+# Planned time points for diary data (e.g. FA, QS).
+# Maps the raw activity identifier to TPT, TPTNUM, TPTREF, and ELTM.
 tpt_source_var: "activityid"
 timepoint_map:
   # Week after Visit 1 (Days 1-7)
@@ -280,7 +365,8 @@ timepoint_map:
     tptref: "Week before Visit 3"
     eltm: "P7D"
 
-# Inclusion/Exclusion criteria (used by TI domain, validated against IE)
+# --- 2.4  Inclusion/Exclusion criteria ----------------------------------------
+# Used by the TI domain and validated against IE.
 ie_criteria:
   tivers: "1.1"
   criteria:
@@ -339,30 +425,12 @@ ie_criteria:
       ietest: "Inability to comply with the study requirements"
       iecat: "EXCLUSION"
 
-# Policies
-policies:
-  unknown_ct: "WARN_AND_KEEP"
-  date_partial_allowed: true
-  imputation:
-    day: "first"
-    month: null
-    year: null
-  join_cardinality_default: "m:1"
-  blank_is_na: true
-  na_strings:
-    - "."
-    - "UNK"
-    - "NA"
-
-# SUPP domain generation: keep SUPP variables in SUPPAE
-create_supp: true
-
-# RELREC – Related Records
+# --- 2.5  RELREC — Related Records -------------------------------------------
 # Defines cross-domain relationships used to build the RELREC dataset.
 # Types:
-#   record       – link columns in raw data (e.g., cmae1 in cm_whodrug)
-#   identity     – 1:1 SPID match across built domains (e.g., XS↔AE via XSSPID=AESPID)
-#   seq_lookup   – raw link column + built domain SEQ lookup (e.g., DS↔AE)
+#   record       – link columns in raw data (e.g. cmae1 in cm_whodrug)
+#   identity     – 1:1 SPID match across built domains (e.g. XS<>AE via XSSPID=AESPID)
+#   seq_lookup   – raw link column + built domain SEQ lookup (e.g. DS<>AE)
 #   domain       – static dataset-level relationship (no per-subject data)
 relrec:
   - rdomain1: CM
@@ -411,11 +479,3 @@ relrec:
     idvar2: AESPID
     filter_col: DSCAT
     filter_val: DISPOSITION EVENT
-
-# Study day convention
-study_day:
-  convention: "no_day_zero"
-
-log_level: "INFO"
-
-sponsor_overrides: {}
