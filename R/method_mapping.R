@@ -188,7 +188,7 @@ parse_method_call <- function(method_string, domain = NA_character_,
 
     # Validate fn_name is registered
     if (!fn_name %in% names(FUNCTION_REGISTRY)) {
-      warn(glue::glue("Unknown function '{fn_name}' in METHOD for {domain}.{var}. ",
+      warn(glue::glue("Unknown function '{fn_name}' in DERIVATION for {domain}.{var}. ",
                        "Will be treated as custom rule."))
       return(list(fn = fn_name, rule_type = fn_name, params = params))
     }
@@ -217,8 +217,8 @@ parse_method_call <- function(method_string, domain = NA_character_,
     return(list(fn = fn_name, rule_type = rule_type, params = params))
   }
 
-  # ------ Unknown method ------
-  warn(glue::glue("Unknown METHOD '{method_string}' for {domain}.{var}. ",
+  # ------ Unknown derivation ------
+  warn(glue::glue("Unknown DERIVATION '{method_string}' for {domain}.{var}. ",
                    "Will be treated as direct_map."))
   return(list(fn = "map_direct", rule_type = "direct_map",
               params = list(column = tolower(var))))
@@ -503,17 +503,17 @@ map_method_to_rule_type <- function(method_vector) {
 
 
 # ==============================================================================
-# Reconstruct METHOD string from rule_type + params (for display / Excel export)
+# Reconstruct DERIVATION string from rule_type + params (for display / Excel export)
 # ==============================================================================
 
-#' Reconstruct an explicit METHOD string from a rule type and parameters
+#' Reconstruct an explicit DERIVATION string from a rule type and parameters
 #'
 #' Useful for generating the DERIVATION column value when creating or exporting
 #' metadata.
 #'
 #' @param rule_type Character. Internal rule type.
 #' @param params Named list of parameters.
-#' @return Character. Method call string like `derive_seq(by = "USUBJID")`.
+#' @return Character. Derivation call string like `derive_seq(by = "USUBJID")`.
 #' @export
 reconstruct_method_string <- function(rule_type, params = list()) {
   fn_name <- RULE_TYPE_TO_FUNCTION[[rule_type]]

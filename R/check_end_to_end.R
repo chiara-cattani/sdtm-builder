@@ -80,7 +80,7 @@ check_end_to_end <- function(verbose = TRUE, return_data = FALSE,
     .log("  WARNING: Study metadata cross-sheet validation found issues")
   }
 
-  # ------ Step 1d: Pre-build validation (METHOD, params, columns) -------------
+  # ------ Step 1d: Pre-build validation (DERIVATION, params, columns) -------------
   prebuild_issues <- tryCatch(
     validate_prebuild(
       study_meta = list(target_meta = target_meta,

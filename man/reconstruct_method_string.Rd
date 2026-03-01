@@ -2,7 +2,7 @@
 % Please edit documentation in R/method_mapping.R
 \name{reconstruct_method_string}
 \alias{reconstruct_method_string}
-\title{Reconstruct an explicit METHOD string from a rule type and parameters}
+\title{Reconstruct an explicit DERIVATION string from a rule type and parameters}
 \usage{
 reconstruct_method_string(rule_type, params = list())
 }
@@ -12,7 +12,7 @@ reconstruct_method_string(rule_type, params = list())
 \item{params}{Named list of parameters.}
 }
 \value{
-Character. Method call string like \code{derive_seq(by = "USUBJID")}.
+Character. Derivation call string like \code{derive_seq(by = "USUBJID")}.
 }
 \description{
 Useful for generating the DERIVATION column value when creating or exporting

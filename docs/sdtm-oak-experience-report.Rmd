@@ -552,7 +552,7 @@ Each domain receives a difficulty score from **1** (trivial) to **5**
 |:-------|:------:|:-----------------|
 | **S — Sources** | × 1 | Number of raw datasets / Sources rows to configure |
 | **P — Preprocessing** | × 1.5 | Stacking, joining, pivoting, filtering before `build_domain()` |
-| **D — Derivation** | × 1 | Number of variables with METHOD rules / complex `case_when` / multi-branch logic |
+| **D — Derivation** | × 1 | Number of variables with DERIVATION rules / complex `case_when` / multi-branch logic |
 | **X — Cross-domain** | × 0.5 | Dependencies on other built domains (DM for RFSTDTC, AE for seriousness, etc.) |
 | **M — Metadata burden** | × 1 | Total rows the programmer must fill in Sources + Source Columns sheets |
 
@@ -701,7 +701,7 @@ IE).  Cross-domain DM access (for RFSTDTC) is the only dependency.
 | IE | 2 | 12 | 20 | 2 STACK blocks (inclusion + exclusion) from same raw file |
 
 AE, XS, CM, MH, and PR need **zero** Sources and Source Columns rows —
-only the `Variables` sheet with METHOD expressions like `direct(aetrt)`,
+only the `Variables` sheet with DERIVATION expressions like `direct(aetrt)`,
 `format_date(aestdat)`, `hardcode("AE")`.  IE requires 2 Sources rows
 to split inclusion and exclusion criteria from the same raw file, but the
 mapping logic itself remains straightforward.
@@ -976,7 +976,7 @@ pm <- data.frame(
   ),
   sdtmbuilder = c(
     "Fully automated. Zero R code. Only Variables sheet needed.",
-    "Fully declarative. Variables METHOD column drives all derivations.",
+    "Fully declarative. Variables DERIVATION column drives all derivations.",
     "Sources sheet handles stacking/filtering. Source Columns define per-block mappings.",
     "Preprocessing engine + Source Columns + MAP_TIMEPOINT + VLM handle all complexity.",
     "LEFT_JOIN preprocessing replaces ~200 lines of merge code with 3 Sources rows.",
@@ -1004,7 +1004,7 @@ kable(pm,
 ### Phase 1 → Phase 2 Unlock
 
 Moving from config-driven to direct-mapping domains unlocks the **core
-derivation engine** — the `Variables` sheet METHOD column (`direct()`,
+derivation engine** — the `Variables` sheet DERIVATION column (`direct()`,
 `format_date()`, `hardcode()`, `case_when()`, `derive_dy()`, `derive_seq()`).
 This is the heart of sdtmbuilder and covers the same ground as sdtm.oak's
 `assign_no_ct()` / `assign_ct()` but in a metadata-driven, no-code fashion.
@@ -1080,7 +1080,7 @@ effort <- data.frame(
   ),
   sdtmbuilder_meta = c(
     "9 Variables rows + config.yaml visit_map",
-    "61 Variables rows (30 with METHOD)",
+    "61 Variables rows (30 with DERIVATION)",
     "69 Variables + 4 Sources + 37 Source Cols = 110 metadata rows",
     "44 Variables + 5 Sources + 51 Source Cols = 100 metadata rows",
     "53 Variables + 6 Sources + ~40 Source Cols ≈ 100 metadata rows (est.)"

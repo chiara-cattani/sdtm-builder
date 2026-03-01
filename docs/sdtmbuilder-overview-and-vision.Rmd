@@ -204,14 +204,14 @@ variable assignments. The programmer only fills in the `Variables` sheet.
 
 **How it works:**
 
-- Each variable's `METHOD` column contains a derivation instruction:
+- Each variable's `DERIVATION` column contains a derivation instruction:
   `direct(aeterm)`, `format_date(aestdat)`, `hardcode("AE")`,
   `case_when(cmongo == "Y" ~ "ONGOING")`, etc.
 - `compile_rules()` parses these into executable derivation rules.
 - `build_domain()` applies the rules in dependency order, automatically
   joins DM for RFSTDTC when --DY is needed, and passes the result to
   `finalize_domain()` and `export_domain()`.
-- **Programmer effort**: fill in Variables sheet with METHOD expressions.
+- **Programmer effort**: fill in Variables sheet with DERIVATION expressions.
   Zero R code.
 - **sdtm.oak**: handles the core variable mappings, but needs manual code
   for data import (~20 lines), DM join for RFSTDTC (~10 lines), domain
@@ -316,7 +316,7 @@ beyond the Variables sheet.
 **Domains**: AE, CM, MH, XS, PR, (IE partly)
 
 **Complexity for the programmer**: Low — fill in the Variables sheet with
-METHOD expressions like `direct(aeterm)`, `format_date(aestdat)`,
+DERIVATION expressions like `direct(aeterm)`, `format_date(aestdat)`,
 `hardcode("AE")`. No Sources or Source Columns needed.  
 **What happens**: The engine reads the raw dataset implied by the domain
 name, applies the derivation rules, joins DM for reference dates, and

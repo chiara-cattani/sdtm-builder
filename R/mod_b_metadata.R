@@ -1163,7 +1163,7 @@ validate_prebuild <- function(study_meta, ct_lib = NULL, raw_data = NULL) {
     # 2. Unknown function
     if (!fn_name %in% known_fns) {
       add_issue("ERROR", dom, var, "unknown_function",
-                paste0("Unknown function '", fn_name, "' in METHOD. ",
+                paste0("Unknown function '", fn_name, "' in DERIVATION. ",
                        "Known functions: ", paste(known_fns, collapse = ", ")))
       next
     }
