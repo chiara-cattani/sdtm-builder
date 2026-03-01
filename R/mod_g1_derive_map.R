@@ -233,6 +233,8 @@ derive_concat <- function(data, target_var, sources, sep = "",
       parts <- parts[!is.na(parts)]
       parts <- parts[nchar(trimws(parts)) > 0L]
     }
+    # If all values were empty, return NA instead of empty string
+    if (length(parts) == 0L) return(NA_character_)
     paste(parts, collapse = sep)
   })
   if (trim) vals <- trimws(vals)

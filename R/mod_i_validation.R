@@ -280,6 +280,17 @@ validate_ct_conformance <- function(data, target_meta, domain,
     ext_lookup <- stats::setNames(ext_df$is_extensible, ext_df$codelist_id)
   }
 
+  # Compare CT values case/whitespace-insensitively (spaces and casing only)
+  # so values like "Not Recovered / Not Resolved" match
+  # "NOT RECOVERED/NOT RESOLVED".
+  normalize_ct <- function(x) {
+    x <- as.character(x)
+    x <- trimws(x)
+    x <- tolower(x)
+    x <- gsub("\\s+", "", x, perl = TRUE)
+    x
+  }
+
   # Check all variables with a codelist_id (not just ct_assign rules)
   ct_vars <- dom_meta[!is.na(dom_meta$codelist_id), ]
 
@@ -292,7 +303,9 @@ validate_ct_conformance <- function(data, target_meta, domain,
     if (length(valid_values) == 0L) next
 
     data_vals <- unique(data[[v]][!is.na(data[[v]])])
-    bad_vals <- data_vals[!data_vals %in% valid_values]
+    data_norm <- normalize_ct(data_vals)
+    valid_norm <- normalize_ct(valid_values)
+    bad_vals <- data_vals[!data_norm %in% valid_norm]
 
     if (length(bad_vals) > 0L) {
       # Check if codelist is extensible — downgrade to NOTE if so

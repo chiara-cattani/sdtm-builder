@@ -296,7 +296,21 @@ expand_shorthand <- function(method_string, meta_row = NULL) {
       }
     },
     seq = {
-      paste0('derive_seq(by = "', trimws(args), '")')
+      parts <- trimws(strsplit(args, ",")[[1]])
+      parts <- parts[nchar(parts) > 0L]
+      
+      # For seq, first variable(s) are grouping, rest are ordering
+      # Typically: seq: USUBJID, AETERM, AESTDTC
+      # means: group by USUBJID, order by AETERM, AESTDTC
+      if (length(parts) <= 1L) {
+        # Single variable - group and order by it
+        paste0('derive_seq(by = "', parts[1], '")')
+      } else {
+        # Multiple variables: first is grouping, rest are ordering
+        by_val <- paste0('"', parts[1], '"')
+        order_vals <- paste0('"', parts[-1], '"', collapse = ", ")
+        paste0('derive_seq(by = ', by_val, ', order_by = c(', order_vals, '))')
+      }
     },
     sourceid = {
       paste0('derive_sourceid(form_id = "', trimws(args), '")')

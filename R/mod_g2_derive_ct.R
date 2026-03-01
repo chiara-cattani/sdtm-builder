@@ -5,6 +5,15 @@
 #            get_meddra_version, get_whodrug_version, derive_dict_version
 # ==============================================================================
 
+#' @noRd
+.normalize_ct_token <- function(x) {
+  x <- as.character(x)
+  x <- trimws(x)
+  x <- tolower(x)
+  x <- gsub("\\s+", "", x, perl = TRUE)
+  x
+}
+
 #' Assign controlled terminology coded values
 #' @param data Tibble.
 #' @param target_var Character.
@@ -38,14 +47,25 @@ assign_ct <- function(data, target_var, source_var, codelist_id, ct_lib,
     lookup_vals <- cl$coded_value
   }
 
-  # Also add identity mappings (coded_value -> coded_value) so that raw data
+  # Also add identity mappings (coded/submission values -> coded_value) so raw
+  # data already containing CDISC submission values passes through correctly.
+  extra_keys <- cl$coded_value
+  extra_vals <- cl$coded_value
+  if ("submission_value" %in% names(cl)) {
+    extra_keys <- c(extra_keys, cl$submission_value)
+    extra_vals <- c(extra_vals, cl$coded_value)
+  }
 
-  # already containing CDISC submission values passes through correctly.
-  lookup_keys <- c(lookup_keys, cl$coded_value)
-  lookup_vals <- c(lookup_vals, cl$coded_value)
+  lookup_keys <- c(lookup_keys, extra_keys)
+  lookup_vals <- c(lookup_vals, extra_vals)
+
+  # Drop empty keys
+  keep <- !is.na(lookup_keys) & trimws(lookup_keys) != ""
+  lookup_keys <- lookup_keys[keep]
+  lookup_vals <- lookup_vals[keep]
 
   if (!case_sensitive) {
-    lookup <- stats::setNames(lookup_vals, tolower(lookup_keys))
+    lookup <- stats::setNames(lookup_vals, .normalize_ct_token(lookup_keys))
   } else {
     lookup <- stats::setNames(lookup_vals, lookup_keys)
   }
@@ -53,7 +73,7 @@ assign_ct <- function(data, target_var, source_var, codelist_id, ct_lib,
   # Apply custom map first (overrides CT)
   if (!is.null(custom_map)) {
     if (!case_sensitive) {
-      cm <- stats::setNames(custom_map, tolower(names(custom_map)))
+      cm <- stats::setNames(custom_map, .normalize_ct_token(names(custom_map)))
     } else {
       cm <- custom_map
     }
@@ -64,7 +84,7 @@ assign_ct <- function(data, target_var, source_var, codelist_id, ct_lib,
   lookup <- lookup[!duplicated(names(lookup))]
 
   raw_vals <- data[[source_var]]
-  match_keys <- if (!case_sensitive) tolower(raw_vals) else raw_vals
+  match_keys <- if (!case_sensitive) .normalize_ct_token(raw_vals) else raw_vals
 
   mapped <- lookup[match_keys]
   mapped <- unname(mapped)

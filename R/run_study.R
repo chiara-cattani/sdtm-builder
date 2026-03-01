@@ -204,10 +204,63 @@ run_study <- function(config_path = NULL,
 
   .log("  target_meta: {nrow(target_meta)} variables across {length(unique(target_meta$domain))} domains")
 
-  # ---- 3. Load raw data ------------------------------------------------------
-  .log("Step 2: Loading raw data from {raw_dir}...")
+  # ---- 3a. Early rule compilation (before data loading) ---------------------
+  # This allows us to understand which source datasets are truly needed
+  .log("Step 2a: Compiling rules (for smart data loading)...")
+  
+  # Extract variables with derivation rules for selected domains
+  # (filter to domains early so we know what to compile)
+  vars_with_derivation <- NULL
+  if (!is.null(domains)) {
+    domains_upper <- toupper(domains)
+    vars_to_compile <- target_meta %>%
+      dplyr::filter(.data$domain %in% domains_upper, 
+                    !is.na(.data$derivation), 
+                    .data$derivation != "") %>%
+      dplyr::distinct(.data$domain, .data$var)
+    
+    if (nrow(vars_to_compile) > 0L) {
+      vars_with_derivation <- vars_to_compile
+    }
+  }
+  
+  # Compile rules with granular domain/variable filtering
+  rule_set <- compile_rules(target_meta, source_meta = sources_meta, 
+                            ct_lib = ct_lib,
+                            domains = domains,
+                            vars = vars_with_derivation)
+  
+  # Extract source datasets from compiled rules for smart loading
+  source_datasets_from_rules <- get_source_datasets_from_rules(
+    rule_set, target_meta = target_meta, sources_meta = sources_meta
+  )
+  
+  # Combine with domain-based sources for comprehensive coverage
+  required_by_domain <- get_required_datasets(domains = domains, 
+                                              sources_meta = sources_meta)
+  all_required_sources <- union(required_by_domain, source_datasets_from_rules)
+  
+  doms_in_rules <- names(rule_set$rules)
+  .log("  Rules for {length(doms_in_rules)} domains: {paste(doms_in_rules, collapse = ', ')}")
+  if (length(all_required_sources) > 0L) {
+    .log("  Required source datasets: {paste(sort(all_required_sources), collapse = ', ')}")
+  }
+
+  # ---- 3b. Load raw data (smart selection based on compiled rules) ---------
+  .log("Step 2b: Loading raw data from {raw_dir}...")
   checkmate::assert_directory_exists(raw_dir)
-  raw_data <- load_raw_datasets(raw_dir)
+  
+  # Load data with smart selection based on what's actually needed
+  raw_data <- if (length(all_required_sources) > 0L) {
+    # Load specific required datasets
+    load_raw_datasets_with_sources(raw_dir, sources = all_required_sources, 
+                                   verbose = verbose)
+  } else {
+    # Fallback to domain-based loading
+    load_raw_datasets_selective(raw_dir, domains = domains, 
+                                sources_meta = sources_meta,
+                                verbose = verbose)
+  }
   .log("  Loaded {length(raw_data)} datasets: {paste(names(raw_data), collapse = ', ')}")
 
   # ---- 4. Build config object ------------------------------------------------
@@ -288,14 +341,8 @@ run_study <- function(config_path = NULL,
   hooks_dir <- cfg_yaml$paths$hooks %||% file.path(dirname(metadata_path), "hooks")
   config$hooks_dir <- if (dir.exists(hooks_dir)) hooks_dir else NULL
 
-  # ---- 5. Compile rules ------------------------------------------------------
-  .log("Step 4: Compiling rules...")
-  rule_set <- compile_rules(target_meta, ct_lib = ct_lib)
-  doms_in_rules <- names(rule_set$rules)
-  .log("  Rules for {length(doms_in_rules)} domains: {paste(doms_in_rules, collapse = ', ')}")
-
-  # ---- 6. Build all domains --------------------------------------------------
-  .log("Step 5: Building domains...")
+  # ---- 4. Build all domains --------------------------------------------------
+  .log("Step 3: Building domains...")
   results <- build_all_domains(
     target_meta      = target_meta,
     raw_data         = raw_data,
@@ -314,12 +361,12 @@ run_study <- function(config_path = NULL,
   built_domains <- names(results)
   .log("  Built {length(built_domains)} domains: {paste(built_domains, collapse = ', ')}")
 
-  # ---- 6a. Build RELREC (Related Records) ------------------------------------
+  # ---- 4a. Build RELREC (Related Records) ------------------------------------
   relrec_data <- NULL
   # Only build RELREC if the user requested it (or requested all domains)
   build_relrec_flag <- is.null(domains) || "RELREC" %in% toupper(domains)
   if (build_relrec_flag && !is.null(cfg_yaml$relrec) && length(cfg_yaml$relrec) > 0L) {
-    .log("Step 5b: Building RELREC (Related Records)...")
+    .log("Step 3a: Building RELREC (Related Records)...")
 
     # Collect built domain tibbles for identity/seq_lookup specs
     built_domain_data <- stats::setNames(
@@ -348,7 +395,7 @@ run_study <- function(config_path = NULL,
   }
 
   # ---- 7. Export datasets ----------------------------------------------------
-  .log("Step 6: Exporting datasets to {output_dir}...")
+  .log("Step 4: Exporting datasets to {output_dir}...")
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   exported <- list()
 
@@ -408,7 +455,7 @@ run_study <- function(config_path = NULL,
   # ---- 8. Generate R programs ------------------------------------------------
   generated_programs <- NULL
   if (generate_programs) {
-    .log("Step 7: Generating R programs to {programs_dir}...")
+    .log("Step 5: Generating R programs to {programs_dir}...")
     dir.create(programs_dir, recursive = TRUE, showWarnings = FALSE)
     generated_programs <- list()
 

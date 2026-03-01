@@ -7,13 +7,38 @@
 #' @param target_meta Tibble (validated, normalized).
 #' @param source_meta Tibble or `NULL`. Optional; auto-inferred if needed.
 #' @param ct_lib Tibble or `NULL`.
+#' @param domains Character vector or `NULL`. If provided, compile rules only for these domains.
+#' @param vars Tibble or `NULL`. If provided, restrict variables to those in this tibble
+#'   (must have `domain` and `var` columns). Allows fine-grained control over which
+#'   variables are compiled per domain.
 #' @param dsl Character. Default `"json"`.
 #' @param strict Logical. Default `TRUE`.
 #' @return `rule_set` object.
 #' @export
 compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
+                          domains = NULL, vars = NULL,
                           dsl = "json", strict = TRUE) {
-  domains <- unique(target_meta$domain)
+  all_domains <- unique(target_meta$domain)
+  
+  # Filter to only requested domains
+  if (!is.null(domains)) {
+    domains <- toupper(domains)
+    all_domains <- intersect(domains, all_domains)
+  }
+  
+  # Create a lookup for which var to include (if vars filter provided)
+  vars_to_include <- NULL
+  if (!is.null(vars) && is.data.frame(vars) && nrow(vars) > 0L) {
+    vars_to_include <- list()
+    for (i in seq_len(nrow(vars))) {
+      dom <- toupper(vars$domain[i])
+      var <- vars$var[i]
+      if (!dom %in% names(vars_to_include)) {
+        vars_to_include[[dom]] <- character()
+      }
+      vars_to_include[[dom]] <- c(vars_to_include[[dom]], var)
+    }
+  }
   all_rules  <- list()
   dep_info   <- list()
   type_accum <- character()
@@ -26,8 +51,17 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
     ext_lookup <- stats::setNames(ext_df$is_extensible, ext_df$codelist_id)
   }
 
-  for (dom in domains) {
+  for (dom in all_domains) {
     dom_meta <- dplyr::filter(target_meta, .data$domain == dom)
+    
+    # Filter variables if vars_to_include is specified for this domain
+    if (!is.null(vars_to_include) && dom %in% names(vars_to_include)) {
+      allowed_vars <- vars_to_include[[dom]]
+      dom_meta <- dplyr::filter(dom_meta, .data$var %in% !! allowed_vars)
+    }
+    
+    if (nrow(dom_meta) == 0L) next  # Skip domain if no variables remain
+    
     dom_rules <- list()
 
     # Identify variables with value-level metadata (multiple rows per var)

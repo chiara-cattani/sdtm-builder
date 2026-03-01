@@ -345,6 +345,7 @@ build_domain <- function(domain, target_meta, raw_data,
                                context = list(config = config,
                                               ct_lib = rule_set$ct_lib,
                                               domain = domain,
+                                              domain_meta = domain_meta,
                                               raw_data = raw_data))
       provenance <- dplyr::bind_rows(provenance, tibble::tibble(
         var = var_name, rule_type = rule$type,
@@ -640,7 +641,28 @@ derive_variable <- function(data, var, rule, context) {
       }
     },
     seq = {
-      by_vars    <- unlist(params$by %||% list("USUBJID"))
+      # If params$by is not specified, try to use domain KEYS from metadata
+      by_vars <- params$by
+      if (is.null(by_vars)) {
+        # Check if domain_meta has KEYS column
+        if (!is.null(context$domain_meta) && nrow(context$domain_meta) > 0L) {
+          if ("KEYS" %in% names(context$domain_meta)) {
+            keys_str <- context$domain_meta$KEYS[1]
+            if (!is.na(keys_str) && nchar(trimws(keys_str)) > 0L) {
+              # Parse the comma-separated keys
+              by_vars <- trimws(strsplit(keys_str, ",")[[1]])
+            } else {
+              by_vars <- list("USUBJID")
+            }
+          } else {
+            by_vars <- list("USUBJID")
+          }
+        } else {
+          by_vars <- list("USUBJID")
+        }
+      }
+      by_vars <- unlist(by_vars)
+      
       order_vars <- unlist(params$order_by %||% list())
       ties_method <- params$ties %||% "dense"
 

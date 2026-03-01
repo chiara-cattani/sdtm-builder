@@ -47,6 +47,7 @@ the explicit form before parsing. Use whichever is most convenient.
 | `dur:AESTDTC, AEENDTC` | `derive_duration(start_dtc = "AESTDTC", end_dtc = "AEENDTC")` | Duration |
 | `epoch:AESTDTC` | `derive_epoch(dtc_var = "AESTDTC")` | Epoch derivation |
 | `seq:USUBJID` | `derive_seq(by = "USUBJID")` | Sequence number |
+| `seq:USUBJID, AESPID` | `derive_seq(by = c("USUBJID", "AESPID"))` | Sequence grouped by multiple variables |
 | `sourceid:AE` | `derive_sourceid(form_id = "AE")` | Source identifier |
 | `regex:col\|pattern` | `derive_regex_extract(column = "col", pattern = "pattern")` | Regex extraction |
 
@@ -147,6 +148,16 @@ Derive the source record identifier from the review status dataset.
 ```
 sourceid:AE    →  derive_sourceid(form_id = "AE")
 sourceid:CM    →  derive_sourceid(form_id = "CM")
+```
+
+
+### Prefix `seq:` — Sequence
+
+Derive sequence by one or more grouping variables.
+
+```
+seq:USUBJID             →  derive_seq(by = "USUBJID")
+seq:USUBJID, AESPID     →  derive_seq(by = c("USUBJID", "AESPID"))
 ```
 
 

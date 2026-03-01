@@ -34,9 +34,7 @@ out <- run_study(
 
   # -- Domains -----------------------------------------------------------------
   # Which domains to build. NULL = build all found in metadata.
-  domains           = c("DM", "AE", "PR", "MH", "CM", "TV", "TI", "IE", "SV",
-                        "XS", "DS", "SC", "BE", "CE", "CO", "EC", "EX", "VS",
-                        "QS", "FA", "ML", "APSC"),
+  domains           = c("AE"),
 
   # -- Options -----------------------------------------------------------------
   # create_supp    = TRUE to generate SUPP-- datasets; FALSE to skip
@@ -49,3 +47,4 @@ out <- run_study(
   validate          = TRUE,
   verbose           = TRUE
 )
+

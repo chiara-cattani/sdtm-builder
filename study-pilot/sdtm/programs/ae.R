@@ -5,7 +5,7 @@
 # PURPOSE       : SDTM AE Domain - Adverse Events
 # ------------------------------------------------------------------------------
 # NOTES :
-#   Raw datasets : ae, ae_meddra, sae
+#   Raw datasets : ae, ae_meddra, sa, sae
 #   Dependencies : sdtmbuilder package
 # ------------------------------------------------------------------------------
 # PROGRAM HISTORY :
@@ -44,6 +44,7 @@ for (nm in names(all_raw)) {
 
 ae <- all_raw[["ae"]]
 ae_meddra <- all_raw[["ae_meddra"]]
+sa <- all_raw[["sa"]]
 sae <- all_raw[["sae"]]
 dm1 <- all_raw[["dm"]]
 
@@ -59,6 +60,11 @@ ae_meddra_new <- setdiff(names(ae_meddra), names(ae))
 ae_meddra_slim <- ae_meddra[, c("subjectid", "aespid", ae_meddra_new), drop = FALSE]
 ae <- ae %>%
   dplyr::left_join(ae_meddra_slim, by = c("subjectid", "aespid"))
+sa <- dplyr::rename(sa, dplyr::any_of(c(aespid = "saspid")))
+sa_new <- setdiff(names(sa), names(ae))
+sa_slim <- sa[, c("subjectid", "aespid", sa_new), drop = FALSE]
+ae <- ae %>%
+  dplyr::left_join(sa_slim, by = c("subjectid", "aespid"))
 sae <- dplyr::rename(sae, dplyr::any_of(c(aespid = "saespid")))
 sae_new <- setdiff(names(sae), names(ae))
 sae_slim <- sae[, c("subjectid", "aespid", sae_new), drop = FALSE]
@@ -99,7 +105,7 @@ if ("rfstdtc" %in% names(ae) && !"RFSTDTC" %in% names(ae)) ae$RFSTDTC <- ae$rfst
 ae2 <- ae %>%
   # --- Identifiers ---
   mutate(
-    STUDYID = study,
+    STUDYID = "STUDY-PILOT",
     DOMAIN = "AE",
     AESPID = as.character(aespid)
   ) %>%
@@ -121,11 +127,11 @@ ae2 <- ae %>%
     AESOCCD = as.numeric(pt_soc_code)
   ) %>%
   # --- Derived Variables ---
-  mutate(AESEV = as.character(aesev)) %>%
-  mutate(AESER = as.character(aeser)) %>%
   mutate(
+    AESEV = as.character(aesev),
+    AESER = as.character(aeser),
     AEACN = as.character(aeacnp),
-    AEACNOTH = purrr::pmap_chr(list(aeacns0, aeacns1, aeacns2), ~ paste(na.omit(c(...)), collapse = "; ")),
+    AEACNOTH = purrr::pmap_chr(list(aeacns0, aeacns1, aeacns2), function(...) { p <- c(...); p <- p[!is.na(p) & trimws(p) != ""]; paste(p, collapse = "; ") }),
     AEREL = as.character(aerel1),
     AEOUT = as.character(aeout),
     AESCONG = as.character(aescong),
@@ -149,7 +155,7 @@ ae2 <- ae %>%
   ) %>%
   # --- Derived Variables ---
   mutate(
-    AEACNEVL = NA,
+    AEACNEVL = as.character(aeacnevl),
     AEACNOTX = as.character(aeacnssp),
     AEACNX = as.character(aeacnpsp)
   ) %>%
@@ -186,7 +192,7 @@ ae2 <- ae %>%
   derive_dy("AESTDY", "AESTDTC", "RFSTDTC") %>%
   derive_dy("AEENDY", "AEENDTC", "RFSTDTC") %>%
   # --- Sequence ---
-  derive_seq("AESEQ", by = c("USUBJID"))
+  derive_seq("AESEQ", by = c("USUBJID"), order_by = c("AESPID"))
 
 # Finalize ----
 ae_final <- export_domain(

@@ -665,16 +665,20 @@ read_study_ct_excel <- function(path) {
 
   # Transform to internal CT library format:
   #   coded_value  = SUBMISSION_VALUE (the SDTM standard term)
-  #   input_value  = DECODE if present, else SUBMISSION_VALUE
+  #   input_value  = DECODE if present (non-blank), else SUBMISSION_VALUE
   #   decode       = DECODE as-is
   #   case_sensitive = "N" (default)
-  df$coded_value    <- df$submission_value
-  df$input_value    <- dplyr::coalesce(df$decode, df$submission_value)
-  df$case_sensitive <- "N"
+  decode_clean <- ifelse(is.na(df$decode), NA_character_, trimws(df$decode))
+  decode_clean[decode_clean == ""] <- NA_character_
+
+  df$coded_value       <- df$submission_value
+  df$submission_value  <- df$submission_value
+  df$input_value       <- dplyr::coalesce(decode_clean, df$submission_value)
+  df$case_sensitive    <- "N"
 
   # Select and order output columns
-  out_cols <- c("codelist_id", "codelist_name", "coded_value", "input_value",
-                "decode", "case_sensitive", "term_code")
+  out_cols <- c("codelist_id", "codelist_name", "coded_value", "submission_value",
+                "input_value", "decode", "case_sensitive", "term_code")
   out_cols <- intersect(out_cols, names(df))
   df[, out_cols, drop = FALSE]
 }
