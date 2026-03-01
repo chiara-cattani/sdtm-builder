@@ -206,6 +206,9 @@ validate_metadata_ct_structure <- function(target_meta,
 
   # =========== 3. VALUE-LEVEL METADATA STRUCTURE ===========
 
+  # Extract domains from target_meta for later use (available regardless of VLM presence)
+  meta_domains <- unique(target_meta$domain)
+
   if (!is.null(value_level_meta) && nrow(value_level_meta) > 0L) {
     required_vlm_cols <- c("domain", "variable")
     missing_vlm_cols <- setdiff(required_vlm_cols, names(value_level_meta))
@@ -219,7 +222,6 @@ validate_metadata_ct_structure <- function(target_meta,
     } else {
       # 3a. Check if referenced domains exist in target_meta
       vlm_domains <- unique(value_level_meta$domain)
-      meta_domains <- unique(target_meta$domain)
       missing_vlm_domains <- setdiff(vlm_domains, meta_domains)
 
       if (length(missing_vlm_domains) > 0L) {

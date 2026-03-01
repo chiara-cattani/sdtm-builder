@@ -220,11 +220,11 @@ run_study <- function(config_path = NULL,
   if (nrow(pre_val_errors) > 0L) {
     cli::cli_h2("⚠️  PRE-VALIDATION ERRORS FOUND")
     cli::cli_alert_danger("Cannot proceed - critical metadata/CT issues must be fixed:")
-    cli::cli_br()
+    cli::cli_text("")
     for (i in seq_len(nrow(pre_val_errors))) {
       cli::cli_text("  ✗ {pre_val_errors$message[i]}")
     }
-    cli::cli_br()
+    cli::cli_text("")
     cli::cli_text("Please review and update your metadata/CT files, then run run_study() again.")
     cli::cli_text("For detailed report, run:")
     cli::cli_code("validate_and_report_metadata_ct(study_meta$target_meta, ct_lib, ...)")
@@ -243,7 +243,7 @@ run_study <- function(config_path = NULL,
     if (nrow(pre_val_warnings) > 3L) {
       cli::cli_text("  ... and {nrow(pre_val_warnings) - 3} more warning(s)")
     }
-    cli::cli_br()
+    cli::cli_text("")
   }
 
   .log("Pre-validation complete: All critical issues resolved ✓")
