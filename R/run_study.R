@@ -210,7 +210,8 @@ run_study <- function(config_path = NULL,
     target_meta = target_meta,
     ct_lib = ct_lib,
     value_level_meta = value_level_meta,
-    domain_meta = domain_meta
+    domain_meta = domain_meta,
+    domains = domains
   )
 
   # Check for critical errors

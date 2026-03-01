@@ -28,12 +28,15 @@ NULL
 #' @param ct_lib Tibble or `NULL`. Controlled terminology library.
 #' @param value_level_meta Tibble or `NULL`. Value-level metadata.
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata.
+#' @param domains Character vector or `NULL`. If specified, only these domains
+#'   are validated. If `NULL`, all domains in target_meta are validated.
 #' @return `validation_report` with findings organized by category.
 #' @export
 validate_metadata_ct_structure <- function(target_meta,
                                             ct_lib = NULL,
                                             value_level_meta = NULL,
-                                            domain_meta = NULL) {
+                                            domain_meta = NULL,
+                                            domains = NULL) {
   rpt <- new_validation_report(domain = "PRE-VALIDATION (Metadata & CT)")
 
   # =========== 1. TARGET METADATA STRUCTURE ===========
@@ -57,6 +60,22 @@ validate_metadata_ct_structure <- function(target_meta,
                        ),
                        domain = "PRE-VALIDATION")
     return(rpt)
+  }
+
+  # Filter to selected domains if specified
+  if (!is.null(domains) && length(domains) > 0L) {
+    domains_upper <- toupper(domains)
+    target_meta <- target_meta %>%
+      dplyr::filter(.data$domain %in% domains_upper)
+    if (nrow(target_meta) == 0L) {
+      rpt <- add_finding(rpt, rule_id = "metadata_no_matching_domains",
+                         severity = "ERROR",
+                         message = glue::glue(
+                           "No metadata found for selected domain(s): {paste(domains, collapse=', ')}"
+                         ),
+                         domain = "PRE-VALIDATION")
+      return(rpt)
+    }
   }
 
   # 1a. Check for duplicate (domain, var) pairs
@@ -209,9 +228,17 @@ validate_metadata_ct_structure <- function(target_meta,
   # Extract domains from target_meta for later use (available regardless of VLM presence)
   meta_domains <- unique(target_meta$domain)
 
-  if (!is.null(value_level_meta) && nrow(value_level_meta) > 0L) {
+  # Filter value-level metadata to selected domains if specified
+  vlm_filtered <- value_level_meta
+  if (!is.null(domains) && length(domains) > 0L && !is.null(value_level_meta)) {
+    domains_upper <- toupper(domains)
+    vlm_filtered <- value_level_meta %>%
+      dplyr::filter(.data$domain %in% domains_upper)
+  }
+
+  if (!is.null(vlm_filtered) && nrow(vlm_filtered) > 0L) {
     required_vlm_cols <- c("domain", "variable")
-    missing_vlm_cols <- setdiff(required_vlm_cols, names(value_level_meta))
+    missing_vlm_cols <- setdiff(required_vlm_cols, names(vlm_filtered))
     if (length(missing_vlm_cols) > 0L) {
       rpt <- add_finding(rpt, rule_id = "vlm_missing_cols",
                          severity = "ERROR",
@@ -221,7 +248,7 @@ validate_metadata_ct_structure <- function(target_meta,
                          domain = "PRE-VALIDATION")
     } else {
       # 3a. Check if referenced domains exist in target_meta
-      vlm_domains <- unique(value_level_meta$domain)
+      vlm_domains <- unique(vlm_filtered$domain)
       missing_vlm_domains <- setdiff(vlm_domains, meta_domains)
 
       if (length(missing_vlm_domains) > 0L) {
@@ -234,7 +261,7 @@ validate_metadata_ct_structure <- function(target_meta,
       }
 
       # 3b. Check if referenced variables exist in target_meta for their domain
-      vlm_invalid_vars <- value_level_meta %>%
+      vlm_invalid_vars <- vlm_filtered %>%
         dplyr::anti_join(target_meta, by = c("domain", "variable" = "var"))
 
       if (nrow(vlm_invalid_vars) > 0L) {
@@ -249,7 +276,7 @@ validate_metadata_ct_structure <- function(target_meta,
       }
 
       # 3c. Check that where_var/where_value are not left without both
-      incomplete_where <- value_level_meta %>%
+      incomplete_where <- vlm_filtered %>%
         dplyr::filter((is.na(.data$where_var) & !is.na(.data$where_value)) |
                       (!is.na(.data$where_var) & is.na(.data$where_value)))
 
@@ -268,9 +295,17 @@ validate_metadata_ct_structure <- function(target_meta,
 
   # =========== 4. DOMAIN-LEVEL METADATA STRUCTURE ===========
 
-  if (!is.null(domain_meta) && nrow(domain_meta) > 0L) {
+  # Filter domain-level metadata to selected domains if specified
+  dm_filtered <- domain_meta
+  if (!is.null(domains) && length(domains) > 0L && !is.null(domain_meta)) {
+    domains_upper <- toupper(domains)
+    dm_filtered <- domain_meta %>%
+      dplyr::filter(.data$domain %in% domains_upper)
+  }
+
+  if (!is.null(dm_filtered) && nrow(dm_filtered) > 0L) {
     # 4a. Check if domains in domain_meta exist in target_meta
-    domain_meta_domains <- unique(domain_meta$domain)
+    domain_meta_domains <- unique(dm_filtered$domain)
     missing_domains <- setdiff(domain_meta_domains, meta_domains)
 
     if (length(missing_domains) > 0L) {
