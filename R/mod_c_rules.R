@@ -133,26 +133,8 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
       }
       params$vlm_branches <- conditions
 
-      deps <- character()
-      if (!is.na(base_row$depends_on) && nchar(base_row$depends_on) > 0) {
-        deps <- trimws(strsplit(base_row$depends_on, ";")[[1]])
-      }
-
-      # Auto-extract dependencies from VLM conditions (e.g., LBTESTCD from
-      # 'LBTESTCD == "GLUC"'). Any uppercase bare words that match other
-      # variables in this domain are added as implicit dependencies.
-      dom_vars <- unique(dom_meta$var)
-      for (cond in conditions) {
-        cond_text <- cond$condition
-        if (is.null(cond_text) || is.na(cond_text)) next
-        # Extract candidate variable names (uppercase word tokens)
-        tokens <- regmatches(cond_text, gregexpr("[A-Z][A-Z0-9_]+", cond_text))[[1]]
-        for (tok in tokens) {
-          if (tok %in% dom_vars && tok != vlm_var && !tok %in% deps) {
-            deps <- c(deps, tok)
-          }
-        }
-      }
+      # Dependencies are inferred automatically from the mandatory SDTM
+      # derivation order (see mod_d_dependency.R) — no explicit depends_on needed.
 
       # Resolve extensibility for the base codelist
       cl_id <- if (!is.na(base_row$codelist_id)) base_row$codelist_id else NULL
@@ -165,7 +147,6 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         var        = vlm_var,
         type       = rule_type,
         params     = params,
-        depends_on = deps,
         codelist_id = cl_id,
         label      = base_row$label,
         target_type = base_row$type,
@@ -423,23 +404,17 @@ enrich_rules_with_ct <- function(rule_set, ct_lib) {
 }
 
 #' Infer inter-variable dependencies from rules
+#'
+#' Dependencies are inferred automatically from the mandatory SDTM derivation
+#' order (see [build_dependency_graph()] in mod_d_dependency.R). This function
+#' is a no-op passthrough kept for backward compatibility.
+#'
 #' @param rule_set `rule_set` object.
-#' @return Updated `rule_set`.
+#' @return Updated `rule_set` (unchanged).
 #' @export
 infer_rule_dependencies <- function(rule_set) {
-  # Already done during compile_rules; this is a passthrough for re-inference
-  for (dom in names(rule_set$rules)) {
-    edges <- tibble::tibble(from_var = character(), to_var = character(),
-                            domain = character())
-    for (var_name in names(rule_set$rules[[dom]])) {
-      rule <- rule_set$rules[[dom]][[var_name]]
-      for (dep in rule$depends_on) {
-        edges <- dplyr::bind_rows(edges, tibble::tibble(
-          from_var = dep, to_var = var_name, domain = dom))
-      }
-    }
-    rule_set$dependency_info[[dom]] <- edges
-  }
+  # Derivation order is determined automatically by the 10-category mandatory
+  # SDTM sequence in build_dependency_graph(). No explicit dependency edges needed.
   rule_set
 }
 

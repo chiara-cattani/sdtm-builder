@@ -9,49 +9,65 @@
 
 # --- Internal helpers: variable categorization --------------------------------
 
-#' Assign a semantic category to a variable based on name and rule type
+#' Assign a semantic category to a variable for code-section comments.
+#'
+#' Mirrors the 10-category mandatory SDTM derivation order (mod_d_dependency.R).
+#' Returns a tag string used by [.section_label()] for the comment header.
+#'
 #' @keywords internal
 .categorize_var <- function(var, rule_type, domain) {
-  dom <- toupper(domain)
-  if (var %in% c("STUDYID", "DOMAIN", "USUBJID", "SUBJID"))   return("identifiers")
-  if (grepl("SPID$", var) || var == "SOURCEID")                return("identifiers")
-  if (rule_type == "seq")                                      return("sequence")
-  if (rule_type == "dy")                                       return("study_day")
-  if (rule_type == "iso_dtc")                                  return("dates")
-  if (grepl("DICT$|DICTVER$", var))                            return("dict_version")
-  if (grepl(paste0("DECOD$|LLT$|LLTCD$|PT$|PTCD$|HLT$|HLTCD$",
-                   "|HLGT$|HLGTCD$|BODSYS$|BDSYCD$|SOC$",
-                   "|SOCCD$|SOCLST$"), var))                   return("coded_fields")
-  if (grepl("TERM$|TRT$|MODIFY$", var))                        return("topics")
-  if (grepl("CAT$|SCAT$", var))                                return("categories")
-  if (var %in% c("VISIT", "VISITNUM", "VISITDY") ||
-      rule_type %in% c("visit", "visitnum", "visitdy"))        return("visits")
-  if (var == "EPOCH" || rule_type == "epoch")                   return("epoch")
-  if (grepl("TPT$|TPTNUM$|TPTREF$|ELTM$", var) ||
-      rule_type %in% c("tpt", "ref_time_point"))               return("time_points")
-  if (rule_type %in% c("ct_assign", "ct_decode"))              return("ct_mapped")
-  if (rule_type %in% c("baseline_flag", "lastobs_flag"))       return("flags")
-  "other"
+  cat <- .derive_category(var, rule_type, domain)
+  switch(as.character(cat),
+    "1"  = "topics",
+    "2"  = "identifiers",
+    "3"  = "results",
+    "4"  = "record_level",
+    "5"  = "categories",
+    "6"  = {
+      # Refine cat-6 for nicer section labels
+      rt <- tolower(rule_type %||% "")
+      if (rt %in% c("ct_assign", "ct_decode"))            "ct_mapped"
+      else if (rt %in% c("baseline_flag", "lastobs_flag")) "flags"
+      else                                                  "derived"
+    },
+    "7"  = "coded_fields",
+    "8"  = {
+      rt <- tolower(rule_type %||% "")
+      vu <- toupper(var)
+      if (rt == "dy" || grepl("DY$", vu))                        "study_day"
+      else if (rt == "epoch" || grepl("EPOCH$", vu))              "epoch"
+      else if (grepl("VISIT", vu) ||
+               rt %in% c("visit", "visitnum", "visitdy"))        "visits"
+      else if (grepl("TPT|ELTM", vu) ||
+               rt %in% c("tpt", "ref_time_point"))               "time_points"
+      else                                                         "dates"
+    },
+    "9"  = "qualifiers",
+    "10" = "sequence",
+    "derived"
+  )
 }
 
 #' Return a human-readable section label for a category tag
 #' @keywords internal
 .section_label <- function(category) {
   switch(category,
-    identifiers  = "Identifiers",
-    topics       = "Topic / Term",
-    categories   = "Categories",
-    coded_fields = "Coded Fields",
-    dict_version = "Dictionary Version",
+    topics       = "Topic / Term Variables",
+    identifiers  = "Identifier Variables",
+    results      = "Result Qualifiers",
+    record_level = "Record-Level Variables",
+    categories   = "Qualifier Variables (CAT / SCAT)",
     ct_mapped    = "Controlled Terminology",
+    derived      = "Rule-Derived Variables",
+    flags        = "Flags",
+    coded_fields = "Synonym / Coded Fields",
     dates        = "Dates",
     time_points  = "Time Points",
     visits       = "Visit Variables",
     epoch        = "Epoch",
     study_day    = "Study Day",
-    flags        = "Flags",
-    sequence     = "Sequence",
-    other        = "Derived Variables",
+    qualifiers   = "Variable Qualifiers",
+    sequence     = "Sequence (Final Step)",
     category
   )
 }

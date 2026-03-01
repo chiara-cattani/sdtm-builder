@@ -280,7 +280,8 @@ read_study_metadata_excel <- function(path) {
   if (!"is_key" %in% names(df)) df$is_key <- NA
   if (!"to_supp" %in% names(df)) df$to_supp <- NA
   if (!"rule_params" %in% names(df)) df$rule_params <- NA_character_
-  # NOTE: depends_on is no longer used - derivation order is automatic
+  # Derivation order is inferred automatically from rule_type and variable
+  # names (see mod_d_dependency.R). No depends_on column needed.
 
   # Trim whitespace in character columns
   chr_cols <- names(df)[vapply(df, is.character, logical(1))]
@@ -1073,7 +1074,6 @@ check_extensibility <- function(data, target_meta, ct_lib, domain) {
 #' 4. **Source column existence** — columns referenced in DERIVATION exist in raw data.
 #' 5. **Codelist availability** — CODELIST_IDs referenced by ct_assign/ct_decode
 #'    exist in the CT library.
-#' 6. **Circular dependencies** — DEPENDS_ON does not create cycles.
 #'
 #' @param study_meta Named list from [read_study_metadata_excel()] or
 #'   [make_dummy_study()].
@@ -1217,34 +1217,9 @@ validate_prebuild <- function(study_meta, ct_lib = NULL, raw_data = NULL) {
     }
   }
 
-  # 6. Circular dependency check
-  for (dom in unique(target_meta$domain)) {
-    dom_meta <- target_meta[target_meta$domain == dom, ]
-    edges <- tibble::tibble(from_var = character(), to_var = character())
-    for (j in seq_len(nrow(dom_meta))) {
-      deps <- dom_meta$depends_on[j]
-      if (is.na(deps) || deps == "") next
-      dep_list <- unlist(strsplit(deps, ";"))
-      for (d in dep_list) {
-        d <- trimws(d)
-        if (d != "" && d %in% dom_meta$var) {
-          edges <- dplyr::bind_rows(edges, tibble::tibble(
-            from_var = d, to_var = dom_meta$var[j]
-          ))
-        }
-      }
-    }
-    if (nrow(edges) > 0L) {
-      has_cycle <- tryCatch({
-        g <- igraph::graph_from_data_frame(edges, directed = TRUE)
-        !igraph::is_dag(g)
-      }, error = function(e) FALSE)
-      if (isTRUE(has_cycle)) {
-        add_issue("ERROR", dom, NA_character_, "circular_dependency",
-                  paste0("Circular dependency detected in domain ", dom))
-      }
-    }
-  }
+  # NOTE: Circular dependency checks are no longer needed — derivation order
+  # is determined automatically by the 10-category mandatory SDTM sequence
+  # in build_dependency_graph() (mod_d_dependency.R).
 
   if (length(issues) == 0L) {
     return(tibble::tibble(

@@ -59,15 +59,17 @@ should be derived:
 ```{r metadata}
 # Show the AE target metadata
 ae_meta <- target_meta[target_meta$domain == "AE", ]
-ae_meta[, c("var", "type", "core", "rule_type", "depends_on")]
+ae_meta[, c("var", "type", "core", "rule_type")]
 ```
 
 Each row is one SDTM variable. Key columns:
 
 - **`rule_type`** — the derivation method (`constant`, `direct_map`, `ct_assign`,
   `iso_dtc`, `dy`, `seq`)
-- **`rule_params`** — JSON parameters for the rule (source column, codelist, etc.)
-- **`depends_on`** — variables that must be derived first
+- **`DERIVATION`** — the derivation expression (e.g. `derive_dy(dtc_var = "AESTDTC")`)
+
+Derivation order is computed automatically from variable names and rule types
+using the mandatory 10-category SDTM sequence (no manual dependency tracking).
 
 The controlled terminology maps raw values to CDISC standard values:
 
@@ -92,9 +94,9 @@ vapply(rule_set$rules$AE, function(r) r$type, character(1))
 
 The rule compiler:
 
-1. Parses JSON parameters (when present)
+1. Parses the DERIVATION column syntax (e.g. `derive_dy(dtc_var = "AESTDTC")`)
 2. Auto-assigns rule\_type for variables without explicit DERIVATION
-3. Resolves dependencies (e.g., AESEQ depends on AESTDTC)
+3. Infers derivation order automatically from the mandatory SDTM sequence
 4. Enriches CT rules with codelist mappings
 
 ## Step 4 — Build the AE domain

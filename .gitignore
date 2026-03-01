@@ -21,7 +21,8 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Build
+# Build artifacts (pkgdown output)
 docs/
-man/*.Rd
-NAMESPACE
+
+# Temporary Excel lock files
+~$*
