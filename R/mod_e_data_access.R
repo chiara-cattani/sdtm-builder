@@ -161,31 +161,14 @@ get_source_datasets_from_rules <- function(rule_set, target_meta = NULL, sources
         }
       }
       
-      # Check for depends_on in target_meta for this variable
+      # Check the derivation field for dataset references
+      # This catches cases like "ae_meddra.pt_name" in derivation expressions
       if (!is.null(target_meta)) {
         var_meta <- target_meta %>% 
           dplyr::filter(.data$domain == toupper(dom), .data$var == var_name) %>%
           dplyr::slice(1L)
         
         if (nrow(var_meta) > 0L) {
-          # Check depends_on field
-          if (!is.na(var_meta$depends_on[1L])) {
-            deps <- var_meta$depends_on[1L]
-            # Parse dependency string for dataset references
-            if (grepl("\\.", deps)) {
-              ds_refs <- strsplit(deps, "[^a-zA-Z0-9_\\.]")[[1L]]
-              ds_refs <- ds_refs[ds_refs != ""]
-              for (ref in ds_refs) {
-                if (grepl("\\.", ref)) {
-                  ds_name <- sub("\\..*", "", ref)
-                  required <- c(required, tolower(ds_name))
-                }
-              }
-            }
-          }
-          
-          # Also check the derivation field directly for dataset references
-          # This catches cases like "ae_meddra.pt_name" in derivation expressions
           if (!is.na(var_meta$derivation[1L])) {
             deriv <- var_meta$derivation[1L]
             # Extract dataset.column patterns: look for word.word sequences

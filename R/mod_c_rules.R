@@ -259,32 +259,9 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         params$dataset <- dom_lower
       }
 
-      # Parse depends_on
-      deps <- character()
-      if (!is.na(row$depends_on) && nchar(row$depends_on) > 0) {
-        deps <- trimws(strsplit(row$depends_on, ";")[[1]])
-      }
-
-      # Auto-add dependencies from params that reference other domain vars
-      # (e.g. coded_var = "AEDECOD" for dict_version, condition for if_else)
-      dom_vars <- unique(dom_meta$var)
-      implicit_refs <- c(params$coded_var, params$dtc_var, params$ref_var)
-      for (ref in implicit_refs) {
-        if (!is.null(ref) && ref %in% dom_vars && ref != var_name && !ref %in% deps) {
-          deps <- c(deps, ref)
-        }
-      }
-      # Also scan condition / true_value / false_value for references
-      for (txt in c(params$condition, params$true_value, params$false_value)) {
-        if (!is.null(txt) && is.character(txt)) {
-          tokens <- regmatches(txt, gregexpr("[A-Z][A-Z0-9_]+", txt))[[1]]
-          for (tok in tokens) {
-            if (tok %in% dom_vars && tok != var_name && !tok %in% deps) {
-              deps <- c(deps, tok)
-            }
-          }
-        }
-      }
+      # NOTE: depends_on is no longer parsed from metadata.
+      # Derivation order is now inferred automatically from rule_type and variable names
+      # using the mandatory SDTM derivation sequence (see mod_d_dependency.R)
 
       # Resolve extensibility for this codelist
       cl_id <- if (!is.na(row$codelist_id)) row$codelist_id else NULL
@@ -298,7 +275,6 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
         type       = rule_type,
         fn         = fn_name,
         params     = params,
-        depends_on = deps,
         codelist_id = if (!is.na(row$codelist_id)) row$codelist_id else NULL,
         label      = row$label,
         target_type = row$type,
@@ -317,17 +293,11 @@ compile_rules <- function(target_meta, source_meta = NULL, ct_lib = NULL,
 
     all_rules[[dom]] <- dom_rules
 
-    # Build dependency edges
-    edges <- tibble::tibble(from_var = character(), to_var = character(),
-                            domain = character())
-    for (var_name in names(dom_rules)) {
-      rule <- dom_rules[[var_name]]
-      for (dep in rule$depends_on) {
-        edges <- dplyr::bind_rows(edges, tibble::tibble(
-          from_var = dep, to_var = var_name, domain = dom))
-      }
-    }
-    dep_info[[dom]] <- edges
+    # NOTE: dependency edges are no longer built from explicit depends_on.
+    # Derivation order is now inferred automatically from rule_type and variable names.
+    # See mod_d_dependency.R for the mandatory SDTM derivation order system.
+    dep_info[[dom]] <- tibble::tibble(from_var = character(), to_var = character(),
+                                       domain = character())
   }
 
   # Enrich CT rules

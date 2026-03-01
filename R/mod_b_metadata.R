@@ -280,7 +280,7 @@ read_study_metadata_excel <- function(path) {
   if (!"is_key" %in% names(df)) df$is_key <- NA
   if (!"to_supp" %in% names(df)) df$to_supp <- NA
   if (!"rule_params" %in% names(df)) df$rule_params <- NA_character_
-  if (!"depends_on" %in% names(df)) df$depends_on <- NA_character_
+  # NOTE: depends_on is no longer used - derivation order is automatic
 
   # Trim whitespace in character columns
   chr_cols <- names(df)[vapply(df, is.character, logical(1))]

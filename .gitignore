@@ -1,0 +1,27 @@
+# R project
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Example directories (not included in commits)
+example1/
+example2/
+
+# Virtual environments
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+docs/
+man/*.Rd
+NAMESPACE
