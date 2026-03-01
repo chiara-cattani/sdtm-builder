@@ -148,15 +148,187 @@ RULE_TYPE_TO_FUNCTION <- stats::setNames(
 
 
 # ==============================================================================
+# Shorthand expansion: compact DERIVATION syntax → explicit function-call syntax
+# ==============================================================================
+# Programmers can use compact shorthand in the DERIVATION column for speed.
+# The expand_shorthand() function converts these to the standard explicit
+# function-call format BEFORE the normal parsing logic runs.
+#
+# Both the shorthand and the explicit long form are always accepted.
+# See vignettes/derivation-shorthands.Rmd for the full reference.
+# ==============================================================================
+
+#' Expand shorthand DERIVATION notation to explicit function-call syntax
+#'
+#' Recognises three shorthand families:
+#' 1. **Quoted string** → `derive_constant()`
+#' 2. **Dot notation** (`dataset.variable`) → `map_direct()` or `format_iso_dtc()`
+#'    depending on the variable's DATA_TYPE.
+#' 3. **Prefix notation** (`prefix:args`) → various derivation functions.
+#'
+#' @param method_string Character. The raw DERIVATION cell value.
+#' @param meta_row Named list or tibble row with metadata columns (needs `data_type`).
+#' @return Character string with the expanded explicit form, or `NULL` if not
+#'   recognised as a shorthand.
+#' @export
+expand_shorthand <- function(method_string, meta_row = NULL) {
+  s <- trimws(method_string)
+  if (nchar(s) == 0L) return(NULL)
+
+  # --- 1. Quoted string → derive_constant ---
+  if ((startsWith(s, '"') && endsWith(s, '"')) ||
+      (startsWith(s, "\u201c") && endsWith(s, "\u201d")) ||
+      (startsWith(s, "'") && endsWith(s, "'"))) {
+    val <- substr(s, 2, nchar(s) - 1)
+    return(paste0('derive_constant(value = "', val, '")'))
+  }
+
+  # --- 2. Prefix notation: prefix:args  or  prefix(opt):args ---
+  prefix_match <- regmatches(s,
+    regexec("^([a-zA-Z_]+)(\\([^)]*\\))?\\s*:\\s*(.+)$", s, perl = TRUE))[[1]]
+  if (length(prefix_match) == 4L) {
+    prefix <- tolower(prefix_match[2])
+    paren  <- prefix_match[3]          # e.g. "(;)" for concat
+    args   <- trimws(prefix_match[4])
+    expanded <- .expand_prefix_shorthand(prefix, paren, args)
+    if (!is.null(expanded)) return(expanded)
+  }
+
+  # --- 3. Dot notation: dataset.variable ---
+  dot_match <- regmatches(s,
+    regexec("^([a-zA-Z_][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)$",
+            s, perl = TRUE))[[1]]
+  if (length(dot_match) == 3L) {
+    dataset <- dot_match[2]
+    src_var <- dot_match[3]
+    # Context-aware: if DATA_TYPE is datetime/durationDatetime → format_iso_dtc
+    dtype <- .get_data_type(meta_row)
+    if (!is.null(dtype) && tolower(dtype) %in% c("datetime", "durationdatetime")) {
+      return(paste0('format_iso_dtc(dataset = "', dataset,
+                    '", date_col = "', src_var, '")'))
+    }
+    return(paste0('map_direct(dataset = "', dataset,
+                  '", source_var = "', src_var, '")'))
+  }
+
+  # Not a shorthand
+  NULL
+}
+
+#' Expand a prefix:args shorthand into explicit function-call syntax
+#' @noRd
+.expand_prefix_shorthand <- function(prefix, paren, args) {
+  switch(prefix,
+    ct = {
+      dot_parts <- strsplit(args, "\\.", perl = TRUE)[[1]]
+      if (length(dot_parts) == 2L) {
+        paste0('assign_ct(column = "', trimws(dot_parts[2]),
+               '", dataset = "', trimws(dot_parts[1]), '")')
+      } else {
+        paste0('assign_ct(column = "', trimws(args), '")')
+      }
+    },
+    decode = {
+      dot_parts <- strsplit(args, "\\.", perl = TRUE)[[1]]
+      if (length(dot_parts) == 2L) {
+        paste0('decode_ct(column = "', trimws(dot_parts[2]),
+               '", dataset = "', trimws(dot_parts[1]), '")')
+      } else {
+        paste0('decode_ct(column = "', trimws(args), '")')
+      }
+    },
+    coalesce = {
+      cols <- trimws(strsplit(args, ",")[[1]])
+      cols_str <- paste0('"', cols, '"', collapse = ", ")
+      paste0('derive_coalesce(columns = c(', cols_str, '))')
+    },
+    concat = {
+      cols <- trimws(strsplit(args, ",")[[1]])
+      cols_str <- paste0('"', cols, '"', collapse = ", ")
+      sep <- ""
+      if (!is.null(paren) && nchar(paren) > 0L) {
+        sep <- gsub("^\\(|\\)$", "", paren)
+      }
+      if (nchar(sep) > 0L) {
+        paste0('derive_concat(columns = c(', cols_str,
+               '), separator = "', sep, '")')
+      } else {
+        paste0('derive_concat(columns = c(', cols_str, '))')
+      }
+    },
+    occur = {
+      paste0('derive_occurrence(source_var = "', trimws(args), '")')
+    },
+    status = {
+      paste0('derive_status(result_var = "', trimws(args), '")')
+    },
+    trim = {
+      paste0('derive_trim_pad(column = "', trimws(args), '")')
+    },
+    dy = {
+      parts <- trimws(strsplit(args, ",")[[1]])
+      if (length(parts) >= 2L) {
+        paste0('derive_dy(dtc_var = "', parts[1],
+               '", ref_var = "', parts[2], '")')
+      } else {
+        paste0('derive_dy(dtc_var = "', parts[1], '")')
+      }
+    },
+    dur = {
+      parts <- trimws(strsplit(args, ",")[[1]])
+      if (length(parts) >= 2L) {
+        paste0('derive_duration(start_dtc = "', parts[1],
+               '", end_dtc = "', parts[2], '")')
+      } else {
+        paste0('derive_duration(start_dtc = "', parts[1], '")')
+      }
+    },
+    epoch = {
+      paste0('derive_epoch(dtc_var = "', trimws(args), '")')
+    },
+    regex = {
+      regex_parts <- strsplit(args, "\\|", perl = TRUE)[[1]]
+      if (length(regex_parts) >= 2L) {
+        paste0('derive_regex_extract(column = "', trimws(regex_parts[1]),
+               '", pattern = "', trimws(regex_parts[2]), '")')
+      } else {
+        paste0('derive_regex_extract(column = "', trimws(args), '")')
+      }
+    },
+    seq = {
+      paste0('derive_seq(by = "', trimws(args), '")')
+    },
+    sourceid = {
+      paste0('derive_sourceid(form_id = "', trimws(args), '")')
+    },
+    # Not a recognised prefix — return NULL
+    NULL
+  )
+}
+
+#' Extract DATA_TYPE from a metadata row
+#' @noRd
+.get_data_type <- function(meta_row) {
+  if (is.null(meta_row)) return(NULL)
+  dtype <- meta_row[["data_type"]]
+  if (is.null(dtype) || is.na(dtype)) dtype <- meta_row[["DATA_TYPE"]]
+  if (is.null(dtype) || is.na(dtype)) return(NULL)
+  dtype
+}
+
+
+# ==============================================================================
 # parse_method_call(): Parse "fn(param = val, ...)" from DERIVATION column
 # ==============================================================================
 
 #' Parse a DERIVATION column value into function name + parameters
 #'
-#' Supports three formats:
-#' 1. **Explicit call**: `derive_seq(by = "USUBJID", order_by = "AESTDTC")`
-#' 2. **Legacy keyword**: `SEQ`, `DY`, `STRESN` (auto-expanded with warning)
-#' 3. **Empty/NA**: returns `NULL` (auto-assigned by compile_rules)
+#' Supports four formats:
+#' 1. **Shorthand**: `ae.aeterm`, `"AE"`, `ct:aesev`, etc.
+#'    (auto-expanded to explicit call syntax — see [expand_shorthand()])
+#' 2. **Explicit call**: `derive_seq(by = "USUBJID", order_by = "AESTDTC")`
+#' 3. **Legacy keyword**: `SEQ`, `DY`, `STRESN` (auto-expanded with warning)
+#' 4. **Empty/NA**: returns `NULL` (auto-assigned by compile_rules)
 #'
 #' @param method_string Character. The DERIVATION value from Excel.
 #' @param domain Character. Domain code (for convention-based defaults).
@@ -171,6 +343,12 @@ parse_method_call <- function(method_string, domain = NA_character_,
   }
 
   method_string <- trimws(method_string)
+
+  # ------ Try shorthand expansion first ------
+  expanded <- expand_shorthand(method_string, meta_row = meta_row)
+  if (!is.null(expanded)) {
+    method_string <- expanded
+  }
 
   # ------ Try explicit function-call syntax: fn(param = val, ...) ------
   fn_match <- regmatches(method_string,

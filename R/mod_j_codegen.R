@@ -141,7 +141,8 @@
     concat = {
       cols <- paste0('"', unlist(p$columns %||% p$sources), '"', collapse = ", ")
       sep  <- p$separator %||% p$sep %||% ""
-      paste0(var, ' = purrr::pmap_chr(list(', gsub('"', '', cols), '), ~ paste(na.omit(c(...)), collapse = "', sep, '"))')
+      paste0(var, ' = purrr::pmap_chr(list(', gsub('"', '', cols),
+             '), function(...) { p <- c(...); p <- p[!is.na(p) & trimws(p) != ""]; paste(p, collapse = "', sep, '") })')
     },
     numeric_round = {
       digits <- rule$significant_digits %||% p$significant_digits %||% 3L

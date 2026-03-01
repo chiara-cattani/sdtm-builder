@@ -229,7 +229,10 @@ derive_concat <- function(data, target_var, sources, sep = "",
                           na_rm = TRUE, trim = TRUE) {
   vals <- purrr::pmap_chr(data[sources], function(...) {
     parts <- c(...)
-    if (na_rm) parts <- parts[!is.na(parts)]
+    if (na_rm) {
+      parts <- parts[!is.na(parts)]
+      parts <- parts[nchar(trimws(parts)) > 0L]
+    }
     paste(parts, collapse = sep)
   })
   if (trim) vals <- trimws(vals)

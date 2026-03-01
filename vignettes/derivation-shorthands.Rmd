@@ -1,0 +1,160 @@
+---
+title: "Derivation Shorthand Reference"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Derivation Shorthand Reference}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Overview
+
+The **DERIVATION** column in the Variables sheet of `Study_Metadata.xlsx`
+supports two equivalent ways to define each derivation rule:
+
+1. **Explicit (long) form** — full function call syntax, e.g.
+   `map_direct(dataset = "ae", source_var = "aeterm")`
+2. **Shorthand (short) form** — compact notation for faster data entry, e.g.
+   `ae.aeterm`
+
+Both forms are **always accepted**. The shorthand is automatically expanded to
+the explicit form before parsing. Use whichever is most convenient.
+
+
+## Quick Reference Table
+
+| Shorthand | Expands to | Notes |
+|---|---|---|
+| `ae.aeterm` | `map_direct(dataset = "ae", source_var = "aeterm")` | Dot notation: `dataset.variable` → direct mapping |
+| `ae.startdate` | `format_iso_dtc(dataset = "ae", date_col = "startdate")` | Same dot notation, but when DATA_TYPE = `datetime` or `durationDatetime` |
+| `"AE"` | `derive_constant(value = "AE")` | Quoted string → constant value |
+| `ct:aesev` | `assign_ct(column = "aesev")` | Controlled terminology assignment |
+| `ct:ae.aesev` | `assign_ct(column = "aesev", dataset = "ae")` | CT with explicit dataset |
+| `decode:aedecod` | `decode_ct(column = "aedecod")` | CT decode |
+| `decode:ae.aedecod` | `decode_ct(column = "aedecod", dataset = "ae")` | CT decode with dataset |
+| `coalesce:col1, col2, col3` | `derive_coalesce(columns = c("col1", "col2", "col3"))` | First non-missing value |
+| `concat:col1, col2, col3` | `derive_concat(columns = c("col1", "col2", "col3"))` | Concatenate (default sep = "") |
+| `concat(;):col1, col2` | `derive_concat(columns = c("col1", "col2"), separator = ";")` | Concatenate with custom separator |
+| `occur:aeoccur` | `derive_occurrence(source_var = "aeoccur")` | Occurrence flag |
+| `status:LBORRES` | `derive_status(result_var = "LBORRES")` | Status derivation |
+| `trim:aeterm` | `derive_trim_pad(column = "aeterm")` | Trim whitespace |
+| `dy:AESTDTC` | `derive_dy(dtc_var = "AESTDTC")` | Study day (ref defaults to RFSTDTC) |
+| `dy:AEENDTC, RFSTDTC` | `derive_dy(dtc_var = "AEENDTC", ref_var = "RFSTDTC")` | Study day with explicit reference |
+| `dur:AESTDTC, AEENDTC` | `derive_duration(start_dtc = "AESTDTC", end_dtc = "AEENDTC")` | Duration |
+| `epoch:AESTDTC` | `derive_epoch(dtc_var = "AESTDTC")` | Epoch derivation |
+| `seq:USUBJID` | `derive_seq(by = "USUBJID")` | Sequence number |
+| `sourceid:AE` | `derive_sourceid(form_id = "AE")` | Source identifier |
+| `regex:col\|pattern` | `derive_regex_extract(column = "col", pattern = "pattern")` | Regex extraction |
+
+
+## Legacy Keywords (still supported)
+
+These uppercase keywords are auto-expanded with convention-based defaults:
+
+| Keyword | Expands to |
+|---|---|
+| `SEQ` | `derive_seq(by = "USUBJID")` |
+| `DY` | `derive_dy(dtc_var = "<PREFIX>STDTC")` |
+| `DUR` | `derive_duration(start_dtc = "<PREFIX>STDTC", end_dtc = "<PREFIX>ENDTC")` |
+| `EPOCH` | `derive_epoch(dtc_var = "<PREFIX>STDTC")` |
+| `VISITNUM` | `derive_visitnum(visit_var = "VISIT")` |
+| `VISIT` | `derive_visit()` |
+| `VISITDY` | `derive_visitdy(visit_var = "VISIT")` |
+| `TPT` | `derive_tpt()` |
+| `BASELINE` | `derive_baseline_flag(...)` |
+| `LASTOBS` | `derive_lastobs_flag(...)` |
+| `STRESN` | `derive_numeric_round(column = "<inferred>")` |
+| `USUBJID` | `derive_usubjid()` |
+
+(`<PREFIX>` is inferred from the variable name, e.g. `AEDY` → prefix `AE`.)
+
+
+## Detailed Rules
+
+### Dot Notation: `dataset.variable`
+
+The most common shorthand. Write the raw dataset name, a dot, and the source
+variable name.
+
+- If the variable's **DATA_TYPE** is `datetime` or `durationDatetime`, it
+  expands to `format_iso_dtc()` (ISO 8601 date/time formatting).
+- Otherwise it expands to `map_direct()` (simple column copy).
+
+**Examples:**
+
+```
+AETERM    →  ae.aeterm       →  map_direct(dataset = "ae", source_var = "aeterm")
+AESTDTC   →  ae.startdate   →  format_iso_dtc(dataset = "ae", date_col = "startdate")
+CMTRT     →  cm.cmtrt       →  map_direct(dataset = "cm", source_var = "cmtrt")
+```
+
+
+### Quoted String: `"value"`
+
+Any value enclosed in double quotes (`"..."`) or single quotes (`'...'`)
+becomes a constant.
+
+**Examples:**
+
+```
+DOMAIN    →  "AE"            →  derive_constant(value = "AE")
+AECAT     →  "GENERAL"       →  derive_constant(value = "GENERAL")
+```
+
+
+### Prefix `ct:` — Controlled Terminology
+
+Assign a raw value via the controlled terminology codelist.
+
+```
+ct:aesev          →  assign_ct(column = "aesev")
+ct:ae.aesev_raw   →  assign_ct(column = "aesev_raw", dataset = "ae")
+```
+
+
+### Prefix `concat:` — Concatenation
+
+Concatenate multiple columns. Empty and missing values are automatically
+skipped (no extra separators). Specify a custom separator in parentheses.
+
+```
+concat:col1, col2, col3         →  derive_concat(columns = c("col1", "col2", "col3"))
+concat(;):col1, col2, col3      →  derive_concat(..., separator = ";")
+concat( - ):start, end           →  derive_concat(..., separator = " - ")
+```
+
+
+### Prefix `dy:` — Study Day
+
+Derive study day from a DTC variable. Optionally specify the reference
+variable (defaults to `RFSTDTC`).
+
+```
+dy:AESTDTC              →  derive_dy(dtc_var = "AESTDTC")
+dy:AEENDTC, RFSTDTC     →  derive_dy(dtc_var = "AEENDTC", ref_var = "RFSTDTC")
+dy:CMSTDTC, RFXSTDTC    →  derive_dy(dtc_var = "CMSTDTC", ref_var = "RFXSTDTC")
+```
+
+
+### Prefix `sourceid:` — Source Identifier
+
+Derive the source record identifier from the review status dataset.
+
+```
+sourceid:AE    →  derive_sourceid(form_id = "AE")
+sourceid:CM    →  derive_sourceid(form_id = "CM")
+```
+
+
+## Empty DERIVATION
+
+If the DERIVATION cell is left empty, the system auto-assigns:
+
+- **STUDYID** → `derive_constant(value = "auto")` (resolved from config)
+- **DOMAIN** → `derive_constant(value = "<domain>")` (from domain code)
+- **All others** → `map_direct(column = "<lowercase_varname>")` (assumes a
+  same-named column in the primary raw dataset)

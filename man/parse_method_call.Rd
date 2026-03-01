@@ -24,8 +24,10 @@ parse_method_call(
 Named list: \code{fn}, \code{rule_type}, \code{params} or \code{NULL} if empty.
 }
 \description{
-Supports three formats:
+Supports four formats:
 \enumerate{
+\item \strong{Shorthand}: \code{ae.aeterm}, \code{"AE"}, \code{ct:aesev}, etc.
+(auto-expanded to explicit call syntax — see \code{\link[=expand_shorthand]{expand_shorthand()}})
 \item \strong{Explicit call}: \code{derive_seq(by = "USUBJID", order_by = "AESTDTC")}
 \item \strong{Legacy keyword}: \code{SEQ}, \code{DY}, \code{STRESN} (auto-expanded with warning)
 \item \strong{Empty/NA}: returns \code{NULL} (auto-assigned by compile_rules)
