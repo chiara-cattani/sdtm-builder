@@ -32,15 +32,6 @@ export:
     - "rda"
   generate_programs: true
 
-# Controlled terminology
-ct:
-  files:
-    - "metadata/Study_CT.xlsx"
-
-# Study metadata
-metadata:
-  file: "metadata/Study_Metadata.xlsx"
-
 # Visit map
 # Maps EventId to VISIT, VISITNUM, VISITDY
 visit_source_var: "eventid"

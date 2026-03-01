@@ -19,6 +19,8 @@
 #' 6. Optionally generates an R program per domain in the programs directory
 #'
 #' @param config_path Character or `NULL`. Path to a `config.yaml` file.
+#'   If `NULL` (the default), auto-discovers `config.yaml` or
+#'   `metadata/config.yaml` in the current working directory.
 #'   If provided, `metadata_path`, `ct_path`, `raw_dir`, `output_dir` and
 #'   `programs_dir` are read from the YAML (but explicit arguments override).
 #' @param metadata_path Character or `NULL`. Path to `Study_Metadata.xlsx`.
@@ -77,7 +79,11 @@
 #'
 #' @examples
 #' \dontrun{
-#' # Using a config.yaml file (stored in metadata/)
+#' # Auto-discover config.yaml in the working directory
+#' setwd("my_study")
+#' out <- run_study()
+#'
+#' # Or pass the config path explicitly
 #' out <- run_study("metadata/config.yaml")
 #'
 #' # Using explicit paths (no config.yaml needed)
@@ -90,7 +96,7 @@
 #' )
 #'
 #' # Datasets only (no R programs generated)
-#' out <- run_study("metadata/config.yaml", generate_programs = FALSE)
+#' out <- run_study(generate_programs = FALSE)
 #' }
 #'
 #' @export
@@ -114,6 +120,17 @@ run_study <- function(config_path = NULL,
 
   # ---- 1. Resolve paths from config.yaml or arguments -----------------------
   cfg_yaml <- NULL
+
+  # Auto-discover config.yaml if not explicitly provided
+  if (is.null(config_path)) {
+    candidates <- c("config.yaml", "metadata/config.yaml")
+    found <- candidates[file.exists(candidates)]
+    if (length(found) > 0L) {
+      config_path <- found[1L]
+      .log("Auto-discovered config: {config_path}")
+    }
+  }
+
   if (!is.null(config_path)) {
     checkmate::assert_file_exists(config_path)
     cfg_yaml <- yaml::read_yaml(config_path)

@@ -22,6 +22,8 @@ run_study(
 }
 \arguments{
 \item{config_path}{Character or \code{NULL}. Path to a \code{config.yaml} file.
+If \code{NULL} (the default), auto-discovers \code{config.yaml} or
+\code{metadata/config.yaml} in the current working directory.
 If provided, \code{metadata_path}, \code{ct_path}, \code{raw_dir}, \code{output_dir} and
 \code{programs_dir} are read from the YAML (but explicit arguments override).}
 
@@ -110,7 +112,11 @@ Given a \code{config.yaml} (or individual paths), this function:
 
 \examples{
 \dontrun{
-# Using a config.yaml file (stored in metadata/)
+# Auto-discover config.yaml in the working directory
+setwd("my_study")
+out <- run_study()
+
+# Or pass the config path explicitly
 out <- run_study("metadata/config.yaml")
 
 # Using explicit paths (no config.yaml needed)
@@ -123,7 +129,7 @@ out <- run_study(
 )
 
 # Datasets only (no R programs generated)
-out <- run_study("metadata/config.yaml", generate_programs = FALSE)
+out <- run_study(generate_programs = FALSE)
 }
 
 }
