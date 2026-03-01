@@ -78,7 +78,7 @@ validate_metadata_ct_structure <- function(target_meta,
     }
   }
 
-  # 1a. Check for duplicate (domain, var) pairs
+  # 1a. Check for duplicate (domain, var) pairs (WARNING only - acceptable with value-level metadata)
   dup_check <- target_meta %>%
     dplyr::group_by(.data$domain, .data$var) %>%
     dplyr::mutate(n = dplyr::n()) %>%
@@ -89,9 +89,9 @@ validate_metadata_ct_structure <- function(target_meta,
     dup_list <- glue::glue_data(dup_check,
                                  "{domain}/{var} ({n} times)")
     rpt <- add_finding(rpt, rule_id = "metadata_duplicate_vars",
-                       severity = "ERROR",
+                       severity = "WARNING",
                        message = glue::glue(
-                         "Duplicate (domain, var) pairs in metadata: {paste(dup_list, collapse='; ')}"
+                         "Duplicate (domain, var) pairs found (common with value-level metadata): {paste(dup_list, collapse='; ')}"
                        ),
                        domain = "PRE-VALIDATION")
   }
@@ -111,18 +111,17 @@ validate_metadata_ct_structure <- function(target_meta,
                        domain = "PRE-VALIDATION")
   }
 
-  # 1c. Check for invalid type values
-  valid_types <- c("Char", "Num")
+  # 1c. Check for invalid type values (case-insensitive: char/Char, num/Num)
   invalid_type <- target_meta %>%
     dplyr::filter(!is.na(.data$type) &
-                  !.data$type %in% valid_types)
+                  !toupper(.data$type) %in% c("CHAR", "NUM"))
   if (nrow(invalid_type) > 0L) {
     invalid_list <- glue::glue_data(invalid_type,
                                       "{domain}/{var}={type}")
     rpt <- add_finding(rpt, rule_id = "metadata_invalid_type",
                        severity = "ERROR",
                        message = glue::glue(
-                         "Invalid 'type' values (must be 'Char' or 'Num'): {paste(head(invalid_list, 5), collapse='; ')}"
+                         "Invalid 'type' values (must be 'Char'/'char' or 'Num'/'num'): {paste(head(invalid_list, 5), collapse='; ')}"
                        ),
                        domain = "PRE-VALIDATION")
   }
@@ -163,12 +162,13 @@ validate_metadata_ct_structure <- function(target_meta,
       # 2b. Check is_selected and is_extensible format
       if ("is_selected" %in% names(ct_lib)) {
         invalid_selected <- ct_lib %>%
-          dplyr::filter(!toupper(.data$is_selected) %in% c("Y", "N"))
+          dplyr::filter(!is.na(.data$is_selected) &
+                        !toupper(.data$is_selected) %in% c("Y", "N"))
         if (nrow(invalid_selected) > 0L) {
           rpt <- add_finding(rpt, rule_id = "ct_invalid_is_selected",
                              severity = "ERROR",
                              message = glue::glue(
-                               "{nrow(invalid_selected)} row(s) in CT have invalid is_selected values (must be Y/N)"
+                               "{nrow(invalid_selected)} row(s) in CT have invalid is_selected values (must be Y/N or empty)"
                              ),
                              domain = "PRE-VALIDATION")
         }
@@ -190,9 +190,15 @@ validate_metadata_ct_structure <- function(target_meta,
     }
 
     # 2c. Check for codelists referenced in metadata but missing from ct_lib
+    # Exclude special codelists that are external dictionaries (MEDDRA, WHODRUG, etc)
+    dictionary_codelists <- c("MEDDRA", "WHOD", "WHODRUG")
+    
     meta_codelists <- unique(target_meta$codelist_id[!is.na(target_meta$codelist_id)])
     ct_codelists <- unique(ct_lib$codelist_id)
+    
+    # Filter out dictionary codelists from missing check
     missing_in_ct <- setdiff(meta_codelists, ct_codelists)
+    missing_in_ct <- missing_in_ct[!toupper(missing_in_ct) %in% toupper(dictionary_codelists)]
 
     if (length(missing_in_ct) > 0L) {
       # Find which variables reference missing codelists
@@ -203,23 +209,27 @@ validate_metadata_ct_structure <- function(target_meta,
       missing_text <- glue::glue_data(missing_vars,
                                        "{domain}/{var} → {codelist_id}")
       rpt <- add_finding(rpt, rule_id = "ct_missing_codelists",
-                         severity = "ERROR",
+                         severity = "WARNING",
                          message = glue::glue(
-                           "{length(missing_in_ct)} codelist(s) referenced in metadata but NOT in CT: {paste(head(missing_text, 5), collapse='; ')}"
+                           "{length(missing_in_ct)} codelist(s) referenced but NOT in CT: {paste(head(missing_text, 5), collapse='; ')}"
                          ),
                          domain = "PRE-VALIDATION")
     }
 
-    # 2d. Check for orphaned codelists (in ct_lib but not referenced anywhere)
-    orphan_codelists <- setdiff(ct_codelists, meta_codelists)
+    # 2d. Check for orphaned codelists (in ct_lib but not referenced in selected domains)
+    # Only warn if we're validating specific domains (not all domains)
+    if (!is.null(domains) && length(domains) > 0L) {
+      orphan_codelists <- setdiff(ct_codelists, meta_codelists)
+      orphan_codelists <- orphan_codelists[!toupper(orphan_codelists) %in% toupper(dictionary_codelists)]
 
-    if (length(orphan_codelists) > 0L) {
-      rpt <- add_finding(rpt, rule_id = "ct_orphaned_codelists",
-                         severity = "WARNING",
-                         message = glue::glue(
-                           "{length(orphan_codelists)} codelist(s) in CT but NOT referenced in metadata (unused): {paste(head(orphan_codelists, 5), collapse=', ')}"
-                         ),
-                         domain = "PRE-VALIDATION")
+      if (length(orphan_codelists) > 0L) {
+        rpt <- add_finding(rpt, rule_id = "ct_orphaned_codelists",
+                           severity = "NOTE",
+                           message = glue::glue(
+                             "{length(orphan_codelists)} codelist(s) in CT not referenced in selected domain(s): {paste(head(orphan_codelists, 5), collapse=', ')}"
+                           ),
+                           domain = "PRE-VALIDATION")
+      }
     }
   }
 
@@ -237,14 +247,20 @@ validate_metadata_ct_structure <- function(target_meta,
   }
 
   if (!is.null(vlm_filtered) && nrow(vlm_filtered) > 0L) {
-    required_vlm_cols <- c("domain", "variable")
+    # Check for required columns: domain is always needed, variable can be VARNAME or variable
+    required_vlm_cols <- c("domain")
     missing_vlm_cols <- setdiff(required_vlm_cols, names(vlm_filtered))
-    if (length(missing_vlm_cols) > 0L) {
+    has_var_col <- "variable" %in% names(vlm_filtered) || "VARNAME" %in% names(vlm_filtered)
+    
+    if (length(missing_vlm_cols) > 0L || !has_var_col) {
+      if (length(missing_vlm_cols) > 0L) {
+        msg <- glue::glue("Value-level metadata missing required columns: {paste(missing_vlm_cols, collapse=', ')}")
+      } else {
+        msg <- "Value-level metadata missing 'variable' or 'VARNAME' column"
+      }
       rpt <- add_finding(rpt, rule_id = "vlm_missing_cols",
                          severity = "ERROR",
-                         message = glue::glue(
-                           "Value-level metadata missing required columns: {paste(missing_vlm_cols, collapse=', ')}"
-                         ),
+                         message = msg,
                          domain = "PRE-VALIDATION")
     } else {
       # 3a. Check if referenced domains exist in target_meta
