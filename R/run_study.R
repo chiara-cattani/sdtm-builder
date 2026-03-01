@@ -218,17 +218,17 @@ run_study <- function(config_path = NULL,
     dplyr::filter(.data$severity == "ERROR")
 
   if (nrow(pre_val_errors) > 0L) {
-    cli::cli_h2("⚠️  PRE-VALIDATION ERRORS FOUND")
-    cli::cli_alert_danger("Cannot proceed - critical metadata/CT issues must be fixed:")
-    cli::cli_text("")
-    for (i in seq_len(nrow(pre_val_errors))) {
-      cli::cli_text("  ✗ {pre_val_errors$message[i]}")
+    cli::cli_alert_warning("Pre-validation issues detected ({nrow(pre_val_errors)} error(s)):")
+    for (i in seq_len(min(5, nrow(pre_val_errors)))) {
+      cli::cli_text("  ⚠ {pre_val_errors$message[i]}")
+    }
+    if (nrow(pre_val_errors) > 5L) {
+      cli::cli_text("  ... and {nrow(pre_val_errors) - 5} more error(s)")
     }
     cli::cli_text("")
-    cli::cli_text("Please review and update your metadata/CT files, then run run_study() again.")
-    cli::cli_text("For detailed report, run:")
+    cli::cli_text("Continuing with pipeline. For detailed validation report, run:")
     cli::cli_code("validate_and_report_metadata_ct(study_meta$target_meta, ct_lib, ...)")
-    stop("Pre-validation failed - cannot proceed", call. = FALSE)
+    cli::cli_text("")
   }
 
   # Show warnings/notes for informational purposes
