@@ -299,7 +299,15 @@ validate_ct_conformance <- function(data, target_meta, domain,
     if (!v %in% names(data)) next
 
     cl_id <- ct_vars$codelist_id[i]
-    valid_values <- ct_lib$coded_value[ct_lib$codelist_id == cl_id]
+    
+    # Get all valid values: coded_value, submission_value, AND decode
+    cl <- ct_lib %>% dplyr::filter(.data$codelist_id == cl_id)
+    valid_values <- union(cl$coded_value, cl$submission_value)
+    if ("decode" %in% names(cl)) {
+      decode_vals <- cl$decode[!is.na(cl$decode) & trimws(cl$decode) != ""]
+      valid_values <- union(valid_values, decode_vals)
+    }
+    
     if (length(valid_values) == 0L) next
 
     data_vals <- unique(data[[v]][!is.na(data[[v]])])
