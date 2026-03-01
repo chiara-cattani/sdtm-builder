@@ -377,7 +377,7 @@ reusable across studies without code changes.
 | `derive_lastobs_flag()` | (not built before) | Generic last-observation flag within groups |
 | `derive_occurrence()` | Manual `if_else(!is.na(...), "Y", NA)` | Occurrence derivation |
 | `derive_status()` | (not built before) | NOT DONE / NA status derivation |
-| `derive_seriousness()` | Manual AE seriousness flags | Derive AESER from multiple criterion columns |
+
 | `derive_ref_time_point()` | (not built before) | --STRTPT/--ENRTPT derivation with pattern/value modes |
 
 ### Identifiers & Sequences (replaced manual `mutate()` logic)

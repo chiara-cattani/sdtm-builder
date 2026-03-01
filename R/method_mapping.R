@@ -103,9 +103,7 @@ FUNCTION_REGISTRY <- list(
   derive_status     = list(rule_type = "status",         required = c("result_var"),
                            optional  = list(done_value = NA_character_,
                                             not_done_value = "NOT DONE")),
-  derive_seriousness = list(rule_type = "seriousness",   required = c("flag_vars"),
-                            optional  = list(present_value = "Y",
-                                             absent_value = "N")),
+
   derive_dict_version = list(rule_type = "dict_version", required = c("dataset"),
                              optional  = list(prefix = "MedDRA", dictvar = "DictInstance")),
   get_dict_version    = list(rule_type = "dict_version", required = c("dataset"),

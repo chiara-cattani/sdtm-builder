@@ -228,7 +228,7 @@ variable assignments. The programmer only fills in the `Variables` sheet.
 | **Rules** (C) | `compile_rules()`, `enrich_rules_with_ct()` | Parse DERIVATION column into executable rules |
 | **Config domains** (H) | `expand_config_domains()` | Generate TI/TV from config |
 | **Build** (H) | `build_domain()`, `derive_variable()`, `finalize_domain()` | Execute rules and finalise |
-| **Derivations** (G1–G6) | `map_direct()`, `derive_constant()`, `assign_ct()`, `parse_partial_date()`, `format_iso_dtc()`, `derive_dy()`, `derive_seq()`, `derive_usubjid()`, `derive_dict_version()`, `derive_case_when()`, `derive_if_else()`, `derive_coalesce()`, `derive_seriousness()` | Individual variable derivations |
+| **Derivations** (G1–G6) | `map_direct()`, `derive_constant()`, `assign_ct()`, `parse_partial_date()`, `format_iso_dtc()`, `derive_dy()`, `derive_seq()`, `derive_usubjid()`, `derive_dict_version()`, `derive_case_when()`, `derive_if_else()`, `derive_coalesce()` | Individual variable derivations |
 | **Validation** (I) | `validate_domain_structure()` (11 checks) | Post-build conformance |
 | **Export** (K) | `export_domain()` | Write XPT, RDS, CSV |
 | **Orchestration** | `run_study()`, `build_all_domains()` | Coordinate the full pipeline |

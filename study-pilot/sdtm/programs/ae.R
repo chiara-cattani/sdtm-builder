@@ -9,7 +9,7 @@
 #   Dependencies : sdtmbuilder package
 # ------------------------------------------------------------------------------
 # PROGRAM HISTORY :
-# 2026-02-15 - sdtmbuilder - Auto-generated program
+# 2026-03-01 - sdtmbuilder - Auto-generated program
 # ******************************************************************************
 
 # Configuration ----
@@ -122,7 +122,7 @@ ae2 <- ae %>%
   ) %>%
   # --- Derived Variables ---
   mutate(AESEV = as.character(aesev)) %>%
-  derive_seriousness("AESER", c("aesdth", "aeslife", "aeshosp", "aesdisab", "aescong", "aesmie")) %>%
+  mutate(AESER = as.character(aeser)) %>%
   mutate(
     AEACN = as.character(aeacnp),
     AEACNOTH = purrr::pmap_chr(list(aeacns0, aeacns1, aeacns2), ~ paste(na.omit(c(...)), collapse = "; ")),

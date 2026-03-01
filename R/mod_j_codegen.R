@@ -273,10 +273,7 @@
     lastobs_flag = {
       glue::glue('derive_lastobs_flag("{var}")')
     },
-    seriousness = {
-      flag_vars <- paste0('"', unlist(p$flag_vars), '"', collapse = ", ")
-      glue::glue('derive_seriousness("{var}", c({flag_vars}))')
-    },
+
     ref_time_point = {
       src_var <- p$source_var %||% ""
       label   <- p$tpt_label %||% ""

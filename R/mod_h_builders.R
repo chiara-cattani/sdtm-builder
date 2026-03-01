@@ -893,23 +893,7 @@ derive_variable <- function(data, var, rule, context) {
       data <- derive_lastobs_flag(data, var, by = actual_by,
                                    order_var = order_var %||% actual_by[1])
     },
-    seriousness = {
-      flag_vars     <- unlist(params$flag_vars %||% list())
-      present_val   <- params$present_value %||% "Y"
-      absent_val    <- params$absent_value %||% "N"
-      actual_flags <- character()
-      for (f in flag_vars) {
-        if (f %in% names(data)) actual_flags <- c(actual_flags, f)
-        else if (tolower(f) %in% names(data)) actual_flags <- c(actual_flags, tolower(f))
-      }
-      if (length(actual_flags) > 0L) {
-        data <- derive_seriousness(data, var, actual_flags,
-                                    present_value = present_val,
-                                    absent_value = absent_val)
-      } else {
-        data[[var]] <- absent_val
-      }
-    },
+
     ref_time_point = {
       rtpt_var   <- var
       tpt_var    <- params$tpt_var %||% NULL

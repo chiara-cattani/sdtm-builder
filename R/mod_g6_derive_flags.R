@@ -3,7 +3,7 @@
 # ==============================================================================
 # Functions: derive_baseline_flag, derive_lastobs_flag, derive_lobxfl,
 #            derive_occurrence, derive_status, derive_reason,
-#            derive_seriousness, derive_ref_time_point
+#            derive_ref_time_point
 # ==============================================================================
 
 #' Derive baseline flag
@@ -102,41 +102,7 @@ derive_reason <- function(data, target_var, source_var = NULL,
   data
 }
 
-#' Derive seriousness flag from multiple criteria columns
-#'
-#' Commonly used for AESER: if any of the SAE seriousness criterion flags
-#' (AESDTH, AESLIFE, AESHOSP, AESDISAB, AESCONG, AESMIE) is `"Y"`,
-#' the event is serious.
-#'
-#' @param data Tibble.
-#' @param target_var Character. Target variable name (e.g., `"AESER"`).
-#' @param flag_vars Character vector. Column names of seriousness criterion
-#'   flags to check.
-#' @param present_value Character. Value indicating the flag is present.
-#'   Default `"Y"`.
-#' @param absent_value Character. Value when no flag is present.
-#'   Default `"N"`.
-#' @return Tibble with `target_var` populated.
-#' @export
-derive_seriousness <- function(data, target_var, flag_vars,
-                               present_value = "Y",
-                               absent_value = "N") {
-  flag_cols <- intersect(flag_vars, names(data))
-  if (length(flag_cols) > 0L) {
-    data[[target_var]] <- apply(
-      data[, flag_cols, drop = FALSE], 1L, function(row) {
-        if (any(toupper(row) == toupper(present_value), na.rm = TRUE)) {
-          present_value
-        } else {
-          absent_value
-        }
-      }
-    )
-  } else {
-    data[[target_var]] <- absent_value
-  }
-  data
-}
+
 
 #' Derive reference time point variables (--STRTPT/--STTPT or --ENRTPT/--ENTPT)
 #'
