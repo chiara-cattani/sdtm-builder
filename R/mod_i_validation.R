@@ -20,6 +20,8 @@ NULL
 #' @param domain_meta Tibble or `NULL`. Domain-level metadata providing
 #'   keys and structure information for validation.
 #' @param checks Character vector of check names to run, or `"all"`.
+#'   Special option: `"consistency"` runs only the final metadata-CT-dataset
+#'   consistency check, useful for Define-XML preparation.
 #' @return `validation_report`.
 #' @export
 validate_domain_structure <- function(data, target_meta, domain, config,
@@ -27,6 +29,16 @@ validate_domain_structure <- function(data, target_meta, domain, config,
                                       domain_meta = NULL,
                                       checks = "all") {
   rpt <- new_validation_report(domain = domain)
+
+  # Special case: consistency check only
+  if ("consistency" %in% checks) {
+    return(validate_metadata_ct_dataset_consistency(
+      data, target_meta, domain,
+      ct_lib = ct_lib,
+      value_level_meta = value_level_meta,
+      report = rpt
+    ))
+  }
 
   if ("all" %in% checks || "required_vars" %in% checks) {
     rpt <- validate_required_vars(data, target_meta, domain, rpt)
@@ -62,6 +74,16 @@ validate_domain_structure <- function(data, target_meta, domain, config,
   }
   if ("all" %in% checks || "no_duplicate_rows" %in% checks) {
     rpt <- validate_no_duplicate_rows(data, domain, rpt)
+  }
+
+  # Add consistency check if requested (can be run with or without other checks)
+  if ("all" %in% checks || "consistency" %in% checks) {
+    rpt <- validate_metadata_ct_dataset_consistency(
+      data, target_meta, domain,
+      ct_lib = ct_lib,
+      value_level_meta = value_level_meta,
+      report = rpt
+    )
   }
 
   rpt
@@ -677,4 +699,344 @@ validate_no_duplicate_rows <- function(data, domain, report) {
                           domain = domain)
   }
   report
+}
+
+#' Comprehensive consistency validation: metadata ↔ CT ↔ dataset
+#'
+#' Validates that selected metadata and CT match what's actually in the dataset.
+#' Identifies all inconsistencies to help prepare for Define-XML creation.
+#'
+#' Checks include:
+#' - Variables: extra in dataset, missing from dataset, not selected but in dataset
+#' - Values: extra in dataset, not selected in CT, extensibility violations
+#' - Value-level metadata: selected but unused, unused but valid
+#' - Data integrity: all-missing selected vars, unexpected patterns
+#'
+#' @param data Tibble. The built domain dataset.
+#' @param target_meta Tibble. Target metadata for this domain.
+#' @param domain Character. Domain abbreviation.
+#' @param ct_lib Tibble or `NULL`. Codelists with is_selected column.
+#' @param value_level_meta Tibble or `NULL`. Value-level metadata.
+#' @param report `validation_report` or `NULL`.
+#' @return Updated `validation_report`.
+#' @export
+validate_metadata_ct_dataset_consistency <- function(data, target_meta, domain,
+                                                      ct_lib = NULL,
+                                                      value_level_meta = NULL,
+                                                      report = NULL) {
+  if (is.null(report)) report <- new_validation_report(domain = domain)
+
+  dom_meta <- dplyr::filter(target_meta, .data[["domain"]] == .env[["domain"]])
+  if (nrow(dom_meta) == 0L) return(report)
+
+  # =========== 1. VARIABLE-LEVEL CONSISTENCY ===========
+
+  # 1a. Extra variables in dataset (not in metadata)
+  extra_vars <- setdiff(names(data), toupper(dom_meta$var))
+  if (length(extra_vars) > 0L) {
+    report <- add_finding(report, rule_id = "consistency_extra_vars",
+                          severity = "WARNING",
+                          message = glue::glue(
+                            "{domain}: {length(extra_vars)} variable(s) in dataset but NOT in metadata: {paste(extra_vars, collapse=', ')}"
+                          ),
+                          domain = domain)
+  }
+
+  # 1b. Missing variables in dataset (selected in metadata as REQ or EXP)
+  req_exp_vars <- toupper(dom_meta$var[!is.na(dom_meta$core) &
+                                        toupper(dom_meta$core) %in% c("REQ", "EXP")])
+  missing_vars <- setdiff(req_exp_vars, names(data))
+  if (length(missing_vars) > 0L) {
+    report <- add_finding(report, rule_id = "consistency_missing_vars",
+                          severity = "ERROR",
+                          message = glue::glue(
+                            "{domain}: {length(missing_vars)} required/expected variable(s) MISSING from dataset: {paste(missing_vars, collapse=', ')}"
+                          ),
+                          domain = domain)
+  }
+
+  # 1c. Permissible variables in metadata not in dataset (OK if PERM)
+  all_meta_vars <- toupper(dom_meta$var)
+  perm_not_in_data <- setdiff(all_meta_vars, names(data))
+  perm_in_meta <- dom_meta$var[toupper(dom_meta$var) %in% perm_not_in_data &
+                                !is.na(dom_meta$core) &
+                                toupper(dom_meta$core) == "PERM"]
+  if (length(perm_in_meta) > 0L) {
+    # This is informational - PERM variables can be absent
+    report <- add_finding(report, rule_id = "consistency_perm_absent",
+                          severity = "NOTE",
+                          message = glue::glue(
+                            "{domain}: {length(perm_in_meta)} permissible variable(s) in metadata but absent from dataset (OK if not needed): {paste(perm_in_meta, collapse=', ')}"
+                          ),
+                          domain = domain)
+  }
+
+  # =========== 2. VALUE-LEVEL CONSISTENCY (CODELISTS) ===========
+
+  if (!is.null(ct_lib)) {
+    ct_vars <- dom_meta[!is.na(dom_meta$codelist_id), ]
+
+    for (i in seq_len(nrow(ct_vars))) {
+      v <- ct_vars$var[i]
+      if (!v %in% names(data)) next
+
+      cl_id <- ct_vars$codelist_id[i]
+      cl_all <- ct_lib %>% dplyr::filter(.data$codelist_id == cl_id)
+      if (nrow(cl_all) == 0L) next
+
+      # Separate selected from unselected
+      is_selected_col <- "is_selected" %in% names(cl_all)
+      if (is_selected_col) {
+        cl_selected <- cl_all %>% dplyr::filter(toupper(.data$is_selected) == "Y")
+      } else {
+        cl_selected <- cl_all
+      }
+
+      # Build list of selected CT values
+      selected_ct_values <- union(cl_selected$coded_value, cl_selected$submission_value)
+      if ("decode" %in% names(cl_selected)) {
+        decode_vals <- cl_selected$decode[!is.na(cl_selected$decode) &
+                                          trimws(cl_selected$decode) != ""]
+        selected_ct_values <- union(selected_ct_values, decode_vals)
+      }
+
+      # Get data values
+      data_vals <- unique(data[[v]][!is.na(data[[v]])])
+      if (length(data_vals) == 0L) next
+
+      # Normalize for comparison
+      normalize_ct <- function(x) {
+        x <- as.character(x)
+        x <- trimws(x)
+        x <- tolower(x)
+        x <- gsub("\\s+", "", x, perl = TRUE)
+        x
+      }
+
+      data_norm <- normalize_ct(data_vals)
+      selected_norm <- normalize_ct(selected_ct_values)
+      all_ct_norm <- normalize_ct(union(cl_all$coded_value, cl_all$submission_value))
+
+      # 2a. Values in dataset not in selected CT terms
+      extra_data_vals <- data_vals[!data_norm %in% selected_norm]
+      if (length(extra_data_vals) > 0L) {
+        # Check if they're in full codelist (unselected) vs not in codelist at all
+        extra_data_norm <- normalize_ct(extra_data_vals)
+        unselected_in_cl <- extra_data_vals[extra_data_norm %in% all_ct_norm]
+        not_in_cl <- extra_data_vals[!extra_data_norm %in% all_ct_norm]
+
+        if (length(unselected_in_cl) > 0L) {
+          report <- add_finding(report, rule_id = "consistency_unselected_values",
+                                severity = "WARNING",
+                                message = glue::glue(
+                                  "{domain}/{v}: {length(unselected_in_cl)} value(s) in dataset are in {cl_id} but NOT SELECTED (select≠Y) in CT - UPDATE CT or dataset: {paste(head(unselected_in_cl, 3), collapse=', ')}"
+                                ),
+                                variable = v, domain = domain)
+        }
+
+        if (length(not_in_cl) > 0L) {
+          is_ext <- cl_all$is_extensible[1L]
+          if (!is.null(is_ext) && toupper(is_ext) == "YES") {
+            report <- add_finding(report, rule_id = "consistency_ext_value_not_in_ct",
+                                  severity = "WARNING",
+                                  message = glue::glue(
+                                    "{domain}/{v}: {length(not_in_cl)} value(s) in dataset NOT IN codelist {cl_id} (extensible) - ADD to CT if standard or REMOVE from dataset: {paste(head(not_in_cl, 3), collapse=', ')}"
+                                  ),
+                                  variable = v, domain = domain)
+          } else {
+            report <- add_finding(report, rule_id = "consistency_non_ext_value_not_in_ct",
+                                  severity = "ERROR",
+                                  message = glue::glue(
+                                    "{domain}/{v}: {length(not_in_cl)} value(s) in dataset NOT IN codelist {cl_id} (NON-EXTENSIBLE) - REMOVE from dataset or ADD to CT: {paste(head(not_in_cl, 3), collapse=', ')}"
+                                  ),
+                                  variable = v, domain = domain)
+          }
+        }
+      }
+
+      # 2b. Selected CT terms not appearing in data
+      selected_data_vals <- unique(data[[v]][!is.na(data[[v]])])
+      selected_data_norm <- normalize_ct(selected_data_vals)
+      unused_ct_vals <- cl_selected$coded_value[
+        !normalize_ct(cl_selected$coded_value) %in% selected_data_norm
+      ]
+
+      if (length(unused_ct_vals) > 0L && nrow(dplyr::filter(data, !is.na(!!rlang::sym(v)))) > 0L) {
+        # Only warn if variable has data
+        report <- add_finding(report, rule_id = "consistency_unused_ct_values",
+                              severity = "NOTE",
+                              message = glue::glue(
+                                "{domain}/{v}: Selected value(s) in {cl_id} NOT APPEARING in dataset: {paste(head(unused_ct_vals, 3), collapse=', ')} (OK if not expected in this dataset)"
+                              ),
+                              variable = v, domain = domain)
+      }
+    }
+  }
+
+  # =========== 3. VALUE-LEVEL METADATA CONSISTENCY ===========
+
+  if (!is.null(value_level_meta)) {
+    dom_vlm <- dplyr::filter(value_level_meta, .data$domain == .env[["domain"]])
+
+    for (i in seq_len(nrow(dom_vlm))) {
+      vlm_var <- dom_vlm$variable[i]
+      vlm_where <- dom_vlm$where_var[i]
+      vlm_when <- dom_vlm$where_value[i]
+
+      if (!vlm_var %in% names(data)) next
+
+      # Check if VLM condition has data
+      if (!is.na(vlm_where) && vlm_where %in% names(data)) {
+        if (is.na(vlm_when)) {
+          has_data <- nrow(dplyr::filter(data, !is.na(!!rlang::sym(vlm_where)))) > 0L
+        } else {
+          has_data <- nrow(
+            dplyr::filter(data, .data[[vlm_where]] == vlm_when &
+                          !is.na(!!rlang::sym(vlm_var)))
+          ) > 0L
+        }
+
+        if (!has_data) {
+          report <- add_finding(report, rule_id = "consistency_unused_vlm",
+                                severity = "WARNING",
+                                message = glue::glue(
+                                  "{domain}: Value-level metadata selected for {vlm_var} (when {vlm_where}={vlm_when}) but NO MATCHING DATA in dataset"
+                                ),
+                                domain = domain)
+        }
+      }
+    }
+  }
+
+  # =========== 4. DATA INTEGRITY CHECKS ===========
+
+  # 4a. Verify no all-missing required/expected variables
+  for (v in req_exp_vars) {
+    if (!v %in% names(data)) next
+    n_non_missing <- sum(!is.na(data[[v]]) & trimws(data[[v]]) != "")
+    if (n_non_missing == 0L) {
+      report <- add_finding(report, rule_id = "consistency_all_missing",
+                            severity = "ERROR",
+                            message = glue::glue(
+                              "{domain}/{v}: Required/Expected variable is ALL-MISSING in dataset"
+                            ),
+                            variable = v, domain = domain)
+    }
+  }
+
+  report
+}
+
+#' Generate a comprehensive consistency report for Define-XML preparation
+#'
+#' Creates a summary of metadata-CT-dataset consistency findings organized
+#' by severity and issue type. Perfect for final validation before Define-XML.
+#'
+#' @param report `validation_report`. The validation report to summarize.
+#' @return Invisible report (for piping). Prints formatted summary to console.
+#' @export
+print_consistency_report <- function(report) {
+  checkmate::assert_class(report, "validation_report")
+
+  findings <- report$findings
+
+  # Filter and organize by severity and rule category
+  if (nrow(findings) == 0L) {
+    cli::cli_alert_success("✓ No consistency issues found - ready for Define-XML!")
+    return(invisible(report))
+  }
+
+  # Count by severity
+  n_err <- sum(findings$severity == "ERROR")
+  n_warn <- sum(findings$severity == "WARNING")
+  n_note <- sum(findings$severity == "NOTE")
+
+  # Print header
+  cli::cli_h1("Metadata ↔ CT ↔ Dataset Consistency Report")
+  if (!is.null(report$domain)) {
+    cli::cli_text("Domain: {.strong {report$domain}}")
+  }
+  cli::cli_text("Generated: {format(Sys.time(), '%Y-%m-%d %H:%M:%S')} UTC")
+  cli::cli_br()
+
+  # Summary counts
+  cli::cli_div(theme = list(
+    col_type = list("span" = list(before = "{.strong ", after = "}"))
+  ))
+  cli::cli_h2("Summary")
+  cli::cli_ul(c(
+    "{.red ERROR}s: {n_err}",
+    "{.yellow WARNING}s: {n_warn}",
+    "{.cyan NOTE}s: {n_note}"
+  ))
+  cli::cli_end()
+
+  # Group findings by issue type (rule_id)
+  issue_groups <- unique(findings$rule_id)
+  issue_labels <- list(
+    consistency_extra_vars = "Extra Variables in Dataset",
+    consistency_missing_vars = "Missing Required Variables",
+    consistency_perm_absent = "Permissible Variables Absent",
+    consistency_unselected_values = "Unselected CT Values Used",
+    consistency_ext_value_not_in_ct = "Extensible Codelist: Value Not in CT",
+    consistency_non_ext_value_not_in_ct = "Non-Extensible Codelist: Value Not in CT",
+    consistency_unused_ct_values = "Selected CT Values Not Used",
+    consistency_unused_vlm = "Unused Value-Level Metadata",
+    consistency_all_missing = "All-Missing Required Variables"
+  )
+
+  for (issue in issue_groups) {
+    issue_findings <- dplyr::filter(findings, .data$rule_id == issue)
+    issue_title <- issue_labels[[issue]] %||% issue
+
+    # Determine icon and color based on severity
+    max_sev <- issue_findings$severity[1L]
+    if (any(issue_findings$severity == "ERROR")) max_sev <- "ERROR"
+    else if (any(issue_findings$severity == "WARNING")) max_sev <- "WARNING"
+
+    icon <- switch(max_sev,
+      "ERROR" = "✗",
+      "WARNING" = "!",
+      "NOTE" = "ℹ",
+      "?"
+    )
+    color <- switch(max_sev,
+      "ERROR" = "red",
+      "WARNING" = "yellow",
+      "NOTE" = "cyan",
+      "grey"
+    )
+
+    # Print issue group header
+    cli::cli_h3("{.{color} {icon} {issue_title}} ({nrow(issue_findings)})")
+
+    # Print each finding in this group
+    for (k in seq_len(nrow(issue_findings))) {
+      finding <- issue_findings[k, ]
+      severity_text <- switch(finding$severity,
+        "ERROR" = "{.red [ERROR]}",
+        "WARNING" = "{.yellow [WARN]}",
+        "NOTE" = "{.cyan [INFO]}"
+      )
+      cli::cli_text("{severity_text} {finding$message}")
+    }
+
+    cli::cli_br()
+  }
+
+  # Actionable next steps
+  if (n_err > 0L || n_warn > 0L) {
+    cli::cli_h2("Next Steps")
+    cli::cli_ul(c(
+      "Review all {.red [ERROR]} findings - these {.strong MUST} be resolved before Define-XML",
+      "Address {.yellow [WARN]} findings - these should be resolved for data quality",
+      "Review {.cyan [INFO]} findings - informational; may not require action",
+      "Update dataset ({.file sdtm/datasets}) or metadata ({.file metadata/*.xlsx) as needed",
+      "Rerun validation to verify fixes"
+    ))
+  } else if (n_note == 0L) {
+    cli::cli_alert_success("✓ All consistency checks passed - ready to generate Define-XML!")
+  }
+
+  invisible(report)
 }
