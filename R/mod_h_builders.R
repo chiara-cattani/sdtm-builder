@@ -641,29 +641,46 @@ derive_variable <- function(data, var, rule, context) {
       }
     },
     seq = {
-      # If params$by is not specified, try to use domain KEYS from metadata
-      by_vars <- params$by
+      # Default behavior: use KEYS from domain metadata
+      # KEYS format: "USUBJID, AETERM, AESTDTC"
+      # Semantics: group by STUDYID+USUBJID, sort by remaining KEYS variables
+      
+      by_vars <- params$by  # User override if provided
+      order_vars <- params$order_by %||% character()
+      
       if (is.null(by_vars)) {
-        # Check if domain_meta has KEYS column
-        if (!is.null(context$domain_meta) && nrow(context$domain_meta) > 0L) {
-          if ("KEYS" %in% names(context$domain_meta)) {
-            keys_str <- context$domain_meta$KEYS[1]
-            if (!is.na(keys_str) && nchar(trimws(keys_str)) > 0L) {
-              # Parse the comma-separated keys
-              by_vars <- trimws(strsplit(keys_str, ",")[[1]])
+        # Auto-derive from domain KEYS in metadata
+        if (!is.null(context$domain_meta) && nrow(context$domain_meta) > 0L &&
+            "KEYS" %in% names(context$domain_meta)) {
+          
+          keys_str <- context$domain_meta$KEYS[1]
+          if (!is.na(keys_str) && nchar(trimws(keys_str)) > 0L) {
+            # Parse comma-separated KEYS
+            keys_list <- trimws(strsplit(keys_str, ",")[[1]])
+            keys_list <- keys_list[nchar(keys_list) > 0L]
+            
+            # First KEYS variable is the grouping variable(s)
+            # Always include STUDYID for absolute uniqueness
+            if (length(keys_list) > 0L) {
+              by_vars <- c("STUDYID", keys_list[1])
+              # Remaining KEYS are used for ordering
+              if (length(keys_list) > 1L) {
+                order_vars <- keys_list[-1]
+              }
             } else {
-              by_vars <- list("USUBJID")
+              by_vars <- c("STUDYID", "USUBJID")
             }
           } else {
-            by_vars <- list("USUBJID")
+            by_vars <- c("STUDYID", "USUBJID")
           }
         } else {
-          by_vars <- list("USUBJID")
+          # Fallback: group by STUDYID, USUBJID
+          by_vars <- c("STUDYID", "USUBJID")
         }
       }
-      by_vars <- unlist(by_vars)
       
-      order_vars <- unlist(params$order_by %||% list())
+      by_vars <- unlist(by_vars)
+      order_vars <- unlist(order_vars)
       ties_method <- params$ties %||% "dense"
 
       # Map to actual column names (uppercase target vars may not exist yet,

@@ -185,7 +185,7 @@ expand_shorthand <- function(method_string, meta_row = NULL) {
 
   # --- 2. Prefix notation: prefix:args  or  prefix(opt):args ---
   prefix_match <- regmatches(s,
-    regexec("^([a-zA-Z_]+)(\\([^)]*\\))?\\s*:\\s*(.+)$", s, perl = TRUE))[[1]]
+    regexec("^([a-zA-Z_]+)(\\([^)]*\\))?\\s*:\\s*(.*)$", s, perl = TRUE))[[1]]
   if (length(prefix_match) == 4L) {
     prefix <- tolower(prefix_match[2])
     paren  <- prefix_match[3]          # e.g. "(;)" for concat
@@ -299,17 +299,61 @@ expand_shorthand <- function(method_string, meta_row = NULL) {
       parts <- trimws(strsplit(args, ",")[[1]])
       parts <- parts[nchar(parts) > 0L]
       
-      # For seq, first variable(s) are grouping, rest are ordering
-      # Typically: seq: USUBJID, AETERM, AESTDTC
-      # means: group by USUBJID, order by AETERM, AESTDTC
-      if (length(parts) <= 1L) {
-        # Single variable - group and order by it
-        paste0('derive_seq(by = "', parts[1], '")')
+      # For seq, if no arguments provided, use domain KEYS automatically
+      # If arguments provided: "seq: STUDYID, USUBJID, AETERM, AESTDTC" means
+      #  - Group by: STUDYID, USUBJID (all core identifiers)
+      #  - Order by: AETERM, AESTDTC (other KEYS variables)
+      # The rule: STUDYID is always first in grouping for absolute uniqueness,
+      # then USUBJID, then other variables are used for ordering.
+      
+      if (length(parts) == 0L) {
+        # No arguments - let derive_seq() use KEYS from domain metadata automatically
+        'derive_seq()'
       } else {
-        # Multiple variables: first is grouping, rest are ordering
-        by_val <- paste0('"', parts[1], '"')
-        order_vals <- paste0('"', parts[-1], '"', collapse = ", ")
-        paste0('derive_seq(by = ', by_val, ', order_by = c(', order_vals, '))')
+        # Arguments provided: split into by (grouping) and order_by (sorting)
+        # Typically KEYS are: STUDYID, USUBJID, <other>, <other>, ...
+        # So by should be c("STUDYID", "USUBJID")
+        # And order_by should be the rest
+        
+        # For seq, always group by the first parts (usually STUDYID, USUBJID)
+        # and order by the remaining ones
+        
+        # All variables except the last 1 or 2 are grouping
+        # Actually, use a simpler rule: STUDYID + USUBJID always in by,
+        # rest in order_by
+        
+        # Find which parts are STUDYID/USUBJID
+        by_candidates <- c()
+        order_candidates <- c()
+        
+        for (i in seq_along(parts)) {
+          p <- toupper(parts[i])
+          if (p %in% c("STUDYID", "USUBJID")) {
+            by_candidates <- c(by_candidates, parts[i])
+          } else {
+            order_candidates <- c(order_candidates, parts[i])
+          }
+        }
+        
+        # If we have grouping variables, use them
+        if (length(by_candidates) > 0L) {
+          by_val <- paste0('"', by_candidates, '"', collapse = ", ")
+          if (length(order_candidates) > 0L) {
+            order_val <- paste0('"', order_candidates, '"', collapse = ", ")
+            paste0('derive_seq(by = c(', by_val, '), order_by = c(', order_val, '))')
+          } else {
+            paste0('derive_seq(by = c(', by_val, '))')
+          }
+        } else {
+          # No STUDYID/USUBJID found, use first as grouping
+          by_val <- paste0('"', parts[1], '"')
+          if (length(parts) > 1L) {
+            order_val <- paste0('"', parts[-1], '"', collapse = ", ")
+            paste0('derive_seq(by = ', by_val, ', order_by = c(', order_val, '))')
+          } else {
+            paste0('derive_seq(by = ', by_val, ')')
+          }
+        }
       }
     },
     sourceid = {

@@ -192,7 +192,7 @@ ae2 <- ae %>%
   derive_dy("AESTDY", "AESTDTC", "RFSTDTC") %>%
   derive_dy("AEENDY", "AEENDTC", "RFSTDTC") %>%
   # --- Sequence ---
-  derive_seq("AESEQ", by = c("USUBJID"), order_by = c("AESPID"))
+  derive_seq("AESEQ", by = c("STUDYID", "USUBJID"), order_by = c("AETERM", "AESTDTC"))
 
 # Finalize ----
 ae_final <- export_domain(
