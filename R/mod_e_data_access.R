@@ -118,6 +118,314 @@ load_raw_datasets <- function(dir, pattern = "\\.(sas7bdat|xlsx|xls|csv|rds|rda|
   result
 }
 
+#' Extract source datasets needed from compiled rule set
+#'
+#' Scans a compiled rule_set object to identify which raw datasets are referenced
+#' in the rule_params (derivation rules). This enables ultra-selective data loading
+#' based on the actual variables being derived. Also examines target_meta derivation
+#' fields to identify dataset dependencies from the raw derivation expressions.
+#'
+#' @param rule_set A rule_set object (result from compile_rules).
+#' @param target_meta Tibble. The target metadata (for context).
+#' @param sources_meta Tibble. The sources metadata (for validation).
+#' @return Character vector of required raw dataset names (lowercased), extracted
+#'   from the compiled rules.
+#' @keywords internal
+#' @export
+get_source_datasets_from_rules <- function(rule_set, target_meta = NULL, sources_meta = NULL) {
+  required <- character()
+  
+  # Iterate through all domains and variables in the rule_set
+  for (dom in names(rule_set$rules)) {
+    dom_rules <- rule_set$rules[[dom]]
+    
+    for (var_name in names(dom_rules)) {
+      rule_info <- dom_rules[[var_name]]
+      
+      # Extract datasets from rule_params if present
+      if (!is.null(rule_info$rule_params)) {
+        params <- rule_info$rule_params
+        
+        # Check for dataset references in params
+        for (param_name in names(params)) {
+          param_val <- params[[param_name]]
+          
+          # If a parameter value looks like "dataset.column", extract the dataset name
+          if (is.character(param_val) && length(param_val) == 1L && 
+              grepl("^[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)?$", param_val)) {
+            if (grepl("\\.", param_val)) {
+              ds_name <- sub("\\..*", "", param_val)
+              required <- c(required, tolower(ds_name))
+            }
+          }
+        }
+      }
+      
+      # Check for depends_on in target_meta for this variable
+      if (!is.null(target_meta)) {
+        var_meta <- target_meta %>% 
+          dplyr::filter(.data$domain == toupper(dom), .data$var == var_name) %>%
+          dplyr::slice(1L)
+        
+        if (nrow(var_meta) > 0L) {
+          # Check depends_on field
+          if (!is.na(var_meta$depends_on[1L])) {
+            deps <- var_meta$depends_on[1L]
+            # Parse dependency string for dataset references
+            if (grepl("\\.", deps)) {
+              ds_refs <- strsplit(deps, "[^a-zA-Z0-9_\\.]")[[1L]]
+              ds_refs <- ds_refs[ds_refs != ""]
+              for (ref in ds_refs) {
+                if (grepl("\\.", ref)) {
+                  ds_name <- sub("\\..*", "", ref)
+                  required <- c(required, tolower(ds_name))
+                }
+              }
+            }
+          }
+          
+          # Also check the derivation field directly for dataset references
+          # This catches cases like "ae_meddra.pt_name" in derivation expressions
+          if (!is.na(var_meta$derivation[1L])) {
+            deriv <- var_meta$derivation[1L]
+            # Extract dataset.column patterns: look for word.word sequences
+            # Use regex to find potential dataset.column references
+            matches <- gregexpr("[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*", deriv, perl = TRUE)
+            if (matches[[1]][1] != -1) {
+              found_refs <- regmatches(deriv, matches)[[1]]
+              for (ref in found_refs) {
+                ds_name <- sub("\\..*", "", ref)
+                # Filter out common non-dataset prefixes
+                if (!ds_name %in% c("data", "meta", "config", "raw", "rule", "param")) {
+                  required <- c(required, tolower(ds_name))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  # Remove duplicates and return
+  unique(required)
+}
+
+#' Determine required raw datasets for specified domains
+#'
+#' Given a set of target domains and sources metadata, returns the list of raw
+#' dataset names that must be loaded to build those domains.
+#'
+#' @param domains Character vector. The domains to build (e.g., c("AE", "CM")).
+#'   If `NULL`, returns all datasets referenced in sources_meta.
+#' @param sources_meta Tibble or `NULL`. The Sources metadata sheet. Must contain
+#'   at least a `domain` column (or `DOMAIN`) and a `source` column (or `source`).
+#'   If `NULL`, a minimal heuristic is used: assumes dataset names match domain names.
+#' @return Character vector of required raw dataset names (lowercased).
+#' @keywords internal
+#' @export
+get_required_datasets <- function(domains = NULL, sources_meta = NULL) {
+  required <- character()
+
+  # If sources_meta is available, use it to find dependencies
+  if (!is.null(sources_meta) && nrow(sources_meta) > 0L) {
+    # Normalize column names (could be "DOMAIN" or "domain", "source" or "SOURCE")
+    col_domain <- if ("DOMAIN" %in% names(sources_meta)) "DOMAIN" else "domain"
+    col_source <- if ("SOURCE" %in% names(sources_meta)) "SOURCE" else "source"
+
+    if (col_domain %in% names(sources_meta) && col_source %in% names(sources_meta)) {
+      if (is.null(domains)) {
+        # Get all unique datasets referenced
+        required <- unique(tolower(sources_meta[[col_source]]))
+      } else {
+        # Get datasets for specific domains
+        domains_upper <- toupper(domains)
+        for (dom in domains_upper) {
+          dom_rows <- sources_meta[[col_domain]] == dom | 
+                      tolower(sources_meta[[col_domain]]) == tolower(dom)
+          if (any(dom_rows)) {
+            ds_in_dom <- tolower(sources_meta[[col_source]][dom_rows])
+            required <- c(required, ds_in_dom)
+          }
+        }
+        required <- unique(required)
+      }
+    }
+  }
+
+  # If no sources_meta or no results found, use heuristic:
+  # assume dataset name = domain name (lowercased)
+  if (length(required) == 0L && !is.null(domains)) {
+    required <- tolower(domains)
+  }
+
+  # Remove NAs and empty strings
+  required <- required[!is.na(required) & nchar(required) > 0L]
+  unique(required)
+}
+
+#' Load only required raw datasets
+#'
+#' Loads raw datasets from a directory, but only those needed for the specified
+#' domains (based on sources metadata). This is more efficient than loading all
+#' datasets when building only a subset of domains.
+#'
+#' @param dir Character. Path to the raw data directory.
+#' @param domains Character vector or `NULL`. The domains to build. If `NULL`,
+#'   loads all datasets in the directory.
+#' @param sources_meta Tibble or `NULL`. The Sources metadata. If provided, used
+#'   to determine dataset dependencies.
+#' @param pattern Character. Regex pattern for file selection.
+#' @param recursive Logical. Search subdirectories?
+#' @param verbose Logical. Print progress messages?
+#' @return Named list of tibbles (only those needed).
+#' @export
+load_raw_datasets_selective <- function(dir, domains = NULL, sources_meta = NULL,
+                                       pattern = "\\.(sas7bdat|xlsx|xls|csv|rds|rda|rdata|xpt)$",
+                                       recursive = FALSE, verbose = TRUE) {
+  checkmate::assert_directory_exists(dir)
+  
+  # Determine which datasets are needed
+  required <- get_required_datasets(domains = domains, sources_meta = sources_meta)
+
+  # List all available files
+  files <- list.files(dir, pattern = pattern, full.names = TRUE,
+                      recursive = recursive, ignore.case = TRUE)
+  
+  # Filter to only required datasets
+  result <- list()
+  for (f in files) {
+    ds_name <- tolower(tools::file_path_sans_ext(basename(f)))
+    
+    # Skip if not in required list
+    if (length(required) > 0L && !(ds_name %in% required)) {
+      next
+    }
+
+    ext <- tolower(tools::file_ext(f))
+    if (verbose) cli::cli_alert_info("Loading {ds_name} from {basename(f)}...")
+
+    df <- tryCatch(
+      switch(ext,
+        sas7bdat = haven::read_sas(f),
+        xpt      = haven::read_xpt(f),
+        xlsx = , xls = readxl::read_excel(f),
+        csv      = suppressWarnings(readr::read_csv(f, show_col_types = FALSE)),
+        rds      = readRDS(f),
+        rda = , rdata = {
+          env <- new.env(parent = emptyenv())
+          load(f, envir = env)
+          obj_names <- ls(env)
+          if (length(obj_names) == 0L) abort(glue::glue("No objects in {basename(f)}"))
+          get(obj_names[1L], envir = env)
+        },
+        abort(glue::glue("Unsupported format: .{ext}"))
+      ),
+      error = function(e) {
+        cli::cli_alert_danger("Failed to load {basename(f)}: {e$message}")
+        return(NULL)
+      }
+    )
+
+    if (!is.null(df)) {
+      result[[ds_name]] <- tibble::as_tibble(df)
+      if (verbose) {
+        cli::cli_alert_success("  {ds_name}: {nrow(df)} rows x {ncol(df)} cols")
+      }
+    }
+  }
+
+  # If nothing was loaded and domains were specified, fall back to loading everything
+  if (length(result) == 0L && !is.null(domains)) {
+    if (verbose) cli::cli_alert_warning("  No datasets found for domains {paste(domains, collapse=', ')}; loading all available")
+    result <- load_raw_datasets(dir, pattern = pattern, recursive = recursive, verbose = verbose)
+  } else if (length(result) == 0L) {
+    abort("No datasets could be loaded successfully.")
+  }
+
+  result
+}
+
+#' Load raw datasets by explicit source names
+#'
+#' Loads raw datasets from a directory by specifying exact dataset names
+#' (sources). This is useful when you know precisely which datasets are needed,
+#' such as when loading only datasets required by compiled derivation rules.
+#'
+#' @param dir Character. Path to the raw data directory.
+#' @param sources Character vector. Names of specific datasets to load
+#'   (e.g., c("ae", "ae_meddra", "sae")). Names are lowercased for matching.
+#' @param pattern Character. Regex pattern for file selection.
+#' @param recursive Logical. Search subdirectories?
+#' @param verbose Logical. Print progress messages?
+#' @return Named list of tibbles (only those that exist and are loadable).
+#' @export
+load_raw_datasets_with_sources <- function(dir, sources = NULL,
+                                          pattern = "\\.(sas7bdat|xlsx|xls|csv|rds|rda|rdata|xpt)$",
+                                          recursive = FALSE, verbose = TRUE) {
+  checkmate::assert_directory_exists(dir)
+  checkmate::assert_character(sources, min.len = 1L)
+  
+  # Normalize source names (lowercase)
+  sources_lower <- tolower(sources)
+  
+  # List all available files
+  files <- list.files(dir, pattern = pattern, full.names = TRUE,
+                      recursive = recursive, ignore.case = TRUE)
+  
+  # Load only the requested sources
+  result <- list()
+  for (f in files) {
+    ds_name <- tolower(tools::file_path_sans_ext(basename(f)))
+    
+    # Skip if not in requested sources
+    if (!(ds_name %in% sources_lower)) {
+      next
+    }
+
+    ext <- tolower(tools::file_ext(f))
+    if (verbose) cli::cli_alert_info("Loading {ds_name} from {basename(f)}...")
+
+    df <- tryCatch(
+      switch(ext,
+        sas7bdat = haven::read_sas(f),
+        xpt      = haven::read_xpt(f),
+        xlsx = , xls = readxl::read_excel(f),
+        csv      = suppressWarnings(readr::read_csv(f, show_col_types = FALSE)),
+        rds      = readRDS(f),
+        rda = , rdata = {
+          env <- new.env(parent = emptyenv())
+          load(f, envir = env)
+          obj_names <- ls(env)
+          if (length(obj_names) == 0L) abort(glue::glue("No objects in {basename(f)}"))
+          get(obj_names[1L], envir = env)
+        },
+        abort(glue::glue("Unsupported format: .{ext}"))
+      ),
+      error = function(e) {
+        cli::cli_alert_danger("Failed to load {basename(f)}: {e$message}")
+        return(NULL)
+      }
+    )
+
+    if (!is.null(df)) {
+      result[[ds_name]] <- tibble::as_tibble(df)
+      if (verbose) {
+        cli::cli_alert_success("  {ds_name}: {nrow(df)} rows x {ncol(df)} cols")
+      }
+    }
+  }
+
+  if (length(result) == 0L) {
+    if (verbose) {
+      missing_sources <- setdiff(sources_lower, names(result))
+      cli::cli_alert_warning("  Could not load requested sources: {paste(missing_sources, collapse=', ')}")
+    }
+  }
+
+  result
+}
+
 #' Standardize column names
 #' @param data Tibble.
 #' @param dataset_name Character.
